@@ -1,6 +1,8 @@
 #include "bvh.h"
 #include "bvh_box.h"
+
 #include <stddef.h>
+
 void bvh_init(bvh *b) {
     // start with a tiny hint; the first real build resizes to fit. no point
     // guessing the prim count here.
@@ -12,9 +14,9 @@ void bvh_init(bvh *b) {
 
 void bvh_free(bvh *b) {
     bvh_storage_free(&b->store);
-b->root = -1;
-b->built = 0;
-b->last_cost = 0.0f;
+    b->root = -1;
+    b->built = 0;
+    b->last_cost = 0.0f;
 }
 
 void bvh_clear(bvh *b) {
@@ -26,3 +28,17 @@ void bvh_clear(bvh *b) {
 
 int bvh_prim_count(const bvh *b) {
     return (int)b->store.prim_count;
+}
+
+int bvh_node_count(const bvh *b) {
+    return (int)b->store.node_count;
+}
+
+int bvh_is_built(const bvh *b) {
+    return b->built;
+}
+
+aabb bvh_bounds(const bvh *b) {
+    if (!b->built || b->root < 0) return bvh_box_empty();
+    return bvh_node_at_c(&b->store, b->root)->bounds;
+}
