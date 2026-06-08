@@ -1,14 +1,28 @@
 #include "bvh_build.h"
 #include "bvh_sah.h"
 #include "bvh_box.h"
+
 #include <stddef.h>
 #include <float.h>
+
+// recursion would be the natural fit but a degenerate input can blow a deep
+// C stack, so we run an explicit work stack instead. each frame is a node we
+// still owe children to: the prim span it covers and the node slot reserved
+// for it. depth-first, left-first, which keeps the flat layout's "left child
+// is next slot" invariant.
+// a deferred subtree we still owe nodes to. we do NOT pre-reserve the node slot
+// (that would break the "left child is next slot" contiguity under a LIFO
+// stack). instead each frame allocates its own node when it pops, and - if it's
+// a right child - patches its parent's second_child to wherever it landed.
+// left children need no patch: they pop immediately after the parent so they
+// always grab parent+1 on their own.
 typedef struct {
     int32_t first;        // first prim
     int32_t count;        // prim count
     int     depth;
     int32_t patch_parent; // node whose second_child points here, -1 if left/root
 } build_frame;
+
 typedef struct {
     bvh        *b;
     bvh_prim   *prims;     // store->prims, the reorderable copy
@@ -16,6 +30,9 @@ typedef struct {
     // running cost accumulator so we can stash a SAH estimate on the tree.
     float       cost_accum;
 } build_ctx;
+
+// compute the tight bound over a prim span and, separately, the bound over the
+// span's centroids (the SAH bins on centroids, not full boxes).
 static void span_bounds(const bvh_prim *prims, int32_t first, int32_t count,
                         aabb *box_out, aabb *centroid_out) {
     aabb box = bvh_box_empty();
@@ -33,11 +50,11 @@ static void span_bounds(const bvh_prim *prims, int32_t first, int32_t count,
 static void make_leaf(build_ctx *bc, int32_t node, int32_t first, int32_t count,
                       aabb box) {
     bvh_node *n = bvh_node_at(&bc->b->store, node);
-n->bounds = box;
-n->u.first_prim = (uint32_t)first;
-n->count = (uint16_t)count;
-n->axis = 0;
-bc->cost_accum += bvh_box_area(box) * (float)count;
+    n->bounds = box;
+    n->u.first_prim = (uint32_t)first;
+    n->count = (uint16_t)count;
+    n->axis = 0;
+    bc->cost_accum += bvh_box_area(box) * (float)count;
 }
 
 // median split fallback: sort-ish partition around the centroid midpoint on the
@@ -70,11 +87,15 @@ static int32_t median_partition(bvh_prim *prims, int32_t first, int32_t count,
 
 static int run_build(build_ctx *bc, int32_t n) {
     bvh *b = bc->b;
-build_frame stack[2 * BVH_MAX_DEPTH + 4];
-int sp = 0;
-stack[sp++] = (build_frame){ 0, n, 0, -1 }
-;
-while (sp > 0) {
+
+    // explicit stack. worst case depth is BVH_MAX_DEPTH, and at each level we
+    // push at most one deferred sibling, so a 2*depth stack is plenty.
+    build_frame stack[2 * BVH_MAX_DEPTH + 4];
+    int sp = 0;
+
+    stack[sp++] = (build_frame){ 0, n, 0, -1 };
+
+    while (sp > 0) {
         build_frame f = stack[--sp];
 
         // allocate this subtree's node now, depth-first. left children land at
@@ -147,3 +168,45 @@ while (sp > 0) {
     }
 
     return 0;
+}
+
+static int build_common(bvh *b, const bvh_prim *prims, int32_t n, int use_sah) {
+    if (n <= 0) {
+        // empty build. valid, just never hits. record the prims (none) so a
+        // later refit on an empty tree is a no-op rather than reading garbage.
+        bvh_storage_clear(&b->store);
+        bvh_storage_set_prims(&b->store, NULL, 0);
+        b->root = -1;
+        b->built = 0;
+        b->last_cost = 0.0f;
+        return n < 0 ? -1 : 0;
+    }
+
+    bvh_storage_clear(&b->store);
+    if (bvh_storage_set_prims(&b->store, prims, n) != 0) return -1;
+
+    build_ctx bc;
+    bc.b = b;
+    bc.prims = b->store.prims;
+    bc.use_sah = use_sah;
+    bc.cost_accum = 0.0f;
+
+    if (run_build(&bc, n) != 0) {
+        // partial tree on oom. mark unbuilt so queries dont walk half a tree.
+        b->built = 0;
+        b->root = -1;
+        return -1;
+    }
+
+    b->built = 1;
+    b->last_cost = bc.cost_accum;
+    return 0;
+}
+
+int bvh_build(bvh *b, const bvh_prim *prims, int32_t n) {
+    return build_common(b, prims, n, 1);
+}
+
+int bvh_build_median(bvh *b, const bvh_prim *prims, int32_t n) {
+    return build_common(b, prims, n, 0);
+}
