@@ -1,9 +1,11 @@
 #include "jobsys.h"
 #include "jobsys_worker.h"
+
 #include <unistd.h>
 #include <string.h>
 #include "../log.h"
 #include "../assert.h"
+
 // how many cpus do we have. cores-1 by default so the main/render thread keeps a
 // core to itself. if sysconf is unhelpful we assume a modest 4.
 static int detect_workers(void) {
@@ -17,19 +19,21 @@ static int detect_workers(void) {
 
 int jobsys_init(jobsys_pool *p, int nworkers) {
     memset(&p->stats, 0, sizeof(p->stats));
-p->nworkers = nworkers > 0 ? nworkers : detect_workers();
-if (p->nworkers > JOBSYS_MAX_WORKERS) p->nworkers = JOBSYS_MAX_WORKERS;
-jobsys_overflow_init(&p->overflow, 256);
-jobsys_fence_pool_init(&p->fences);
-jobsys_chain_pool_init(&p->chains);
-pthread_mutex_init(&p->sleep_mtx, NULL);
-pthread_cond_init(&p->sleep_cv, NULL);
-atomic_store_explicit(&p->waiters, 0, memory_order_relaxed);
-atomic_store_explicit(&p->rr, 0, memory_order_relaxed);
-atomic_store_explicit(&p->running, 1, memory_order_relaxed);
-for (int i = 0;
-i < p->nworkers;
-i++) {
+
+    p->nworkers = nworkers > 0 ? nworkers : detect_workers();
+    if (p->nworkers > JOBSYS_MAX_WORKERS) p->nworkers = JOBSYS_MAX_WORKERS;
+
+    jobsys_overflow_init(&p->overflow, 256);
+    jobsys_fence_pool_init(&p->fences);
+    jobsys_chain_pool_init(&p->chains);
+
+    pthread_mutex_init(&p->sleep_mtx, NULL);
+    pthread_cond_init(&p->sleep_cv, NULL);
+    atomic_store_explicit(&p->waiters, 0, memory_order_relaxed);
+    atomic_store_explicit(&p->rr, 0, memory_order_relaxed);
+    atomic_store_explicit(&p->running, 1, memory_order_relaxed);
+
+    for (int i = 0; i < p->nworkers; i++) {
         jobsys_worker *w = &p->workers[i];
         w->pool = p;
         w->id   = i;
@@ -43,9 +47,7 @@ i++) {
 
     // start threads last, once every deque exists -- a worker can try to steal
     // from any sibling the instant it wakes, so they must all be live first.
-    for (int i = 0;
-i < p->nworkers;
-i++) {
+    for (int i = 0; i < p->nworkers; i++) {
         int rc = pthread_create(&p->workers[i].thread, NULL,
                                 jobsys_worker_main, &p->workers[i]);
         if (rc != 0) {
@@ -59,7 +61,7 @@ i++) {
     }
 
     LOGI("jobsys: %d workers up", p->nworkers);
-return 0;
+    return 0;
 }
 
 void jobsys_shutdown(jobsys_pool *p) {
@@ -86,8 +88,7 @@ void jobsys_shutdown(jobsys_pool *p) {
 }
 
 // is the calling thread one of our workers? if so return it, else NULL. cheap
-// linear scan over a tiny array;
-we dont bother with pthread tls for this.
+// linear scan over a tiny array; we dont bother with pthread tls for this.
 static jobsys_worker *current_worker(jobsys_pool *p) {
     pthread_t self = pthread_self();
     for (int i = 0; i < p->nworkers; i++) {
@@ -101,9 +102,9 @@ static jobsys_worker *current_worker(jobsys_pool *p) {
 static void wake_one(jobsys_pool *p) {
     if (jat_load_rlx(&p->waiters) > 0) {
         pthread_mutex_lock(&p->sleep_mtx);
-pthread_cond_signal(&p->sleep_cv);
-pthread_mutex_unlock(&p->sleep_mtx);
-}
+        pthread_cond_signal(&p->sleep_cv);
+        pthread_mutex_unlock(&p->sleep_mtx);
+    }
 }
 
 int jobsys_submit(jobsys_pool *p, jobsys_fn fn, void *arg,
@@ -146,17 +147,19 @@ int jobsys_submit_chain(jobsys_pool *p, jobsys_fn first, void *first_arg,
                         jobsys_fn then, void *then_arg,
                         jobsys_handle fence, jobsys_prio prio) {
     VX_ASSERT(first && then);
-// build the continuation first and stash it; the predecessor will carry its
-// index. the continuation inherits the fence so the whole chain counts.
-jobsys_job cont;
-cont.fn    = then;
-cont.arg   = then_arg;
-cont.fence = jobsys_handle_valid(fence) ? fence.id : -1;
-cont.cont  = -1;
-cont.prio  = (uint16_t)prio;
-cont.flags = JOBSYS_F_NONE;
-int cidx = jobsys_chain_store(&p->chains, &cont);
-if (cidx < 0) {
+
+    // build the continuation first and stash it; the predecessor will carry its
+    // index. the continuation inherits the fence so the whole chain counts.
+    jobsys_job cont;
+    cont.fn    = then;
+    cont.arg   = then_arg;
+    cont.fence = jobsys_handle_valid(fence) ? fence.id : -1;
+    cont.cont  = -1;
+    cont.prio  = (uint16_t)prio;
+    cont.flags = JOBSYS_F_NONE;
+
+    int cidx = jobsys_chain_store(&p->chains, &cont);
+    if (cidx < 0) {
         // chain pool full: degrade gracefully -- run them as two independent
         // submits. ordering isnt guaranteed then, but the caller's fence (which
         // should have been bumped by 2) still settles correctly.
@@ -166,24 +169,26 @@ if (cidx < 0) {
     }
 
     jobsys_job head;
-head.fn    = first;
-head.arg   = first_arg;
-head.fence = jobsys_handle_valid(fence) ? fence.id : -1;
-head.cont  = cidx;
-head.prio  = (uint16_t)prio;
-head.flags = JOBSYS_F_NONE;
-jat_add_rlx(&p->stats.submitted, 1);
-jobsys_worker *self = current_worker(p);
-if (self) {
+    head.fn    = first;
+    head.arg   = first_arg;
+    head.fence = jobsys_handle_valid(fence) ? fence.id : -1;
+    head.cont  = cidx;
+    head.prio  = (uint16_t)prio;
+    head.flags = JOBSYS_F_NONE;
+
+    jat_add_rlx(&p->stats.submitted, 1);
+
+    jobsys_worker *self = current_worker(p);
+    if (self) {
         if (jobsys_deque_push(&self->deque, &head) != 0) {
             jobsys_overflow_push(&p->overflow, &head);
             jat_add_rlx(&p->stats.overflowed, 1);
         }
     } else {
         jobsys_overflow_push(&p->overflow, &head);
-}
+    }
     wake_one(p);
-return 0;
+    return 0;
 }
 
 int jobsys_run_main(jobsys_pool *p, int budget) {
@@ -203,12 +208,13 @@ int jobsys_run_main(jobsys_pool *p, int budget) {
 
 void jobsys_wait(jobsys_pool *p, jobsys_handle h) {
     if (!jobsys_handle_valid(h)) return;
-// help-while-waiting. if the caller is the main thread (or any thread) we
-// dont just park -- we pull jobs and run them so the fence's own work makes
-// progress. crucial: if the main thread blocks naively on a fence whose jobs
-// are still queued and all workers are asleep, nobody wakes them and we hang.
-jobsys_worker *self = current_worker(p);
-while (!jobsys_fence_done(&p->fences, h)) {
+
+    // help-while-waiting. if the caller is the main thread (or any thread) we
+    // dont just park -- we pull jobs and run them so the fence's own work makes
+    // progress. crucial: if the main thread blocks naively on a fence whose jobs
+    // are still queued and all workers are asleep, nobody wakes them and we hang.
+    jobsys_worker *self = current_worker(p);
+    while (!jobsys_fence_done(&p->fences, h)) {
         jobsys_job job;
         int got = 0;
 
@@ -247,8 +253,7 @@ while (!jobsys_fence_done(&p->fences, h)) {
         }
     }
 
-    // fence already done by the time we got here;
-release the slot ourselves so
+    // fence already done by the time we got here; release the slot ourselves so
     // it doesnt leak (jobsys_fence_wait would have, but we short-circuited it).
     jobsys_fence_release(&p->fences, h);
 }
