@@ -46,6 +46,22 @@ if (next == q->head) {
 q->tail = next;
 pthread_mutex_unlock(&q->mtx);
 return 0;
+}
+
+int jobsys_overflow_pop(jobsys_overflow *q, jobsys_job *out) {
+    pthread_mutex_lock(&q->mtx);
+    if (q->head == q->tail) {
+        pthread_mutex_unlock(&q->mtx);
+        return 0;
+    }
+    *out = q->buf[q->head];
+    q->head = (q->head + 1) & (q->cap - 1);
+    pthread_mutex_unlock(&q->mtx);
+    return 1;
+}
+
+int jobsys_overflow_pop_main(jobsys_overflow *q, jobsys_job *out) {
+    pthread_mutex_lock(&q->mtx);
 for (size_t i = q->head;
 i != q->tail;
 return 0;
