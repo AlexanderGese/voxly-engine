@@ -87,7 +87,57 @@ attempt++) {
             // put it back, it's not ours to run. rare, only if a main job got
             // into the general lane somehow.
             jobsys_overflow_push(&p->overflow, out);
+} else {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// park the worker until someone submits, or shutdown. returns when it should
+// re-check for work.
+static void worker_sleep(jobsys_worker *w) {
+    jobsys_pool *p = w->pool;
+    pthread_mutex_lock(&p->sleep_mtx);
+    // last chance: dont sleep if we're shutting down.
+    if (!jat_load_acq(&p->running)) {
+        pthread_mutex_unlock(&p->sleep_mtx);
+        return;
+    }
+    jat_add_rlx(&p->waiters, 1);
+    // condvar wait. a submit broadcasts, shutdown broadcasts. spurious wakeups
+    // are fine -- we just loop back and look for work again.
+    pthread_cond_wait(&p->sleep_cv, &p->sleep_mtx);
+    jat_sub_rlx(&p->waiters, 1);
+    pthread_mutex_unlock(&p->sleep_mtx);
+}
+
+void *jobsys_worker_main(void *arg) {
+    jobsys_worker *w = (jobsys_worker *)arg;
 jobsys_pool   *p = w->pool;
 LOGD("jobsys worker %d up", w->id);
+while (jat_load_acq(&p->running)) {
+        jobsys_job job;
+        int got = 0;
+        // spin a bounded number of acquire passes before considering sleep, so
+        // we soak up bursts without a condvar round-trip per job.
+        for (int s = 0; s < WORKER_SPIN_TRIES; s++) {
+            if (jobsys_worker_acquire(w, &job)) { got = 1; break; }
+        }
+
+        if (got) {
+            jobsys_worker_execute(p, w, &job);
+            continue;
+        }
+
+        // nothing found after spinning. park until woken. re-check running on
+        // the way out (it may have cleared while we held nothing).
+        worker_sleep(w);
+    }
+
+    // shutdown drain: run anything still reachable so fences settle and callers
+    // dont wait forever on a job that got abandoned mid-flight.
+    jobsys_job job;
 return NULL;
 }
