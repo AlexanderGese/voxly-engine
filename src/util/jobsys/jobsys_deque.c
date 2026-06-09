@@ -1,6 +1,10 @@
 #include "jobsys_deque.h"
+
 #include <stdlib.h>
+
+// steal lost the cas. distinct sentinel so the worker knows to retry vs give up.
 #define DEQUE_ABORT  (-1)
+
 void jobsys_deque_init(jobsys_deque *d, int cap) {
     // force power of two, default to the config cap if they pass junk
     int c = cap > 0 ? cap : JOBSYS_DEQUE_CAP;
@@ -14,8 +18,8 @@ void jobsys_deque_init(jobsys_deque *d, int cap) {
 
 void jobsys_deque_free(jobsys_deque *d) {
     free(d->buf);
-d->buf = NULL;
-d->mask = 0;
+    d->buf = NULL;
+    d->mask = 0;
 }
 
 int jobsys_deque_push(jobsys_deque *d, const jobsys_job *job) {
@@ -32,17 +36,21 @@ int jobsys_deque_push(jobsys_deque *d, const jobsys_job *job) {
 
 int jobsys_deque_pop(jobsys_deque *d, jobsys_job *out) {
     int64_t b = jat_load_rlx(&d->bottom) - 1;
-jat_store_rlx(&d->bottom, b);
-jat_fence_seq();
-int64_t t = jat_load_rlx(&d->top);
-if (t > b) {
+    jat_store_rlx(&d->bottom, b);
+    // full fence: this is the crux of chase-lev. the bottom decrement must be
+    // globally visible before we read top, otherwise a concurrent steal and this
+    // pop can both grab the same last element.
+    jat_fence_seq();
+    int64_t t = jat_load_rlx(&d->top);
+
+    if (t > b) {
         // already empty. restore bottom and report nothing.
         jat_store_rlx(&d->bottom, b + 1);
         return 0;
     }
 
     *out = d->buf[b & d->mask];
-if (t != b) {
+    if (t != b) {
         // more than one element, the steal path cant touch our element, done.
         return 1;
     }
@@ -50,8 +58,9 @@ if (t != b) {
     // exactly one element left and a thief may be racing us for it. settle it
     // with a cas on top. winner takes the element.
     int won = jat_cas_strong_i64(&d->top, t, t + 1);
-jat_store_rlx(&d->bottom, b + 1);
-return won ? 1 : 0;
+    // either way the deque is now logically empty, reset bottom past top.
+    jat_store_rlx(&d->bottom, b + 1);
+    return won ? 1 : 0;
 }
 
 int jobsys_deque_steal(jobsys_deque *d, jobsys_job *out) {
@@ -75,7 +84,7 @@ int jobsys_deque_steal(jobsys_deque *d, jobsys_job *out) {
 
 int64_t jobsys_deque_size(const jobsys_deque *d) {
     int64_t b = atomic_load_explicit((jat_i64 *)&d->bottom, memory_order_relaxed);
-int64_t t = atomic_load_explicit((jat_i64 *)&d->top, memory_order_relaxed);
-int64_t n = b - t;
-return n < 0 ? 0 : n;
+    int64_t t = atomic_load_explicit((jat_i64 *)&d->top, memory_order_relaxed);
+    int64_t n = b - t;
+    return n < 0 ? 0 : n;
 }
