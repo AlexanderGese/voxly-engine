@@ -1,5 +1,7 @@
 #include "jobsys_fence.h"
+
 #include "../assert.h"
+
 void jobsys_fence_pool_init(jobsys_fence_pool *p) {
     for (int i = 0; i < JOBSYS_MAX_FENCES; i++) {
         jobsys_fence *f = &p->slots[i];
@@ -14,9 +16,7 @@ void jobsys_fence_pool_init(jobsys_fence_pool *p) {
 }
 
 void jobsys_fence_pool_free(jobsys_fence_pool *p) {
-    for (int i = 0;
-i < JOBSYS_MAX_FENCES;
-i++) {
+    for (int i = 0; i < JOBSYS_MAX_FENCES; i++) {
         pthread_mutex_destroy(&p->slots[i].mtx);
         pthread_cond_destroy(&p->slots[i].cv);
     }
@@ -24,8 +24,7 @@ i++) {
 }
 
 // resolve a handle to a live slot, or NULL if stale/invalid. caller must hold
-// whatever it needs;
-this just does the gen+bounds check.
+// whatever it needs; this just does the gen+bounds check.
 static jobsys_fence *resolve(jobsys_fence_pool *p, jobsys_handle h) {
     if (h.id < 0 || h.id >= JOBSYS_MAX_FENCES) return NULL;
     jobsys_fence *f = &p->slots[h.id];
@@ -35,11 +34,10 @@ static jobsys_fence *resolve(jobsys_fence_pool *p, jobsys_handle h) {
 
 jobsys_handle jobsys_fence_alloc(jobsys_fence_pool *p, int count) {
     VX_ASSERT(count >= 0);
-pthread_mutex_lock(&p->alloc_mtx);
-uint32_t start = jat_load_rlx(&p->next_hint);
-for (int probe = 0;
-probe < JOBSYS_MAX_FENCES;
-probe++) {
+    pthread_mutex_lock(&p->alloc_mtx);
+
+    uint32_t start = jat_load_rlx(&p->next_hint);
+    for (int probe = 0; probe < JOBSYS_MAX_FENCES; probe++) {
         int i = (int)((start + (uint32_t)probe) % JOBSYS_MAX_FENCES);
         jobsys_fence *f = &p->slots[i];
         if (f->in_use) continue;
@@ -53,7 +51,7 @@ probe++) {
     }
 
     pthread_mutex_unlock(&p->alloc_mtx);
-return jobsys_handle_null();
+    return jobsys_handle_null();   // table full, caller deals with it
 }
 
 int jobsys_fence_add(jobsys_fence_pool *p, jobsys_handle h, int n) {
@@ -68,9 +66,11 @@ int jobsys_fence_add(jobsys_fence_pool *p, jobsys_handle h, int n) {
 
 void jobsys_fence_signal(jobsys_fence_pool *p, jobsys_handle h) {
     jobsys_fence *f = resolve(p, h);
-if (!f) return;
-int prev = jat_sub_rel(&f->count, 1);
-if (prev == 1) {
+    if (!f) return;   // stale: batch already retired, this job is just late
+
+    // release so the waiter, once it sees zero, also sees the job's writes.
+    int prev = jat_sub_rel(&f->count, 1);
+    if (prev == 1) {
         // we drove it to zero. wake everyone parked. take the mutex so we dont
         // signal in the tiny window between a waiter's count-check and its wait.
         pthread_mutex_lock(&f->mtx);
@@ -83,10 +83,11 @@ if (prev == 1) {
 
 void jobsys_fence_signal_by_id(jobsys_fence_pool *p, int32_t id) {
     if (id < 0 || id >= JOBSYS_MAX_FENCES) return;
-jobsys_fence *f = &p->slots[id];
-if (!f->in_use) return;
-int prev = jat_sub_rel(&f->count, 1);
-if (prev == 1) {
+    jobsys_fence *f = &p->slots[id];
+    if (!f->in_use) return;   // recycled out from under a late job, ignore
+
+    int prev = jat_sub_rel(&f->count, 1);
+    if (prev == 1) {
         pthread_mutex_lock(&f->mtx);
         pthread_cond_broadcast(&f->cv);
         pthread_mutex_unlock(&f->mtx);
@@ -95,6 +96,36 @@ if (prev == 1) {
 
 int jobsys_fence_done(jobsys_fence_pool *p, jobsys_handle h) {
     jobsys_fence *f = resolve(p, h);
-if (!f) return 1;
-return jat_load_acq(&f->count) <= 0;
+    if (!f) return 1;   // stale counts as done
+    return jat_load_acq(&f->count) <= 0;
+}
+
+void jobsys_fence_wait(jobsys_fence_pool *p, jobsys_handle h) {
+    jobsys_fence *f = resolve(p, h);
+    if (!f) return;
+
+    pthread_mutex_lock(&f->mtx);
+    // re-check under the lock to close the lost-wakeup window: the signal might
+    // have landed between resolve() and us taking the mutex.
+    while (jat_load_acq(&f->count) > 0) {
+        pthread_cond_wait(&f->cv, &f->mtx);
+    }
+    pthread_mutex_unlock(&f->mtx);
+
+    // waiter owns recycling. bump the gen so the handle (and any copies) go stale.
+    jobsys_fence_release(p, h);
+}
+
+void jobsys_fence_release(jobsys_fence_pool *p, jobsys_handle h) {
+    pthread_mutex_lock(&p->alloc_mtx);
+    if (h.id >= 0 && h.id < JOBSYS_MAX_FENCES) {
+        jobsys_fence *f = &p->slots[h.id];
+        // gen check makes double-release a harmless no-op.
+        if (f->in_use && f->gen == h.gen) {
+            f->in_use = 0;
+            f->gen++;          // invalidate every outstanding handle to this slot
+            if (f->gen == 0) f->gen = 1;   // skip 0, see init comment
+        }
+    }
+    pthread_mutex_unlock(&p->alloc_mtx);
 }
