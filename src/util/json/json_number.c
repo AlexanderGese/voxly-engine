@@ -1,8 +1,16 @@
 #include "json_number.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// the json number grammar, by hand:
+// -? (0 | [1-9][0-9]*) ( . [0-9]+ )? ( [eE] [+-]? [0-9]+ )?
+// we walk it once just to find the extent and learn whether it's an integer,
+// then hand the slice to strtod for the actual value. doing the value parse
+// ourselves would mean reimplementing rounding, no thanks.
+
 size_t json_number_scan(const char *s, size_t n, double *out, int *is_int) {
     size_t i = 0;
     int isint = 1;
@@ -61,11 +69,11 @@ void json_number_format(strbuf *out, double v, int is_int) {
     // null rather than write something a strict parser would choke on.
     if (!isfinite(v)) {
         strbuf_append(out, "null");
-return;
-}
+        return;
+    }
 
     char buf[32];
-if (is_int && v >= -9.007199254740992e15 && v <= 9.007199254740992e15) {
+    if (is_int && v >= -9.007199254740992e15 && v <= 9.007199254740992e15) {
         // inside the exact-integer range of a double; print as a plain integer.
         snprintf(buf, sizeof buf, "%lld", (long long)v);
         strbuf_append(out, buf);
@@ -73,9 +81,9 @@ if (is_int && v >= -9.007199254740992e15 && v <= 9.007199254740992e15) {
     }
 
     snprintf(buf, sizeof buf, "%.17g", v);
-for (int prec = 1;
-prec < 17;
-prec++) {
+    // %.17g is round-trip safe but ugly. try progressively shorter forms and
+    // keep the shortest that still reads back to the same double.
+    for (int prec = 1; prec < 17; prec++) {
         char shorter[32];
         snprintf(shorter, sizeof shorter, "%.*g", prec, v);
         if (strtod(shorter, NULL) == v) {
