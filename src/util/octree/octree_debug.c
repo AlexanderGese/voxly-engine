@@ -1,10 +1,13 @@
 #include "octree_debug.h"
+
 #include "../darray.h"
 #include "../log.h"
+
 typedef struct {
     int node_count, leaf_count, item_count;
     int max_depth, empty_leaves, nonempty_leaves, item_in_leaves;
 } walk_acc;
+
 static void stat_walk(const octree *t, int32_t idx, walk_acc *a) {
     if (idx < 0) return;
     const octree_node *n = &t->pool.nodes[idx];
@@ -27,15 +30,15 @@ static void stat_walk(const octree *t, int32_t idx, walk_acc *a) {
 
 void octree_collect_stats(const octree *t, octree_stats *out) {
     walk_acc a = {0};
-stat_walk(t, t->root, &a);
-out->node_count   = a.node_count;
-out->leaf_count   = a.leaf_count;
-out->item_count   = t->item_count;
-out->max_depth    = a.max_depth;
-out->empty_leaves = a.empty_leaves;
-out->avg_items    = a.nonempty_leaves ? (float)a.item_in_leaves / a.nonempty_leaves : 0.0f;
-out->pool_cap     = t->pool.cap;
-out->free_nodes   = t->pool.free_count;
+    stat_walk(t, t->root, &a);
+    out->node_count   = a.node_count;
+    out->leaf_count   = a.leaf_count;
+    out->item_count   = t->item_count;
+    out->max_depth    = a.max_depth;
+    out->empty_leaves = a.empty_leaves;
+    out->avg_items    = a.nonempty_leaves ? (float)a.item_in_leaves / a.nonempty_leaves : 0.0f;
+    out->pool_cap     = t->pool.cap;
+    out->free_nodes   = t->pool.free_count;
 }
 
 static void dump_walk(const octree *t, int32_t idx) {
@@ -58,7 +61,7 @@ static void dump_walk(const octree *t, int32_t idx) {
 
 void octree_dump(const octree *t) {
     LOGD("octree dump: %d items, root=%d", t->item_count, t->root);
-dump_walk(t, t->root);
+    dump_walk(t, t->root);
 }
 
 // push one edge (two verts) into the line buffer.
@@ -75,18 +78,13 @@ static void box_edges(vec3 **lines, aabb b) {
         {b.min.x, b.max.y, b.min.z}, {b.max.x, b.max.y, b.min.z},
         {b.max.x, b.max.y, b.max.z}, {b.min.x, b.max.y, b.max.z},
     };
-push_edge(lines, c[0], c[1]);
-push_edge(lines, c[1], c[2]);
-push_edge(lines, c[2], c[3]);
-push_edge(lines, c[3], c[0]);
-push_edge(lines, c[4], c[5]);
-push_edge(lines, c[5], c[6]);
-push_edge(lines, c[6], c[7]);
-push_edge(lines, c[7], c[4]);
-push_edge(lines, c[0], c[4]);
-push_edge(lines, c[1], c[5]);
-push_edge(lines, c[2], c[6]);
-push_edge(lines, c[3], c[7]);
+    // bottom ring, top ring, 4 verticals
+    push_edge(lines, c[0], c[1]); push_edge(lines, c[1], c[2]);
+    push_edge(lines, c[2], c[3]); push_edge(lines, c[3], c[0]);
+    push_edge(lines, c[4], c[5]); push_edge(lines, c[5], c[6]);
+    push_edge(lines, c[6], c[7]); push_edge(lines, c[7], c[4]);
+    push_edge(lines, c[0], c[4]); push_edge(lines, c[1], c[5]);
+    push_edge(lines, c[2], c[6]); push_edge(lines, c[3], c[7]);
 }
 
 static int line_walk(const octree *t, int32_t idx, vec3 **lines) {
