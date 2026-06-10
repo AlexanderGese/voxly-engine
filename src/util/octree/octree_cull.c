@@ -1,5 +1,10 @@
 #include "octree_cull.h"
+
 #include "../darray.h"
+
+// frustum vs node bounds with a tri-state would be nicer (fully-in lets us skip
+// the per-item test) but frustum.h only gives a boolean. so we test the node to
+// prune, then test each item for real. still cheap.
 static int frustum_walk(const octree *t, int32_t idx, const frustum *f,
                         octree_item **out) {
     if (idx < 0) return 0;
@@ -39,11 +44,12 @@ static aabb expand_box(aabb b, float m) {
 // the straddling items sitting in nodes above it. this is the standard octree
 // self-collision sweep.
 typedef struct {
-    octree_item **stack;
-float         margin;
-octree_pair **out;
-int           count;
+    octree_item **stack;   // darray of ancestor items currently in scope
+    float         margin;
+    octree_pair **out;
+    int           count;
 } pair_ctx;
+
 static void try_pair(pair_ctx *pc, const octree_item *a, const octree_item *b) {
     if (a->id == b->id) return;
     aabb ea = expand_box(a->box, pc->margin);
@@ -55,31 +61,39 @@ static void try_pair(pair_ctx *pc, const octree_item *a, const octree_item *b) {
 
 static void pair_walk(const octree *t, int32_t idx, pair_ctx *pc) {
     if (idx < 0) return;
-const octree_node *n = &t->pool.nodes[idx];
-if (n->count == 0) return;
-size_t len = darr_len(n->items);
-size_t anc = darr_len(*pc->stack);
-for (size_t i = 0;
-i < len;
-i++)
-        for (size_t a = 0;
-a < anc;
-a++)
+    const octree_node *n = &t->pool.nodes[idx];
+    if (n->count == 0) return;
+
+    size_t len = darr_len(n->items);
+    size_t anc = darr_len(*pc->stack);
+
+    // this node's items against every ancestor item still in scope
+    for (size_t i = 0; i < len; i++)
+        for (size_t a = 0; a < anc; a++)
             try_pair(pc, &(*pc->stack)[a], &n->items[i]);
-for (size_t i = 0;
-i < len;
-i++)
-        for (size_t j = i + 1;
-j < len;
-j++)
+
+    // this node's items against each other (unordered, j>i)
+    for (size_t i = 0; i < len; i++)
+        for (size_t j = i + 1; j < len; j++)
             try_pair(pc, &n->items[i], &n->items[j]);
-if (n->leaf) return;
-for (size_t i = 0;
-i < len;
-i++)
+
+    if (n->leaf) return;
+
+    // push our items as ancestors, recurse, pop. darray-as-stack.
+    for (size_t i = 0; i < len; i++)
         darr_push(*pc->stack, n->items[i]);
-for (int c = 0;
-c < 8;
-c++)
+
+    for (int c = 0; c < 8; c++)
         if (n->child[c] >= 0) pair_walk(t, n->child[c], pc);
-darr_hdr(*pc->stack)->len = anc;
+
+    // pop back to the depth we were at. straight truncate, order preserved.
+    darr_hdr(*pc->stack)->len = anc;
+}
+
+int octree_collect_pairs(const octree *t, float margin, octree_pair **out) {
+    octree_item *stack = NULL;
+    pair_ctx pc = { &stack, margin, out, 0 };
+    pair_walk(t, t->root, &pc);
+    darr_free(stack);
+    return pc.count;
+}
