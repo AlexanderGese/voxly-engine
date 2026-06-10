@@ -78,8 +78,44 @@ write_compact(out, v);
 // member-index ordering used when sort_keys is on. we sort an index array, not
 // the members themselves, so the dom is left untouched.
 static const json_member *g_sort_base;
+static int member_cmp(const void *a, const void *b) {
+    size_t ia = *(const size_t *)a, ib = *(const size_t *)b;
+    return strcmp(g_sort_base[ia].key, g_sort_base[ib].key);
+}
+
+static void write_pretty(strbuf *out, const json_value *v, json_write_opts o, int level) {
+    if (write_scalar(out, v)) return;
+if (v->kind == JSON_ARRAY) {
+        size_t n = darr_len(v->as.arr);
+        if (n == 0) { strbuf_append(out, "[]"); return; }
+        strbuf_append(out, "[\n");
+        for (size_t i = 0; i < n; i++) {
+            indent(out, level + 1, o.indent);
+            write_pretty(out, &v->as.arr[i], o, level + 1);
+            if (i + 1 < n) strbuf_append_char(out, ',');
+            strbuf_append_char(out, '\n');
+        }
+        indent(out, level, o.indent);
+        strbuf_append_char(out, ']');
+        return;
+    }
+
+    // object
+    size_t n = darr_len(v->as.obj);
+if (n == 0) { strbuf_append(out, "{}"); return; }
+
+    // build an iteration order, sorted or natural.
+    size_t *order = (size_t *)malloc(n * sizeof(size_t));
+if (!order) { strbuf_append(out, "{}"); return; }  // degrade rather than crash
+    for (size_t i = 0;
 i < n;
 i++) order[i] = i;
+if (o.sort_keys) {
+        g_sort_base = v->as.obj;
+        qsort(order, n, sizeof(size_t), member_cmp);
+    }
+
+    strbuf_append(out, "{\n");
 for (size_t k = 0;
 k < n;
 strbuf_append_char(out, '}');
