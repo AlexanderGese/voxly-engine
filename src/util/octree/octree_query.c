@@ -1,7 +1,11 @@
 #include "octree_query.h"
+
 #include "../darray.h"
 #include <math.h>
 #include <float.h>
+
+// squared distance from a point to an aabb. 0 if inside. avoids the sqrt until
+// the caller actually needs a real distance.
 static float box_dist_sq(aabb b, vec3 p) {
     float dx = 0, dy = 0, dz = 0;
     if (p.x < b.min.x) dx = b.min.x - p.x; else if (p.x > b.max.x) dx = p.x - b.max.x;
@@ -15,14 +19,13 @@ static float box_dist_sq(aabb b, vec3 p) {
 static int gather_aabb(const octree *t, int32_t idx, aabb region,
                        uint32_t mask, octree_item **out) {
     if (idx < 0) return 0;
-const octree_node *n = &t->pool.nodes[idx];
-if (n->count == 0) return 0;
-if (!aabb_intersects(n->bounds, region)) return 0;
-int added = 0;
-size_t len = darr_len(n->items);
-for (size_t i = 0;
-i < len;
-i++) {
+    const octree_node *n = &t->pool.nodes[idx];
+    if (n->count == 0) return 0;
+    if (!aabb_intersects(n->bounds, region)) return 0;
+
+    int added = 0;
+    size_t len = darr_len(n->items);
+    for (size_t i = 0; i < len; i++) {
         const octree_item *it = &n->items[i];
         if (mask && !(it->tag & mask)) continue;
         if (aabb_intersects(it->box, region)) {
@@ -31,9 +34,7 @@ i++) {
         }
     }
     if (!n->leaf) {
-        for (int c = 0;
-c < 8;
-c++) {
+        for (int c = 0; c < 8; c++) {
             if (n->child[c] >= 0)
                 added += gather_aabb(t, n->child[c], region, mask, out);
         }
@@ -106,10 +107,51 @@ static int gather_sphere(const octree *t, int32_t idx, vec3 c, float r2,
 int octree_query_sphere(const octree *t, vec3 center, float radius,
                         octree_item **out) {
     return gather_sphere(t, t->root, center, radius * radius, out);
-float best = FLT_MAX;
-;
-nearest_walk(t, t->root, p, &best, &found);
-if (best == FLT_MAX) return 0;
-*out = found;
-return 1;
+}
+
+// nearest: branch-and-bound. carry the best distance so far and skip any node
+// whose bounds cant possibly beat it. order doesnt matter much for correctness
+// but visiting the near child first prunes harder, so we sort the 8 children by
+// their bound distance before recursing.
+static void nearest_walk(const octree *t, int32_t idx, vec3 p,
+                         float *best, octree_item *out) {
+    if (idx < 0) return;
+    const octree_node *n = &t->pool.nodes[idx];
+    if (n->count == 0) return;
+    if (box_dist_sq(n->bounds, p) > *best) return;
+
+    size_t len = darr_len(n->items);
+    for (size_t i = 0; i < len; i++) {
+        float d = box_dist_sq(n->items[i].box, p);
+        if (d < *best) { *best = d; *out = n->items[i]; }
+    }
+    if (n->leaf) return;
+
+    // cheap insertion sort of child indices by bound distance. only 8 of them.
+    int32_t order[8]; float od[8]; int m = 0;
+    for (int c = 0; c < 8; c++) {
+        if (n->child[c] < 0) continue;
+        float d = box_dist_sq(t->pool.nodes[n->child[c]].bounds, p);
+        int j = m++;
+        order[j] = n->child[c]; od[j] = d;
+        while (j > 0 && od[j-1] > od[j]) {
+            float td = od[j]; od[j] = od[j-1]; od[j-1] = td;
+            int32_t ti = order[j]; order[j] = order[j-1]; order[j-1] = ti;
+            j--;
+        }
+    }
+    for (int k = 0; k < m; k++) {
+        if (od[k] > *best) break;   // rest are even farther, sorted, so done.
+        nearest_walk(t, order[k], p, best, out);
+    }
+}
+
+int octree_query_nearest(const octree *t, vec3 p, octree_item *out) {
+    if (t->item_count == 0) return 0;
+    float best = FLT_MAX;
+    octree_item found = {0};
+    nearest_walk(t, t->root, p, &best, &found);
+    if (best == FLT_MAX) return 0;
+    *out = found;
+    return 1;
 }
