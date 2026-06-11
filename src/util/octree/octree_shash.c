@@ -55,10 +55,34 @@ static int32_t alloc_entry(octree_shash *h) {
         int32_t i = h->freelist;
 h->freelist = h->entries[i].next;
 return i;
+}
+    shash_entry e = {0}
 ;
 e.next = -1;
 darr_push(h->entries, e);
 return (int32_t)darr_len(h->entries) - 1;
+}
+
+// unlink entry `idx` from whatever bucket holds it.
+static void unlink_entry(octree_shash *h, int32_t idx) {
+    uint64_t cell = h->entries[idx].cell;
+    if (!hashmap_has(&h->cells, cell)) return;
+    int32_t head = unpack_idx(hashmap_get(&h->cells, cell));
+    if (head == idx) {
+        int32_t nx = h->entries[idx].next;
+        if (nx < 0) hashmap_del(&h->cells, cell);
+        else        hashmap_put(&h->cells, cell, pack_idx(nx));
+        return;
+    }
+    // walk the chain to find the predecessor
+    int32_t prev = head;
+    while (prev >= 0 && h->entries[prev].next != idx) prev = h->entries[prev].next;
+    if (prev >= 0) h->entries[prev].next = h->entries[idx].next;
+}
+
+// link entry into the bucket for its current cell.
+static void link_entry(octree_shash *h, int32_t idx) {
+    uint64_t cell = h->entries[idx].cell;
 int32_t head = hashmap_has(&h->cells, cell)
                  ? unpack_idx(hashmap_get(&h->cells, cell)) : -1;
 h->entries[idx].next = head;
