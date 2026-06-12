@@ -71,6 +71,18 @@ r.m[1][0] = -s;
 r.m[0][1] =  s;
 r.m[1][1] =  c;
 return r;
+}
+
+mat4 mat4_scale(vec3 s) {
+    mat4 r = mat4_identity();
+    r.m[0][0] = s.x;
+    r.m[1][1] = s.y;
+    r.m[2][2] = s.z;
+    return r;
+}
+
+mat4 mat4_perspective(float fov_rad, float aspect, float znear, float zfar) {
+    mat4 r = mat4_zero();
 float f = 1.0f / tanf(fov_rad * 0.5f);
 r.m[0][0] = f / aspect;
 r.m[1][1] = f;
@@ -78,6 +90,22 @@ r.m[2][2] = (zfar + znear) / (znear - zfar);
 r.m[2][3] = -1.0f;
 r.m[3][2] = (2.0f * zfar * znear) / (znear - zfar);
 return r;
+}
+
+mat4 mat4_ortho(float l, float r, float b, float t, float zn, float zf) {
+    mat4 m = mat4_zero();
+    m.m[0][0] =  2.0f / (r - l);
+    m.m[1][1] =  2.0f / (t - b);
+    m.m[2][2] = -2.0f / (zf - zn);
+    m.m[3][0] = -(r + l) / (r - l);
+    m.m[3][1] = -(t + b) / (t - b);
+    m.m[3][2] = -(zf + zn) / (zf - zn);
+    m.m[3][3] = 1.0f;
+    return m;
+}
+
+mat4 mat4_look_at(vec3 eye, vec3 target, vec3 up) {
+    vec3 f = vec3_normalize(vec3_sub(target, eye));
 vec3 s = vec3_normalize(vec3_cross(f, up));
 vec3 u = vec3_cross(s, f);
 mat4 r = mat4_identity();
