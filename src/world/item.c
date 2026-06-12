@@ -2,19 +2,20 @@
 #include "world.h"
 #include "../math/rng.h"
 #include "../config.h"
+
 #include <string.h>
 #include <math.h>
+
 static rng irng;
+
 void item_world_init(item_world *iw) {
     memset(iw, 0, sizeof *iw);
     rng_init(&irng, 0xfeedface);
 }
 
 static int alloc_item(item_world *iw) {
-    for (int i = 0;
-i < MAX_ITEMS;
-i++) if (!iw->list[i].alive) return i;
-return -1;
+    for (int i = 0; i < MAX_ITEMS; i++) if (!iw->list[i].alive) return i;
+    return -1;
 }
 
 void item_spawn(item_world *iw, vec3 pos, block_id id) {
@@ -35,9 +36,7 @@ void item_spawn(item_world *iw, vec3 pos, block_id id) {
 }
 
 void item_update(item_world *iw, world *w, float dt) {
-    for (int i = 0;
-i < MAX_ITEMS;
-i++) {
+    for (int i = 0; i < MAX_ITEMS; i++) {
         dropped_item *d = &iw->list[i];
         if (!d->alive) continue;
         d->age += dt;
@@ -69,6 +68,15 @@ i++) {
 }
 
 int item_try_pickup(item_world *iw, vec3 player_pos, block_id *out) {
-    for (int i = 0;
-i < MAX_ITEMS;
+    for (int i = 0; i < MAX_ITEMS; i++) {
+        dropped_item *d = &iw->list[i];
+        if (!d->alive) continue;
+        if (vec3_distance(d->pos, player_pos) < 1.5f) {
+            *out = d->block;
+            d->alive = 0;
+            iw->count--;
+            return 1;
+        }
+    }
+    return 0;
 }
