@@ -2,15 +2,20 @@
 #include "block.h"
 #include "../config.h"
 #include "../util/log.h"
+
 #include <stdlib.h>
 #include <string.h>
+
+// flood fill queue. fixed size ring buffer.
 #define QMAX 65536
+
 typedef struct { int x, y, z; uint8_t level; } lnode;
+
 static lnode q[QMAX];
 static int   qhead, qtail;
+
 static int qempty(void) { return qhead == qtail; }
-static void qreset(void) { qhead = qtail = 0;
-}
+static void qreset(void) { qhead = qtail = 0; }
 
 static void qpush(int x, int y, int z, uint8_t lv) {
     int nt = (qtail + 1) % QMAX;
@@ -21,9 +26,9 @@ static void qpush(int x, int y, int z, uint8_t lv) {
 
 static int qpop(lnode *out) {
     if (qempty()) return 0;
-*out = q[qhead];
-qhead = (qhead + 1) % QMAX;
-return 1;
+    *out = q[qhead];
+    qhead = (qhead + 1) % QMAX;
+    return 1;
 }
 
 static void set_sun(world *w, int wx, int wy, int wz, uint8_t v) {
@@ -37,11 +42,11 @@ static void set_sun(world *w, int wx, int wy, int wz, uint8_t v) {
 
 static void set_block(world *w, int wx, int wy, int wz, uint8_t v) {
     int cx, cz, lx, lz;
-world_to_chunk(wx, wz, &cx, &cz);
-world_to_local(wx, wz, &lx, &lz);
-chunk *c = world_get_chunk(w, cx, cz);
-if (!c) return;
-chunk_set_blocklight(c, lx, wy, lz, v);
+    world_to_chunk(wx, wz, &cx, &cz);
+    world_to_local(wx, wz, &lx, &lz);
+    chunk *c = world_get_chunk(w, cx, cz);
+    if (!c) return;
+    chunk_set_blocklight(c, lx, wy, lz, v);
 }
 
 void lighting_recompute_chunk(world *w, chunk *c) {
@@ -130,7 +135,7 @@ void lighting_update_block(world *w, int wx, int wy, int wz) {
     // lazy: mark containing chunk dirty and recompute whole thing next frame.
     // proper incremental lighting is a future-me problem
     int cx, cz;
-world_to_chunk(wx, wz, &cx, &cz);
-chunk *c = world_get_chunk(w, cx, cz);
-if (c) lighting_recompute_chunk(w, c);
+    world_to_chunk(wx, wz, &cx, &cz);
+    chunk *c = world_get_chunk(w, cx, cz);
+    if (c) lighting_recompute_chunk(w, c);
 }
