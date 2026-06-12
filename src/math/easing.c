@@ -1,8 +1,8 @@
 #include "easing.h"
+
 float ease_linear(float t) { return t; }
 
-float ease_in_quad(float t) { return t * t;
-}
+float ease_in_quad(float t) { return t * t; }
 
 float ease_out_quad(float t) { return t * (2.0f - t); }
 
@@ -14,7 +14,7 @@ float ease_in_cubic(float t) { return t * t * t; }
 
 float ease_out_cubic(float t) {
     float f = t - 1.0f;
-return f * f * f + 1.0f;
+    return f * f * f + 1.0f;
 }
 
 float ease_out_bounce(float t) {
@@ -34,5 +34,11 @@ float ease_out_bounce(float t) {
 
 float clampf(float v, float lo, float hi) {
     if (v < lo) return lo;
-if (v > hi) return hi;
-return v;
+    if (v > hi) return hi;
+    return v;
+}
+
+float smoothstepf(float e0, float e1, float x) {
+    float t = clampf((x - e0) / (e1 - e0), 0, 1);
+    return t * t * (3.0f - 2.0f * t);
+}
