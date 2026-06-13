@@ -1,6 +1,8 @@
 #include "biome_cache.h"
 #include "biome_noise.h"
+
 #include <string.h>
+
 // hash the column key into a table index. reuse the biome hash so we get a
 // decent spread without inventing another mixer.
 static uint32_t key_index(int wx, int wz, uint32_t seed) {
@@ -9,10 +11,10 @@ static uint32_t key_index(int wx, int wz, uint32_t seed) {
 
 void biome_cache_init(biome_cache *cache, uint32_t seed, int sea_level, int radius) {
     if (!cache) return;
-memset(cache, 0, sizeof *cache);
-cache->seed = seed;
-cache->sea_level = sea_level;
-cache->radius = radius < 0 ? 0 : radius;
+    memset(cache, 0, sizeof *cache);
+    cache->seed = seed;
+    cache->sea_level = sea_level;
+    cache->radius = radius < 0 ? 0 : radius;
 }
 
 void biome_cache_clear(biome_cache *cache) {
@@ -24,12 +26,13 @@ void biome_cache_clear(biome_cache *cache) {
 
 const biome_column *biome_cache_get(biome_cache *cache, int wx, int wz) {
     if (!cache) return NULL;
-cache->tick++;
-uint32_t idx = key_index(wx, wz, cache->seed);
-uint32_t i = idx;
-for (int p = 0;
-p < BIOME_CACHE_PROBE;
-p++) {
+    cache->tick++;
+
+    uint32_t idx = key_index(wx, wz, cache->seed);
+
+    // linear probe looking for a hit
+    uint32_t i = idx;
+    for (int p = 0; p < BIOME_CACHE_PROBE; p++) {
         biome_cache_slot *s = &cache->slots[i];
         if (s->used && s->wx == wx && s->wz == wz) {
             s->stamp = cache->tick;
@@ -41,12 +44,13 @@ p++) {
     }
 
     cache->misses++;
-uint32_t victim = idx;
-uint32_t oldest = 0xFFFFFFFFu;
-i = idx;
-for (int p = 0;
-p < BIOME_CACHE_PROBE;
-p++) {
+
+    // miss: find a victim. prefer an empty slot in the probe window, else evict
+    // the oldest one we saw (lowest stamp).
+    uint32_t victim = idx;
+    uint32_t oldest = 0xFFFFFFFFu;
+    i = idx;
+    for (int p = 0; p < BIOME_CACHE_PROBE; p++) {
         biome_cache_slot *s = &cache->slots[i];
         if (!s->used) { victim = i; oldest = 0; break; }
         if (s->stamp < oldest) { oldest = s->stamp; victim = i; }
@@ -54,12 +58,12 @@ p++) {
     }
 
     biome_cache_slot *vs = &cache->slots[victim];
-vs->used = 1;
-vs->wx = wx;
-vs->wz = wz;
-vs->stamp = cache->tick;
-biome_column_build(&vs->col, wx, wz, cache->sea_level, cache->seed, cache->radius);
-return &vs->col;
+    vs->used = 1;
+    vs->wx = wx;
+    vs->wz = wz;
+    vs->stamp = cache->tick;
+    biome_column_build(&vs->col, wx, wz, cache->sea_level, cache->seed, cache->radius);
+    return &vs->col;
 }
 
 biome_kind biome_cache_biome(biome_cache *cache, int wx, int wz) {
@@ -69,7 +73,7 @@ biome_kind biome_cache_biome(biome_cache *cache, int wx, int wz) {
 
 float biome_cache_hitrate(const biome_cache *cache) {
     if (!cache) return 0.0f;
-uint64_t total = cache->hits + cache->misses;
-if (total == 0) return 0.0f;
-return (float)cache->hits / (float)total * 100.0f;
+    uint64_t total = cache->hits + cache->misses;
+    if (total == 0) return 0.0f;
+    return (float)cache->hits / (float)total * 100.0f;
 }

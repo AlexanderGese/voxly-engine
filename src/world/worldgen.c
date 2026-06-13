@@ -2,8 +2,14 @@
 #include "block.h"
 #include "../math/noise.h"
 #include "../config.h"
+
 #include <math.h>
 #include <stdlib.h>
+
+// little trick to reseed based on world+chunk coords so chunks are
+// deterministic regardless of load order. seed is seeded once globally
+// but grabbed per chunk via a cheap hash before noise sampling
+
 static unsigned hash_u(unsigned x) {
     x ^= x >> 16;
     x *= 0x7feb352du;
@@ -15,15 +21,16 @@ static unsigned hash_u(unsigned x) {
 
 int worldgen_height_at(int wx, int wz, unsigned seed) {
     (void)seed;
-float scale = 1.0f / 90.0f;
-float n  = noise_fbm2d(wx * scale,            wz * scale,            5, 2.0f, 0.5f);
-float nm = noise_fbm2d(wx * scale * 0.25f,    wz * scale * 0.25f,    3, 2.0f, 0.5f);
-float base = (float)WORLD_SEA_LEVEL + 6.0f;
-float h    = base + n * 18.0f + nm * 10.0f;
-int hi = (int)h;
-if (hi < 1) hi = 1;
-if (hi >= CHUNK_SIZE_Y - 1) hi = CHUNK_SIZE_Y - 2;
-return hi;
+    float scale = 1.0f / 90.0f;
+    float n  = noise_fbm2d(wx * scale,            wz * scale,            5, 2.0f, 0.5f);
+    float nm = noise_fbm2d(wx * scale * 0.25f,    wz * scale * 0.25f,    3, 2.0f, 0.5f);
+
+    float base = (float)WORLD_SEA_LEVEL + 6.0f;
+    float h    = base + n * 18.0f + nm * 10.0f;
+    int hi = (int)h;
+    if (hi < 1) hi = 1;
+    if (hi >= CHUNK_SIZE_Y - 1) hi = CHUNK_SIZE_Y - 2;
+    return hi;
 }
 
 static void plant_tree(chunk *c, int lx, int ly, int lz) {
@@ -62,9 +69,8 @@ void worldgen_fill(chunk *c, unsigned seed) {
     // startup (main.c calls noise_seed(seed) before any chunks load).
     // tree placement uses its own hash-based RNG below, independent of noise.
     (void)seed;
-for (int lz = 0;
-lz < CHUNK_SIZE_Z;
-lz++) {
+
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++) {
         for (int lx = 0; lx < CHUNK_SIZE_X; lx++) {
             int wx = c->cx * CHUNK_SIZE_X + lx;
             int wz = c->cz * CHUNK_SIZE_Z + lz;
@@ -96,7 +102,17 @@ lz++) {
 
     // scatter a few trees per chunk using cheap hash
     unsigned s = hash_u((unsigned)c->cx * 2654435761u + (unsigned)c->cz);
-int tries = 4 + (int)(s % 4);
-for (int t = 0;
-t < tries;
+    int tries = 4 + (int)(s % 4);
+    for (int t = 0; t < tries; t++) {
+        s = hash_u(s);
+        int lx = (int)(s % CHUNK_SIZE_X);
+        s = hash_u(s);
+        int lz = (int)(s % CHUNK_SIZE_Z);
+        int wx = c->cx * CHUNK_SIZE_X + lx;
+        int wz = c->cz * CHUNK_SIZE_Z + lz;
+        int h = worldgen_height_at(wx, wz, seed);
+        if (h < WORLD_SEA_LEVEL + 2) continue;
+        if (chunk_get_block(c, lx, h, lz) != BLOCK_GRASS) continue;
+        plant_tree(c, lx, h + 1, lz);
+    }
 }
