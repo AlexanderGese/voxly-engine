@@ -1,6 +1,8 @@
 #include "weather.h"
 #include "../math/rng.h"
+
 static rng wrng;
+
 void weather_init(weather *w) {
     rng_init(&wrng, 0xbadcafe);
     w->state = WEATHER_CLEAR;
@@ -11,7 +13,7 @@ void weather_init(weather *w) {
 
 void weather_update(weather *w, float dt) {
     w->timer += dt;
-if (w->timer >= w->next_change) {
+    if (w->timer >= w->next_change) {
         w->timer = 0;
         w->next_change = 90.0f + rng_frange(&wrng, -30, 240);
         int r = rng_range(&wrng, 0, 4);
@@ -25,8 +27,8 @@ if (w->timer >= w->next_change) {
 const char *weather_name(weather_state s) {
     switch (s) {
     case WEATHER_CLEAR: return "clear";
-case WEATHER_RAIN:  return "rain";
-case WEATHER_SNOW:  return "snow";
-}
+    case WEATHER_RAIN:  return "rain";
+    case WEATHER_SNOW:  return "snow";
+    }
     return "?";
 }
