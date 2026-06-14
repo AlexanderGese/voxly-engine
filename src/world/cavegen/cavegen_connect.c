@@ -1,12 +1,19 @@
 #include "cavegen_connect.h"
+
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <string.h>
+
+// explicit stack flood fill. recursion would blow the C stack on a region the
+// size of a chunk column, so we keep our own int stack of cell indices. 6-way
+// connectivity (face neighbours only) — diagonal-only links look like leaks.
+
 typedef struct {
     int *data;
     int  len;
     int  cap;
 } idx_stack;
+
 static void st_push(idx_stack *s, int v) {
     if (s->len == s->cap) {
         s->cap = s->cap ? s->cap * 2 : 256;
@@ -14,15 +21,12 @@ static void st_push(idx_stack *s, int v) {
     }
     s->data[s->len++] = v;
 }
-static int st_pop(idx_stack *s) { return s->data[--s->len];
-}
+static int st_pop(idx_stack *s) { return s->data[--s->len]; }
 
-static const int DX[6] = { 1, -1, 0, 0, 0, 0 }
-;
-static const int DY[6] = { 0, 0, 1, -1, 0, 0 }
-;
-static const int DZ[6] = { 0, 0, 0, 0, 1, -1 }
-;
+static const int DX[6] = { 1, -1, 0, 0, 0, 0 };
+static const int DY[6] = { 0, 0, 1, -1, 0, 0 };
+static const int DZ[6] = { 0, 0, 0, 0, 1, -1 };
+
 int cavegen_connect_flood(const cavegen_grid *g, int *labels,
                           int sx, int sy, int sz, int label) {
     int start = cavegen_grid_idx(sx, sy, sz);
@@ -60,15 +64,16 @@ int cavegen_connect_flood(const cavegen_grid *g, int *labels,
 
 cavegen_connect_stats cavegen_connect_run(cavegen_grid *g, const cavegen_params *p) {
     cavegen_connect_stats out = {0};
-int *labels = calloc(CAVEGEN_CELLS, sizeof(int));
-int *sizes  = NULL;
-int  sizes_cap = 0;
-if (!labels) { LOGE("cavegen: connect alloc failed"); return out; }
+
+    int *labels = calloc(CAVEGEN_CELLS, sizeof(int));
+    int *sizes  = NULL;   // sizes[label] -> cell count, grown lazily
+    int  sizes_cap = 0;
+    if (!labels) { LOGE("cavegen: connect alloc failed"); return out; }
 
     int next_label = 1;
-for (int y = 0;
-y < CAVEGEN_DIM_Y;
-y++) {
+
+    // label every open region.
+    for (int y = 0; y < CAVEGEN_DIM_Y; y++) {
         for (int z = 0; z < CAVEGEN_DIM_Z; z++) {
             for (int x = 0; x < CAVEGEN_DIM_X; x++) {
                 int idx = cavegen_grid_idx(x, y, z);
@@ -94,9 +99,23 @@ y++) {
         }
     }
     out.region_count = next_label - 1;
-for (int i = 0;
-i < CAVEGEN_CELLS;
-lab <= out.region_count;
-free(sizes);
-return out;
+
+    // second sweep: seal regions that are too small to bother keeping.
+    for (int i = 0; i < CAVEGEN_CELLS; i++) {
+        int lab = labels[i];
+        if (lab == 0) continue;
+        if (sizes[lab] < p->min_region_cells) {
+            g->cells[i] = CAVEGEN_SEALED;   // refilled, but flagged for stats
+        }
+    }
+    for (int lab = 1; lab <= out.region_count; lab++) {
+        if (sizes[lab] < p->min_region_cells) {
+            out.sealed_regions++;
+            out.sealed_cells += sizes[lab];
+        }
+    }
+
+    free(labels);
+    free(sizes);
+    return out;
 }

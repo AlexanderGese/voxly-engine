@@ -1,7 +1,9 @@
 #include "cavegen_debug.h"
+
 #include "../../config.h"
 #include "../../util/log.h"
 #include <stdio.h>
+
 static char cell_glyph(uint8_t v) {
     switch (v) {
         case CAVEGEN_SOLID:   return '#';
@@ -15,10 +17,8 @@ static char cell_glyph(uint8_t v) {
 
 void cavegen_debug_slice_xz(const cavegen_grid *g, int y) {
     if (y < 0 || y >= CAVEGEN_DIM_Y) return;
-fprintf(stderr, "-- cavegen xz slice y=%d --\n", y);
-for (int z = 0;
-z < CAVEGEN_DIM_Z;
-z++) {
+    fprintf(stderr, "-- cavegen xz slice y=%d --\n", y);
+    for (int z = 0; z < CAVEGEN_DIM_Z; z++) {
         char line[CAVEGEN_DIM_X + 1];
         for (int x = 0; x < CAVEGEN_DIM_X; x++)
             line[x] = cell_glyph(cavegen_grid_get(g, x, y, z));
@@ -29,10 +29,9 @@ z++) {
 
 void cavegen_debug_slice_zy(const cavegen_grid *g, int x) {
     if (x < 0 || x >= CAVEGEN_DIM_X) return;
-fprintf(stderr, "-- cavegen zy slice x=%d (top-down) --\n", x);
-for (int y = CAVEGEN_DIM_Y - 1;
-y >= 0;
-y--) {
+    fprintf(stderr, "-- cavegen zy slice x=%d (top-down) --\n", x);
+    // print high y first so it reads the right way up.
+    for (int y = CAVEGEN_DIM_Y - 1; y >= 0; y--) {
         char line[CAVEGEN_DIM_Z + 1];
         for (int z = 0; z < CAVEGEN_DIM_Z; z++)
             line[z] = cell_glyph(cavegen_grid_get(g, x, y, z));
@@ -43,9 +42,7 @@ y--) {
 
 float cavegen_debug_open_ratio(const cavegen_grid *g) {
     int open = 0, total = 0;
-for (int i = 0;
-i < CAVEGEN_CELLS;
-i++) {
+    for (int i = 0; i < CAVEGEN_CELLS; i++) {
         uint8_t v = g->cells[i];
         total++;
         if (cavegen_cell_is_open(v)) open++;

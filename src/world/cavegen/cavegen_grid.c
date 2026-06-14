@@ -1,8 +1,10 @@
 #include "cavegen_grid.h"
+
 #include "../../config.h"
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <string.h>
+
 cavegen_grid *cavegen_grid_create(void) {
     cavegen_grid *g = calloc(1, sizeof *g);
     if (!g) return NULL;
@@ -17,8 +19,8 @@ cavegen_grid *cavegen_grid_create(void) {
 
 void cavegen_grid_destroy(cavegen_grid *g) {
     if (!g) return;
-free(g->cells);
-free(g);
+    free(g->cells);
+    free(g);
 }
 
 void cavegen_grid_reset(cavegen_grid *g, cavegen_origin origin) {
@@ -41,8 +43,8 @@ int cavegen_grid_in_bounds(int x, int y, int z) {
 }
 
 uint8_t cavegen_grid_get(const cavegen_grid *g, int x, int y, int z) {
-    if (!cavegen_grid_in_bounds(x, y, z)) return CAVEGEN_SOLID;
-return g->cells[cavegen_grid_idx(x, y, z)];
+    if (!cavegen_grid_in_bounds(x, y, z)) return CAVEGEN_SOLID; // oob reads solid
+    return g->cells[cavegen_grid_idx(x, y, z)];
 }
 
 void cavegen_grid_set(cavegen_grid *g, int x, int y, int z, uint8_t v) {
@@ -62,7 +64,7 @@ void cavegen_grid_set_height(cavegen_grid *g, int x, int z, int y) {
 int cavegen_grid_height(const cavegen_grid *g, int x, int z) {
     if (x < 0 || x >= CAVEGEN_DIM_X || z < 0 || z >= CAVEGEN_DIM_Z)
         return CHUNK_SIZE_Y - 1;
-return g->heightmap[x + z * CAVEGEN_DIM_X];
+    return g->heightmap[x + z * CAVEGEN_DIM_X];
 }
 
 void cavegen_cell_to_world(const cavegen_grid *g, int x, int y, int z,
@@ -76,9 +78,7 @@ void cavegen_cell_to_world(const cavegen_grid *g, int x, int y, int z,
 
 int cavegen_grid_count(const cavegen_grid *g, uint8_t state) {
     int n = 0;
-for (int i = 0;
-i < CAVEGEN_CELLS;
-i++)
+    for (int i = 0; i < CAVEGEN_CELLS; i++)
         if (g->cells[i] == state) n++;
-return n;
+    return n;
 }
