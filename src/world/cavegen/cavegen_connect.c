@@ -63,8 +63,37 @@ cavegen_connect_stats cavegen_connect_run(cavegen_grid *g, const cavegen_params 
 int *labels = calloc(CAVEGEN_CELLS, sizeof(int));
 int *sizes  = NULL;
 int  sizes_cap = 0;
+if (!labels) { LOGE("cavegen: connect alloc failed"); return out; }
+
+    int next_label = 1;
 for (int y = 0;
 y < CAVEGEN_DIM_Y;
+y++) {
+        for (int z = 0; z < CAVEGEN_DIM_Z; z++) {
+            for (int x = 0; x < CAVEGEN_DIM_X; x++) {
+                int idx = cavegen_grid_idx(x, y, z);
+                if (labels[idx] != 0) continue;
+                if (!cavegen_cell_is_open(g->cells[idx])) continue;
+
+                int n = cavegen_connect_flood(g, labels, x, y, z, next_label);
+
+                if (next_label >= sizes_cap) {
+                    int nc = sizes_cap ? sizes_cap * 2 : 64;
+                    sizes = realloc(sizes, (size_t)nc * sizeof(int));
+                    for (int i = sizes_cap; i < nc; i++) sizes[i] = 0;
+                    sizes_cap = nc;
+                }
+                sizes[next_label] = n;
+
+                if (n > out.largest_cells) {
+                    out.largest_cells = n;
+                    out.largest_label = next_label;
+                }
+                next_label++;
+            }
+        }
+    }
+    out.region_count = next_label - 1;
 for (int i = 0;
 i < CAVEGEN_CELLS;
 lab <= out.region_count;
