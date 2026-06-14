@@ -1,5 +1,9 @@
 #include "cavegen_noise.h"
+
 #include <math.h>
+
+// --- hashing -------------------------------------------------------------
+
 uint32_t cavegen_hash1(uint32_t v, uint32_t seed) {
     uint32_t h = v + seed + 0x9e3779b9u;
     h ^= h >> 16;
@@ -12,14 +16,12 @@ uint32_t cavegen_hash1(uint32_t v, uint32_t seed) {
 
 uint32_t cavegen_hash3(int x, int y, int z, uint32_t seed) {
     uint32_t h = seed + 0x9e3779b9u;
-h ^= (uint32_t)x * 0x85ebca6bu;
-h = (h << 13) | (h >> 19);
-h ^= (uint32_t)y * 0xc2b2ae35u;
-h = (h << 11) | (h >> 21);
-h ^= (uint32_t)z * 0x27d4eb2fu;
-h *= 0x165667b1u;
-h ^= h >> 15;
-return h;
+    h ^= (uint32_t)x * 0x85ebca6bu; h = (h << 13) | (h >> 19);
+    h ^= (uint32_t)y * 0xc2b2ae35u; h = (h << 11) | (h >> 21);
+    h ^= (uint32_t)z * 0x27d4eb2fu;
+    h *= 0x165667b1u;
+    h ^= h >> 15;
+    return h;
 }
 
 float cavegen_hash_f01(int x, int y, int z, uint32_t seed) {
@@ -32,7 +34,7 @@ float cavegen_hash_f01(int x, int y, int z, uint32_t seed) {
 // per-cell value in [-1,1]
 static float cell_val(int xi, int yi, int zi, uint32_t seed) {
     uint32_t h = cavegen_hash3(xi, yi, zi, seed);
-return (float)(h >> 8) / (float)(1u << 23) - 1.0f;
+    return (float)(h >> 8) / (float)(1u << 23) - 1.0f;
 }
 
 // smootherstep
@@ -75,6 +77,28 @@ float cavegen_value3(float x, float y, float z, uint32_t seed) {
 float cavegen_fbm3(float x, float y, float z, uint32_t seed,
                    int octaves, float lacunarity, float gain) {
     float sum = 0.0f, amp = 1.0f, norm = 0.0f;
-float fx = x, fy = y, fz = z;
-for (int o = 0;
-o < octaves;
+    float fx = x, fy = y, fz = z;
+    for (int o = 0; o < octaves; o++) {
+        // bump the seed each octave so layers dont rhyme with each other.
+        sum  += amp * cavegen_value3(fx, fy, fz, seed + (uint32_t)o * 131u);
+        norm += amp;
+        amp  *= gain;
+        fx *= lacunarity; fy *= lacunarity; fz *= lacunarity;
+    }
+    return norm > 0.0f ? sum / norm : 0.0f;
+}
+
+float cavegen_ridge3(float x, float y, float z, uint32_t seed, int octaves) {
+    float sum = 0.0f, amp = 0.5f, norm = 0.0f;
+    float fx = x, fy = y, fz = z;
+    for (int o = 0; o < octaves; o++) {
+        float n = cavegen_value3(fx, fy, fz, seed + (uint32_t)o * 911u);
+        n = 1.0f - fabsf(n);   // fold to a ridge
+        n *= n;                // sharpen
+        sum  += amp * n;
+        norm += amp;
+        amp  *= 0.5f;
+        fx *= 2.0f; fy *= 2.0f; fz *= 2.0f;
+    }
+    return norm > 0.0f ? sum / norm : 0.0f;
+}

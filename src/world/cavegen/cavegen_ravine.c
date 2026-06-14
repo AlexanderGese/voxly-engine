@@ -1,7 +1,10 @@
 #include "cavegen_ravine.h"
+
 #include "cavegen_noise.h"
 #include "../../config.h"
 #include <math.h>
+
+// same little private xorshift as the worms.
 static uint32_t rrng(uint32_t *s) {
     uint32_t x = *s ? *s : 0x6d2b79f5u;
     x ^= x << 13; x ^= x >> 17; x ^= x << 5;
@@ -28,11 +31,10 @@ cavegen_ravine cavegen_ravine_init(vec3 pos, uint32_t stream) {
 static void carve_blade(cavegen_grid *g, vec3 c, float w, float h,
                         const cavegen_params *p) {
     int iw = (int)ceilf(w);
-int ih = (int)ceilf(h);
-int cx = (int)floorf(c.x), cy = (int)floorf(c.y), cz = (int)floorf(c.z);
-for (int dy = -ih;
-dy <= ih;
-dy++) {
+    int ih = (int)ceilf(h);
+    int cx = (int)floorf(c.x), cy = (int)floorf(c.y), cz = (int)floorf(c.z);
+
+    for (int dy = -ih; dy <= ih; dy++) {
         for (int dz = -iw; dz <= iw; dz++) {
             for (int dx = -iw; dx <= iw; dx++) {
                 // normalised ellipsoid test, vertical axis stretched.
@@ -55,24 +57,32 @@ dy++) {
 
 int cavegen_ravine_step(cavegen_grid *g, cavegen_ravine *r, const cavegen_params *p) {
     if (r->steps_left <= 0) return 0;
-r->steps_left--;
-carve_blade(g, r->pos, r->width, r->height, p);
-int wx, wy, wz;
-cavegen_cell_to_world(g, (int)r->pos.x, (int)r->pos.y, (int)r->pos.z,
+    r->steps_left--;
+
+    carve_blade(g, r->pos, r->width, r->height, p);
+
+    // gentle meander in yaw only — ravines wander but dont coil.
+    int wx, wy, wz;
+    cavegen_cell_to_world(g, (int)r->pos.x, (int)r->pos.y, (int)r->pos.z,
                           &wx, &wy, &wz);
-float n = cavegen_value3((float)wx * 0.05f, 0.0f, (float)wz * 0.05f,
+    float n = cavegen_value3((float)wx * 0.05f, 0.0f, (float)wz * 0.05f,
                              p->seed ^ 0x4a71u);
-r->yaw += n * 0.18f;
-float t = (float)r->steps_left;
-if (t < 8.0f) r->width *= 0.9f;
-r->pos.x += cosf(r->yaw);
-r->pos.z += sinf(r->yaw);
-r->pos.y -= 0.05f;
-if (r->pos.x < -2 || r->pos.x > CAVEGEN_DIM_X + 2 ||
+    r->yaw += n * 0.18f;
+
+    // width tapers toward the ends so it closes off instead of stopping flat.
+    float t = (float)r->steps_left;
+    if (t < 8.0f) r->width *= 0.9f;
+
+    r->pos.x += cosf(r->yaw);
+    r->pos.z += sinf(r->yaw);
+    // very slow downward drift so the floor descends along its length.
+    r->pos.y -= 0.05f;
+
+    if (r->pos.x < -2 || r->pos.x > CAVEGEN_DIM_X + 2 ||
         r->pos.z < -2 || r->pos.z > CAVEGEN_DIM_Z + 2 ||
         r->width < 1.0f)
         return 0;
-return 1;
+    return 1;
 }
 
 int cavegen_ravine_maybe_spawn(cavegen_grid *g, const cavegen_params *p) {
