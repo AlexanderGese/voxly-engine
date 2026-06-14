@@ -20,3 +20,9 @@ cavegen_column_fill_pad(ctx->grid);
 cavegen_automata_seed(ctx->grid, &ctx->params);
 cavegen_automata_smooth(ctx->grid, &ctx->params);
 cavegen_worm_spawn_all(ctx->grid, &ctx->params);
+cavegen_ravine_maybe_spawn(ctx->grid, &ctx->params);
+rep.connect = cavegen_connect_run(ctx->grid, &ctx->params);
+rep.carve = cavegen_carve_apply(c, ctx->grid, &ctx->params);
+LOGD("cavegen chunk (%d,%d): %d regions, sealed %d, carved %d air / %d water",
+         c->cx, c->cz, rep.connect.region_count, rep.connect.sealed_regions,
+         rep.carve.air_set, rep.carve.water_set);

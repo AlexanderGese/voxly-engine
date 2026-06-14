@@ -1,5 +1,11 @@
 #include "biome_table.h"
+
 #include <stddef.h>
+
+// envelope fields are: temp, humid, eros, weird, then the four axis weights.
+// weights say how strongly each climate axis pulls toward this biome. zero
+// weight == "dont care". tuned by hand, expect to keep nudging these.
+
 static const biome_def g_biomes[BIOME_KIND_COUNT] = {
     [BIOME_KIND_OCEAN] = {
         "ocean", BIOME_KIND_OCEAN,
@@ -92,7 +98,23 @@ static const biome_def g_biomes[BIOME_KIND_COUNT] = {
         44.0f, 34.0f, 1,
         0.0f, 0.0f, 0, 0x8AB689, 0x3F76E4
     },
+};
+
+const biome_def *biome_table_get(biome_kind kind) {
+    if (kind < 0 || kind >= BIOME_KIND_COUNT) return &g_biomes[BIOME_KIND_PLAINS];
+    return &g_biomes[kind];
 }
-;
-return &g_biomes[index];
+
+int biome_table_count(void) {
+    return BIOME_KIND_COUNT;
+}
+
+const char *biome_table_name(biome_kind kind) {
+    if (kind < 0 || kind >= BIOME_KIND_COUNT) return "?";
+    return g_biomes[kind].name;
+}
+
+const biome_def *biome_table_at(int index) {
+    if (index < 0 || index >= BIOME_KIND_COUNT) return NULL;
+    return &g_biomes[index];
 }
