@@ -1,0 +1,3 @@
+#ifndef WORLD_CAVEGEN_CONNECT_H
+#define WORLD_CAVEGEN_CONNECT_H
+#endif
