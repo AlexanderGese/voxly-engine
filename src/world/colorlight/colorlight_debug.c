@@ -4,13 +4,13 @@
 #include "../block.h"
 #include "../../config.h"
 #include "../../util/log.h"
+
 #include <string.h>
-static const int DX[6] = { 1,-1, 0, 0, 0, 0}
-;
-static const int DY[6] = { 0, 0, 1,-1, 0, 0}
-;
-static const int DZ[6] = { 0, 0, 0, 0, 1,-1}
-;
+
+static const int DX[6] = { 1,-1, 0, 0, 0, 0};
+static const int DY[6] = { 0, 0, 1,-1, 0, 0};
+static const int DZ[6] = { 0, 0, 0, 0, 1,-1};
+
 void colorlight_debug_chunk_stats(world *w, chunk *c, colorlight_stats *out) {
     memset(out, 0, sizeof *out);
     colorlight_grid *g = colorlight_grid_peek(c);
@@ -64,11 +64,11 @@ void colorlight_debug_chunk_stats(world *w, chunk *c, colorlight_stats *out) {
 
 int colorlight_debug_verify(world *w, chunk *c) {
     colorlight_stats st;
-colorlight_debug_chunk_stats(w, c, &st);
-if (st.leak_count == 0 && st.gradient_breaks == 0) return 1;
-LOGW("colorlight verify FAIL chunk %d,%d: %d leaks, %d gradient breaks",
+    colorlight_debug_chunk_stats(w, c, &st);
+    if (st.leak_count == 0 && st.gradient_breaks == 0) return 1;
+    LOGW("colorlight verify FAIL chunk %d,%d: %d leaks, %d gradient breaks",
          c->cx, c->cz, st.leak_count, st.gradient_breaks);
-return 0;
+    return 0;
 }
 
 void colorlight_debug_dump_slice(chunk *c, int y, int chan) {
@@ -80,7 +80,7 @@ void colorlight_debug_dump_slice(chunk *c, int y, int chan) {
     const char *cname = chan == 0 ? "r" : chan == 1 ? "g" : "b";
     LOGD("colorlight slice chunk %d,%d y=%d chan=%s", c->cx, c->cz, y, cname);
 
-    for (int lz = 0; lz <= CHUNK_SIZE_Z; lz++) {
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++) {
         char row[CHUNK_SIZE_X + 1];
         for (int lx = 0; lx < CHUNK_SIZE_X; lx++) {
             uint8_t v = colorlight_grid_get_chan(g, lx, y, lz, chan);
