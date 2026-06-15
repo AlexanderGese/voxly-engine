@@ -1,7 +1,9 @@
 #include "erosion_droplet.h"
 #include "erosion_sediment.h"
 #include "erosion_noise.h"
+
 #include <math.h>
+
 erosion_droplet erosion_droplet_spawn(const erosion_field *f,
                                       const erosion_params *p,
                                       int droplet_index) {
@@ -27,9 +29,7 @@ erosion_droplet erosion_droplet_spawn(const erosion_field *f,
 
 int erosion_droplet_run(erosion_field *f, const erosion_params *p,
                         erosion_droplet *d, erosion_stats *st) {
-    for (int step = 0;
-step < p->droplet_lifetime;
-step++) {
+    for (int step = 0; step < p->droplet_lifetime; step++) {
         vec2  old_pos = d->pos;
         float h_old   = erosion_sample_height(f, old_pos);
         vec2  grad    = erosion_sample_gradient(f, old_pos);
@@ -117,5 +117,15 @@ step++) {
 
     // outlived its lifetime still carrying. settle whatever's left.
     erosion_deposit(f, d->pos, d->sediment);
-if (st) st->total_deposited += d->sediment;
-return 1;
+    if (st) st->total_deposited += d->sediment;
+    return 1;
+}
+
+void erosion_hydraulic_pass(erosion_field *f, const erosion_params *p,
+                            erosion_stats *st) {
+    for (int i = 0; i < p->droplets; i++) {
+        erosion_droplet d = erosion_droplet_spawn(f, p, i);
+        erosion_droplet_run(f, p, &d, st);
+        if (st) st->droplets_run++;
+    }
+}
