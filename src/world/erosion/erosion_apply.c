@@ -1,6 +1,8 @@
 #include "erosion_apply.h"
+
 #include "../../config.h"
 #include <math.h>
+
 block_id erosion_deposit_block(int world_y, int sea_level) {
     // material the water/scree drops. sand collects in the wet lowlands, dirt
     // on the slopes, and the very top of a deposit gets grass so it blends.
@@ -58,6 +60,22 @@ int erosion_apply_column(chunk *c, int lx, int lz,
 int erosion_apply_chunk(chunk *c, const erosion_field *f,
                         const int *old_height, int sea_level) {
     int total = 0;
-for (int lz = 0;
-lz < CHUNK_SIZE_Z;
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++) {
+        for (int lx = 0; lx < CHUNK_SIZE_X; lx++) {
+            // chunk-local maps to the field interior past the pad.
+            int fx = lx + EROSION_PAD;
+            int fz = lz + EROSION_PAD;
+            int oi = fz * EROSION_DIM_X + fx;
+
+            float eroded = f->height[erosion_idx(fx, fz)] + f->sediment[erosion_idx(fx, fz)];
+            int new_top = (int)floorf(eroded + 0.5f);
+            int old_top = old_height[oi];
+
+            if (new_top < 0) new_top = 0;
+            if (new_top > CHUNK_SIZE_Y - 1) new_top = CHUNK_SIZE_Y - 1;
+
+            total += erosion_apply_column(c, lx, lz, old_top, new_top, sea_level);
+        }
+    }
+    return total;
 }

@@ -3,8 +3,10 @@
 #include "erosion_thermal.h"
 #include "erosion_sediment.h"
 #include "erosion_apply.h"
+
 #include <math.h>
 #include <string.h>
+
 erosion_stats erosion_stats_zero(void) {
     erosion_stats s;
     memset(&s, 0, sizeof s);
@@ -14,8 +16,11 @@ erosion_stats erosion_stats_zero(void) {
 void erosion_load_field(erosion_field *f, const erosion_params *p,
                         int ox, int oz, const float *heights) {
     erosion_field_clear(f, ox, oz);
-memcpy(f->height, heights, sizeof(float) * EROSION_CELLS);
-erosion_field_seed_hardness(f, p, 0.35f, 0.5f);
+    memcpy(f->height, heights, sizeof(float) * EROSION_CELLS);
+
+    // softer rock high up (weathered) and near sea level (waterlogged), harder
+    // in the mid band. its a rough heuristic but it keeps plateaus from melting.
+    erosion_field_seed_hardness(f, p, 0.35f, 0.5f);
 }
 
 void erosion_snapshot_tops(const erosion_field *f, int *old_height_out) {
@@ -31,8 +36,12 @@ void erosion_snapshot_tops(const erosion_field *f, int *old_height_out) {
 void erosion_run(erosion_field *f, const erosion_params *p, erosion_stats *st) {
     // water first: it does the dramatic carving and lays down sediment.
     erosion_hydraulic_pass(f, p, st);
-erosion_thermal_pass(f, p, st);
-erosion_settle(f, p);
+
+    // then talus relaxes the fresh cliffs the water left behind.
+    erosion_thermal_pass(f, p, st);
+
+    // any sediment still standing loose gets folded into height (or bled).
+    erosion_settle(f, p);
 }
 
 int erosion_process_chunk(chunk *c, const erosion_params *p,
