@@ -19,7 +19,12 @@ void  erosion_height_set(erosion_field *f, int x, int z, float h);
 void  erosion_height_add(erosion_field *f, int x, int z, float d);
 // bilinear height at a continuous position. clamps to the valid interior.
 float erosion_sample_height(const erosion_field *f, vec2 p);
+// downhill gradient of the bilinear patch at p. points uphill (df/dx, df/dz);
+// the droplet moves along -gradient. returns {0,0} dead flat.
 vec2 erosion_sample_gradient(const erosion_field *f, vec2 p);
+// bilinear hardness, used to scale how much a droplet may carve here.
 float erosion_sample_hardness(const erosion_field *f, vec2 p);
+// largest absolute height difference to any 8-neighbour. used by the thermal
+// pass to find unstable cells and by stats for the steepest delta.
 float erosion_cell_relief(const erosion_field *f, int x, int z);
 #endif
