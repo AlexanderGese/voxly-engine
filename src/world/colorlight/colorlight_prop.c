@@ -25,6 +25,27 @@ static void seed_channel(world *w, int wx, int wy, int wz, int chan, uint8_t lev
 if (colorlight_world_get_chan(w, wx, wy, wz, chan) >= level) return;
 colorlight_world_set_chan(w, wx, wy, wz, chan, level);
 colorlight_queue_push(colorlight_queue_add(), wx, wy, wz, (uint8_t)chan, level);
+}
+
+void colorlight_prop_drain_add(world *w) {
+    colorlight_queue *q = colorlight_queue_add();
+    colorlight_qnode n;
+    while (colorlight_queue_pop(q, &n)) {
+        if (n.level <= 1) continue;
+        for (int d = 0; d < 6; d++) {
+            int nx = n.x + DX[d], ny = n.y + DY[d], nz = n.z + DZ[d];
+            if (ny < 0 || ny >= CHUNK_SIZE_Y) continue;
+            int nl = step_level(w, nx, ny, nz, n.chan, n.level);
+            if (nl == 0) continue;
+            if (colorlight_world_get_chan(w, nx, ny, nz, n.chan) >= (uint8_t)nl) continue;
+            colorlight_world_set_chan(w, nx, ny, nz, n.chan, (uint8_t)nl);
+            colorlight_queue_push(q, nx, ny, nz, n.chan, (uint8_t)nl);
+        }
+    }
+}
+
+void colorlight_prop_place(world *w, int wx, int wy, int wz, colorlight_rgb col) {
+    colorlight_packed seed = colorlight_packed_narrow(col);
 seed_channel(w, wx, wy, wz, 0, colorlight_packed_r(seed));
 seed_channel(w, wx, wy, wz, 1, colorlight_packed_g(seed));
 seed_channel(w, wx, wy, wz, 2, colorlight_packed_b(seed));
