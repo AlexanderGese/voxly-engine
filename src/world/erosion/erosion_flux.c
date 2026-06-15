@@ -1,13 +1,16 @@
 #include "erosion_flux.h"
+
 #include <math.h>
 #include <string.h>
-static const int   D8_DX[8]   = { 1, -1, 0,  0,  1,  1, -1, -1 }
-;
-static const int   D8_DZ[8]   = { 0,  0, 1, -1,  1, -1,  1, -1 }
-;
+
+// 8-neighbour offsets and the distance to each (cardinals 1, diagonals ~1.41).
+// d8 picks the neighbour with the steepest *slope*, not just the lowest height,
+// so we divide the drop by the distance.
+static const int   D8_DX[8]   = { 1, -1, 0,  0,  1,  1, -1, -1 };
+static const int   D8_DZ[8]   = { 0,  0, 1, -1,  1, -1,  1, -1 };
 static const float D8_DIST[8] = { 1, 1, 1, 1, 1.41421356f, 1.41421356f,
-                                  1.41421356f, 1.41421356f }
-;
+                                  1.41421356f, 1.41421356f };
+
 void erosion_flux_d8(const erosion_field *f, erosion_flux *fx) {
     for (int z = 0; z < EROSION_DIM_Z; z++) {
         for (int x = 0; x < EROSION_DIM_X; x++) {
@@ -33,8 +36,7 @@ void erosion_flux_d8(const erosion_field *f, erosion_flux *fx) {
 }
 
 // indices sorted by height, descending. we use a simple insertion into a
-// height-keyed counting-ish order;
-the field is small (400 cells) so an
+// height-keyed counting-ish order; the field is small (400 cells) so an
 // O(n log n) qsort is overkill but harmless. we hand-roll to avoid pulling a
 // comparator + the field pointer through a global.
 static void sort_by_height_desc(const erosion_field *f, int *order) {
@@ -56,13 +58,13 @@ static void sort_by_height_desc(const erosion_field *f, int *order) {
 
 void erosion_flux_accumulate(const erosion_field *f, erosion_flux *fx) {
     static int order[EROSION_CELLS];
-sort_by_height_desc(f, order);
-for (int i = 0;
-i < EROSION_CELLS;
-i++) fx->accum[i] = 1.0f;
-for (int n = 0;
-n < EROSION_CELLS;
-n++) {
+    sort_by_height_desc(f, order);
+
+    // every cell starts owning its own rain (area 1). pushing high->low means
+    // when we reach a cell all its uphill contributors have already added in.
+    for (int i = 0; i < EROSION_CELLS; i++) fx->accum[i] = 1.0f;
+
+    for (int n = 0; n < EROSION_CELLS; n++) {
         int ci = order[n];
         int dn = fx->to[ci];
         if (dn >= 0) fx->accum[dn] += fx->accum[ci];
@@ -72,17 +74,14 @@ n++) {
 void erosion_flux_normalise(erosion_flux *fx) {
     // log curve: a river twice as long isnt twice as wide. then a 4-tap blur.
     float maxv = 0.0f;
-static float tmp[EROSION_CELLS];
-for (int i = 0;
-i < EROSION_CELLS;
-i++) {
+    static float tmp[EROSION_CELLS];
+    for (int i = 0; i < EROSION_CELLS; i++) {
         tmp[i] = logf(1.0f + fx->accum[i]);
         if (tmp[i] > maxv) maxv = tmp[i];
     }
     float inv = maxv > 0.0f ? 1.0f / maxv : 0.0f;
-for (int z = 0;
-z < EROSION_DIM_Z;
-z++) {
+
+    for (int z = 0; z < EROSION_DIM_Z; z++) {
         for (int x = 0; x < EROSION_DIM_X; x++) {
             int i = erosion_idx(x, z);
             float acc = tmp[i];
@@ -100,7 +99,7 @@ z++) {
 
 int erosion_flux_is_channel(const erosion_flux *fx, int x, int z, float thresh) {
     if (!erosion_in_bounds(x, z)) return 0;
-return fx->wet[erosion_idx(x, z)] >= thresh;
+    return fx->wet[erosion_idx(x, z)] >= thresh;
 }
 
 void erosion_flux_compute(const erosion_field *f, erosion_flux *fx) {

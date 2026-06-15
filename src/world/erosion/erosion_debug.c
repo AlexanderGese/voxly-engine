@@ -1,6 +1,8 @@
 #include "erosion_debug.h"
+
 #include <stdio.h>
 #include <math.h>
+
 void erosion_debug_print_stats(const erosion_field *f, const erosion_stats *st) {
     float lo = 1e30f, hi = -1e30f, sum = 0.0f;
     for (int i = 0; i < EROSION_CELLS; i++) {
@@ -24,11 +26,11 @@ void erosion_debug_print_stats(const erosion_field *f, const erosion_stats *st) 
 // map a normalised value [0,1] to a glyph from the ramp.
 static char ramp_glyph(float t) {
     static const char ramp[] = " .:-=+*#%@";
-int n = (int)(sizeof(ramp) - 2);
-int i = (int)(t * (float)n + 0.5f);
-if (i < 0) i = 0;
-if (i > n) i = n;
-return ramp[i];
+    int n = (int)(sizeof(ramp) - 2);   // exclude the nul
+    int i = (int)(t * (float)n + 0.5f);
+    if (i < 0) i = 0;
+    if (i > n) i = n;
+    return ramp[i];
 }
 
 void erosion_debug_dump_relief(const erosion_field *f) {
@@ -52,9 +54,7 @@ void erosion_debug_dump_relief(const erosion_field *f) {
 
 void erosion_debug_dump_channels(const erosion_flux *fx, float thresh) {
     printf("[erosion] channels (thresh=%.2f):\n", thresh);
-for (int z = EROSION_PAD;
-z < EROSION_DIM_Z - EROSION_PAD;
-z++) {
+    for (int z = EROSION_PAD; z < EROSION_DIM_Z - EROSION_PAD; z++) {
         putchar(' '); putchar(' ');
         for (int x = EROSION_PAD; x < EROSION_DIM_X - EROSION_PAD; x++) {
             putchar(erosion_flux_is_channel(fx, x, z, thresh) ? '~' : ' ');
@@ -65,7 +65,17 @@ z++) {
 
 int erosion_debug_verify_flow(const erosion_field *f, const erosion_flux *fx) {
     int bad = 0;
-for (int i = 0;
-i < EROSION_CELLS;
-return bad;
+    for (int i = 0; i < EROSION_CELLS; i++) {
+        int dn = fx->to[i];
+        if (dn < 0) continue;   // pit, allowed
+        if (f->height[dn] >= f->height[i]) {
+            if (bad < 8) {   // dont spam, first few are enough to see the bug
+                printf("[erosion] !! cell %d (h=%.3f) drains UPHILL to %d "
+                       "(h=%.3f)\n", i, f->height[i], dn, f->height[dn]);
+            }
+            bad++;
+        }
+    }
+    if (bad) printf("[erosion] verify_flow: %d violations\n", bad);
+    return bad;
 }
