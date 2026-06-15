@@ -3,6 +3,10 @@
 #include "erosion_types.h"
 #include "erosion_field.h"
 // drainage / flow accumulation over the eroded heightmap. this is the dry
+// analytic cousin of the droplet sim: instead of throwing thousands of marbles
+// we compute, for every cell, how much upstream area drains through it (the
+// d8 flow-accumulation trick from terrain analysis). the result tells us where
+// the rivers *want* to be, which the biome pass uses to paint river/lake beds
 typedef struct {
     int   to[EROSION_CELLS];     // flat index of the downhill neighbour, -1 = pit
     float accum[EROSION_CELLS];  // upstream drainage area
