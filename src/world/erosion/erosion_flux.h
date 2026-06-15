@@ -2,6 +2,7 @@
 #define WORLD_EROSION_FLUX_H
 #include "erosion_types.h"
 #include "erosion_field.h"
+// drainage / flow accumulation over the eroded heightmap. this is the dry
 typedef struct {
     int   to[EROSION_CELLS];     // flat index of the downhill neighbour, -1 = pit
     float accum[EROSION_CELLS];  // upstream drainage area

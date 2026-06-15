@@ -54,6 +54,17 @@ void erosion_debug_dump_channels(const erosion_flux *fx, float thresh) {
     printf("[erosion] channels (thresh=%.2f):\n", thresh);
 for (int z = EROSION_PAD;
 z < EROSION_DIM_Z - EROSION_PAD;
+z++) {
+        putchar(' '); putchar(' ');
+        for (int x = EROSION_PAD; x < EROSION_DIM_X - EROSION_PAD; x++) {
+            putchar(erosion_flux_is_channel(fx, x, z, thresh) ? '~' : ' ');
+        }
+        putchar('\n');
+    }
+}
+
+int erosion_debug_verify_flow(const erosion_field *f, const erosion_flux *fx) {
+    int bad = 0;
 for (int i = 0;
 i < EROSION_CELLS;
 return bad;
