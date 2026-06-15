@@ -1,6 +1,10 @@
 #include "colorlight_emitter.h"
 #include "../../config.h"
 #include <stddef.h>
+
+// the hue table. block id -> color it glows. levels here are "design intent";
+// the actual emission strength is min(table level, however bright the block is).
+// keep these roughly minecraft-ish so it reads right out of the box.
 static const colorlight_emitter EMITTERS[] = {
     // torch: warm orange, classic. not full red, it'd look like lava.
     { BLOCK_TORCH, { 255, 170,  90 }, 14 },
@@ -9,9 +13,10 @@ static const colorlight_emitter EMITTERS[] = {
     // ice catches a faint cold blue when lit, treated as a weak emitter so
     // caves of ice aren't pitch black. arguable, but it looks nice.
     { BLOCK_ICE,   { 150, 200, 255 },  4 },
-}
-;
+};
+
 #define EMITTER_COUNT ((int)(sizeof(EMITTERS) / sizeof(EMITTERS[0])))
+
 static const colorlight_emitter *find(block_id id) {
     for (int i = 0; i < EMITTER_COUNT; i++) {
         if (EMITTERS[i].block == id) return &EMITTERS[i];
@@ -21,8 +26,9 @@ static const colorlight_emitter *find(block_id id) {
 
 int colorlight_emitter_is(block_id id) {
     if (find(id)) return 1;
-const block_info *bi = block_get(id);
-return bi && bi->emits_light && bi->luminance > 0;
+    // fall back to the scalar flag so a newly-flagged emitter still lights.
+    const block_info *bi = block_get(id);
+    return bi && bi->emits_light && bi->luminance > 0;
 }
 
 colorlight_rgb colorlight_emitter_color(block_id id) {
