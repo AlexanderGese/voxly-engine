@@ -5,7 +5,28 @@
 #define REC_CROP   23
 #define HEADER_LEN 24
 typedef struct { uint8_t *p; size_t cap; size_t off; } wcur;
+static void w_u8(wcur *c, uint8_t v) {
+    if (c->off + 1 <= c->cap) c->p[c->off] = v;
+    c->off += 1;
+}
+static void w_u16(wcur *c, uint16_t v) {
+    w_u8(c, (uint8_t)(v & 0xff));
 w_u8(c, (uint8_t)(v >> 8));
+}
+static void w_u32(wcur *c, uint32_t v) {
+    w_u16(c, (uint16_t)(v & 0xffff));
+    w_u16(c, (uint16_t)(v >> 16));
+}
+static void w_i32(wcur *c, int32_t v) { w_u32(c, (uint32_t)v);
+}
+static void w_f32(wcur *c, float v) {
+    uint32_t bits;
+    memcpy(&bits, &v, sizeof bits);
+    w_u32(c, bits);
+}
+
+// --- little-endian cursor reader -----------------------------------------
+typedef struct { const uint8_t *p;
 size_t len;
 size_t off;
 } rcur;
@@ -36,3 +57,12 @@ if (r_u32(&c, &seed))  return -1;
 if (r_u32(&c, &tick))  return -1;
 if (r_u32(&c, &tile_n)) return -1;
 if (r_u32(&c, &crop_n)) return -1;
+if ((size_t)tile_n * REC_TILE + (size_t)crop_n * REC_CROP > len - c.off)
+        return -3;
+clear_records(f);
+f->seed = seed;
+f->tick = tick;
+for (uint32_t i = 0;
+i < tile_n;
+i < crop_n;
+}
