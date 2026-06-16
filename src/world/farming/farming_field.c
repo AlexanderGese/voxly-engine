@@ -12,7 +12,15 @@
 #include "../block.h"
 #include <stdlib.h>
 #include <stddef.h>
+
+// default growth cadence. real-world seconds between growth ticks. crops cross
+// a stage every few of these depending on hydration, so a wheat field matures
+// in a couple of minutes of watered daylight. slow enough to feel like farming.
 #define FIELD_TICK_PERIOD   2.0f
+
+// pack a block coord into a u64 hashmap key. 21 bits each, signed-biased. our
+// worlds dont reach +-1M blocks so this is plenty, and it keeps tile/crop keys
+// identical so the two maps stay in lockstep.
 static uint64_t key_of(int x, int y, int z) {
     uint64_t ux = (uint64_t)(uint32_t)(x + (1 << 20)) & 0x1FFFFFull;
     uint64_t uy = (uint64_t)(uint32_t)(y + (1 << 20)) & 0x1FFFFFull;
@@ -22,15 +30,15 @@ static uint64_t key_of(int x, int y, int z) {
 
 void farming_field_init(farming_field *f, uint32_t world_seed) {
     hashmap_init(&f->tiles, 64);
-hashmap_init(&f->crops, 64);
-f->seed = world_seed;
-f->tick = 0;
-f->accum = 0.0f;
-f->tick_period = FIELD_TICK_PERIOD;
-farming_rng_seed(&f->rng, world_seed ^ 0x5eed1eafu);
-f->counters_produce = 0;
-f->counters_seed = 0;
-f->counters_xp = 0;
+    hashmap_init(&f->crops, 64);
+    f->seed = world_seed;
+    f->tick = 0;
+    f->accum = 0.0f;
+    f->tick_period = FIELD_TICK_PERIOD;
+    farming_rng_seed(&f->rng, world_seed ^ 0x5eed1eafu);
+    f->counters_produce = 0;
+    f->counters_seed = 0;
+    f->counters_xp = 0;
 }
 
 void farming_field_free(farming_field *f) {
@@ -58,13 +66,15 @@ farming_crop *farming_field_crop_at(farming_field *f, int wx, int wy, int wz) {
 }
 
 int farming_field_till(farming_field *f, world *w, int wx, int wy, int wz) {
-    if (farming_field_tile_at(f, wx, wy, wz)) return 0;
-if (!farming_plant_till(w, wx, wy, wz)) return 0;
-farming_tile *t = (farming_tile *)malloc(sizeof *t);
-if (!t) return 0;
-farming_tile_init(t, wx, wy, wz);
-hashmap_put(&f->tiles, key_of(wx, wy, wz), t);
-return 1;
+    if (farming_field_tile_at(f, wx, wy, wz)) return 0; // already tracked
+
+    if (!farming_plant_till(w, wx, wy, wz)) return 0;
+
+    farming_tile *t = (farming_tile *)malloc(sizeof *t);
+    if (!t) return 0;
+    farming_tile_init(t, wx, wy, wz);
+    hashmap_put(&f->tiles, key_of(wx, wy, wz), t);
+    return 1;
 }
 
 int farming_field_plant(farming_field *f, world *w, int wx, int wy, int wz,
@@ -87,13 +97,15 @@ int farming_field_plant(farming_field *f, world *w, int wx, int wy, int wz,
 
 void farming_field_trample(farming_field *f, world *w, int wx, int wy, int wz) {
     farming_tile *t = farming_field_tile_at(f, wx, wy, wz);
-if (!t) return;
-if (!farming_tile_trample(t)) return;
-farming_tile_revert_world(w, t);
-farming_crop *c = farming_field_crop_at(f, wx, wy, wz);
-if (c) { hashmap_del(&f->crops, key_of(wx, wy, wz)); free(c); }
+    if (!t) return;
+    if (!farming_tile_trample(t)) return;
+
+    // over the cap: revert, dropping any crop record too.
+    farming_tile_revert_world(w, t);
+    farming_crop *c = farming_field_crop_at(f, wx, wy, wz);
+    if (c) { hashmap_del(&f->crops, key_of(wx, wy, wz)); free(c); }
     hashmap_del(&f->tiles, key_of(wx, wy, wz));
-free(t);
+    free(t);
 }
 
 int farming_field_bonemeal(farming_field *f, world *w, int wx, int wy, int wz) {
@@ -117,8 +129,10 @@ int farming_field_bonemeal(farming_field *f, world *w, int wx, int wy, int wz) {
 farming_yield farming_field_harvest(farming_field *f, world *w,
                                     int wx, int wy, int wz) {
     farming_yield empty = {0, 0, 0, 0};
-block_id here = world_get_block(w, wx, wy, wz);
-if (here == FARMING_BLOCK_MELON_FRUIT || here == FARMING_BLOCK_PUMPKIN_FRUIT) {
+
+    // a fruit block? harvest it directly, stem stays put.
+    block_id here = world_get_block(w, wx, wy, wz);
+    if (here == FARMING_BLOCK_MELON_FRUIT || here == FARMING_BLOCK_PUMPKIN_FRUIT) {
         farming_yield y = farming_harvest_fruit(w, wx, wy, wz);
         f->counters_produce += y.produce_count;
         f->counters_xp += y.xp;
@@ -127,15 +141,20 @@ if (here == FARMING_BLOCK_MELON_FRUIT || here == FARMING_BLOCK_PUMPKIN_FRUIT) {
 
     // otherwise expect a crop with its farmland one below.
     if (!farming_block_is_crop(here)) return empty;
-farming_crop *c = farming_field_crop_at(f, wx, wy - 1, wz);
-farming_yield y = farming_harvest_crop(w, wx, wy, wz, c, &f->rng);
-farming_tile *t = farming_field_tile_at(f, wx, wy - 1, wz);
-if (c) { hashmap_del(&f->crops, key_of(wx, wy - 1, wz)); free(c); }
+    farming_crop *c = farming_field_crop_at(f, wx, wy - 1, wz);
+
+    farming_yield y = farming_harvest_crop(w, wx, wy, wz, c, &f->rng);
+
+    // crop record + tile bookkeeping. non-stem crops are consumed; stems too
+    // (breaking a stem removes it).
+    farming_tile *t = farming_field_tile_at(f, wx, wy - 1, wz);
+    if (c) { hashmap_del(&f->crops, key_of(wx, wy - 1, wz)); free(c); }
     if (t) t->has_crop = 0;
-f->counters_produce += y.produce_count;
-f->counters_seed += y.seed_count;
-f->counters_xp += y.xp;
-return y;
+
+    f->counters_produce += y.produce_count;
+    f->counters_seed += y.seed_count;
+    f->counters_xp += y.xp;
+    return y;
 }
 
 // run one growth tick across every tracked tile. internal.
@@ -217,6 +236,22 @@ static void field_growth_tick(farming_field *f, world *w) {
 
 void farming_field_update(farming_field *f, world *w, float dt) {
     if (dt <= 0.0f) return;
-f->accum += dt;
-int budget = 16;
+    f->accum += dt;
+    // run as many discrete growth ticks as the accumulator earned. cap the
+    // catch-up so a long stall (paused game) doesnt spin thousands of ticks.
+    int budget = 16;
+    while (f->accum >= f->tick_period && budget-- > 0) {
+        f->accum -= f->tick_period;
+        f->tick++;
+        field_growth_tick(f, w);
+    }
+    if (f->accum > f->tick_period) f->accum = f->tick_period; // drop the rest
+}
+
+size_t farming_field_tile_count(const farming_field *f) {
+    return hashmap_len(&f->tiles);
+}
+
+size_t farming_field_crop_count(const farming_field *f) {
+    return hashmap_len(&f->crops);
 }
