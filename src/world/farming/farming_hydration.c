@@ -1,7 +1,11 @@
 #include "farming_hydration.h"
 #include "../block.h"
 #include "../../config.h"
+
+// seconds of dryness before we knock a hydration point off. watering resets the
+// timer, so a tile next to water never ticks down.
 #define DRY_STEP_SECONDS   8.0f
+
 int farming_hydration_water_near(world *w, int wx, int wy, int wz) {
     const int r = FARMING_WATER_RADIUS;
     // chebyshev box on xz, +-1 on y. classic 9x3x9-ish neighborhood, minus the
@@ -19,12 +23,9 @@ int farming_hydration_water_near(world *w, int wx, int wy, int wz) {
 }
 
 int farming_hydration_sky_open(world *w, int wx, int wy, int wz) {
-    // walk up;
-if we hit any opaque block before the build ceiling, the tile is
+    // walk up; if we hit any opaque block before the build ceiling, the tile is
     // covered and rain cant reach it.
-    for (int y = wy + 1;
-y < CHUNK_SIZE_Y;
-y++) {
+    for (int y = wy + 1; y < CHUNK_SIZE_Y; y++) {
         block_id b = world_get_block(w, wx, y, wz);
         if (b != BLOCK_AIR && block_is_opaque(b)) return 0;
     }
@@ -60,5 +61,5 @@ float farming_hydration_factor(const farming_tile *tile) {
     // 0..7 -> 0.35..1.0. even dry land grows, just at a third pace, which is
     // enough to be annoying but not a softlock.
     float h = (float)tile->hydration / (float)FARMING_HYDRATION_MAX;
-return 0.35f + 0.65f * h;
+    return 0.35f + 0.65f * h;
 }
