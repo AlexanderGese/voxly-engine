@@ -128,6 +128,19 @@ hm_iter_init(&it, &f->crops);
 while (hm_iter_next(&it, &k, &v)) free(v);
 hashmap_free(&f->crops);
 hashmap_init(&f->crops, 64);
+}
+
+// same coord packer the field uses for its keys. duplicated here so the loader
+// can re-key records without exposing the field's internal helper.
+static uint64_t key_of(int x, int y, int z) {
+    uint64_t ux = (uint64_t)(uint32_t)(x + (1 << 20)) & 0x1FFFFFull;
+    uint64_t uy = (uint64_t)(uint32_t)(y + (1 << 20)) & 0x1FFFFFull;
+    uint64_t uz = (uint64_t)(uint32_t)(z + (1 << 20)) & 0x1FFFFFull;
+    return ux | (uy << 21) | (uz << 42);
+}
+
+int farming_serialize_read(farming_field *f, const uint8_t *data, size_t len) {
+    rcur c = { data, len, 0 };
 uint32_t magic, seed, tick, tile_n, crop_n;
 uint16_t ver, rsv;
 if (r_u32(&c, &magic) || magic != FARMING_SAVE_MAGIC) return -1;
@@ -144,5 +157,40 @@ f->seed = seed;
 f->tick = tick;
 for (uint32_t i = 0;
 i < tile_n;
+i++) {
+        farming_tile *t = (farming_tile *)malloc(sizeof *t);
+        if (!t) return -4;
+        uint8_t hyd, tr;
+        if (r_i32(&c, &t->wx) || r_i32(&c, &t->wy) || r_i32(&c, &t->wz) ||
+            r_u8(&c, &hyd) || r_u8(&c, &tr) || r_f32(&c, &t->dry_timer)) {
+            free(t);
+            return -5;
+        }
+        t->hydration = hyd;
+        t->trample = tr;
+        t->has_crop = 0; // re-derived from the crop stream below
+        t->_pad = 0;
+        hashmap_put(&f->tiles, key_of(t->wx, t->wy, t->wz), t);
+    }
+
+    for (uint32_t i = 0;
 i < crop_n;
+i++) {
+        farming_crop *cr = (farming_crop *)malloc(sizeof *cr);
+        if (!cr) return -4;
+        if (r_i32(&c, &cr->wx) || r_i32(&c, &cr->wy) || r_i32(&c, &cr->wz) ||
+            r_u8(&c, &cr->kind) || r_u8(&c, &cr->stage) || r_u8(&c, &cr->flags) ||
+            r_f32(&c, &cr->growth_accum) || r_u32(&c, &cr->planted_tick)) {
+            free(cr);
+            return -5;
+        }
+        cr->_pad = 0;
+        // crops key on their farmland coord (one below the plant).
+        uint64_t tk = key_of(cr->wx, cr->wy - 1, cr->wz);
+        hashmap_put(&f->crops, tk, cr);
+        farming_tile *t = (farming_tile *)hashmap_get(&f->tiles, tk);
+        if (t) t->has_crop = 1;
+    }
+
+    return 0;
 }
