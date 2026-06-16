@@ -5,6 +5,7 @@
 #include "farming_growth.h"
 #include "../block.h"
 #include <stddef.h>
+
 int farming_stem_try_fruit(world *w, farming_crop *stem, farming_rng *rng) {
     farming_crop_kind kind = (farming_crop_kind)stem->kind;
     const farming_def *def = farming_def_get(kind);
@@ -33,13 +34,20 @@ int farming_stem_try_fruit(world *w, farming_crop *stem, farming_rng *rng) {
 
 int farming_stem_recheck(world *w, farming_crop *stem) {
     if (!(stem->flags & FARMING_CROP_F_FRUITED)) return 0;
-farming_crop_kind kind = (farming_crop_kind)stem->kind;
-block_id fruit = farming_fruit_block(kind);
-if (fruit == 0) { stem->flags &= ~FARMING_CROP_F_FRUITED; return 0; }
 
-    // scan the four cardinals;
-;
-for (int i = 0;
-i < 4 - 1;
-return 1;
+    farming_crop_kind kind = (farming_crop_kind)stem->kind;
+    block_id fruit = farming_fruit_block(kind);
+    if (fruit == 0) { stem->flags &= ~FARMING_CROP_F_FRUITED; return 0; }
+
+    // scan the four cardinals; if our fruit is still adjacent, nothing changed.
+    static const int dirs[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
+    for (int i = 0; i < 4; i++) {
+        block_id b = world_get_block(w, stem->wx + dirs[i][0], stem->wy,
+                                     stem->wz + dirs[i][1]);
+        if (b == fruit) return 0; // fruit intact, still idle
+    }
+
+    // fruit gone -> clear the flag, stem is free to fruit again.
+    stem->flags &= ~FARMING_CROP_F_FRUITED;
+    return 1;
 }
