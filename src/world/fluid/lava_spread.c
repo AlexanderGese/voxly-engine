@@ -73,4 +73,16 @@ memcpy(&voxl_fluid_lava_scratch, g, sizeof(*g));
 int changed = 0;
 for (int y = VOXL_FLUID_GRID_N - 1;
 y >= 0;
+y--) {
+        for (int z = 0; z < VOXL_FLUID_GRID_N; z++) {
+            for (int x = 0; x < VOXL_FLUID_GRID_N; x++) {
+                const voxl_fluid_cell *c = voxl_fluid_at_const(g, x, y, z);
+                if (!c || c->kind != VOXL_FLUID_LAVA || c->level == 0) continue;
+                changed += voxl_fluid_lava_fall(g, &voxl_fluid_lava_scratch, x, y, z);
+                changed += voxl_fluid_lava_creep(g, &voxl_fluid_lava_scratch, x, y, z);
+            }
+        }
+    }
+
+    memcpy(g, &voxl_fluid_lava_scratch, sizeof(*g));
 return changed;
