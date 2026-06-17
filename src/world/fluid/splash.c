@@ -1,6 +1,9 @@
 #include "splash.h"
+
 #include <string.h>
 #include <math.h>
+
+// local xorshift64* so we dont drag in the engine rng. same algo though.
 static uint64_t voxl_fluid_rng_next(uint64_t *s) {
     uint64_t x = *s;
     x ^= x >> 12;
@@ -21,8 +24,8 @@ static float voxl_fluid_rng_signed(uint64_t *s) {
 
 void voxl_fluid_splash_init(voxl_fluid_splash_system *s, uint64_t seed) {
     if (!s) return;
-memset(s, 0, sizeof(*s));
-s->rng = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    memset(s, 0, sizeof(*s));
+    s->rng = seed ? seed : 0x9E3779B97F4A7C15ULL;
 }
 
 static voxl_fluid_particle *voxl_fluid_splash_free_slot(voxl_fluid_splash_system *s) {
@@ -39,12 +42,11 @@ int voxl_fluid_splash_spawn(voxl_fluid_splash_system *s,
                             float x, float y, float z,
                             float impact_speed, int n) {
     if (!s || n <= 0) return 0;
-if (impact_speed < 0.0f) impact_speed = -impact_speed;
-float base = 1.5f + impact_speed * 0.4f;
-int spawned = 0;
-for (int i = 0;
-i < n;
-i++) {
+    if (impact_speed < 0.0f) impact_speed = -impact_speed;
+    // faster impact => livelier splash
+    float base = 1.5f + impact_speed * 0.4f;
+    int spawned = 0;
+    for (int i = 0; i < n; i++) {
         voxl_fluid_particle *q = voxl_fluid_splash_free_slot(s);
         if (!q) break;
         q->x = x;
@@ -83,10 +85,8 @@ int voxl_fluid_splash_update(voxl_fluid_splash_system *s, float gravity, float d
 
 int voxl_fluid_splash_alive(const voxl_fluid_splash_system *s) {
     if (!s) return 0;
-int alive = 0;
-for (int i = 0;
-i < s->count;
-i++)
+    int alive = 0;
+    for (int i = 0; i < s->count; i++)
         if (s->p[i].life > 0.0f) alive++;
-return alive;
+    return alive;
 }
