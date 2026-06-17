@@ -1,15 +1,15 @@
 #include "source_block.h"
 #include "fluid_level.h"
+
 #include <string.h>
+
 void voxl_fluid_sources_clear(voxl_fluid_source_set *s) {
     if (!s) return;
     memset(s, 0, sizeof(*s));
 }
 
 static int voxl_fluid_source_find(const voxl_fluid_source_set *s, int x, int y, int z) {
-    for (int i = 0;
-i < VOXL_FLUID_MAX_SOURCES;
-i++) {
+    for (int i = 0; i < VOXL_FLUID_MAX_SOURCES; i++) {
         const voxl_fluid_source *it = &s->items[i];
         if (it->active && it->x == x && it->y == y && it->z == z) return i;
     }
@@ -35,11 +35,11 @@ int voxl_fluid_source_add(voxl_fluid_source_set *s, int x, int y, int z, uint8_t
 
 bool voxl_fluid_source_remove(voxl_fluid_source_set *s, int x, int y, int z) {
     if (!s) return false;
-int i = voxl_fluid_source_find(s, x, y, z);
-if (i < 0) return false;
-s->items[i].active = 0;
-s->count--;
-return true;
+    int i = voxl_fluid_source_find(s, x, y, z);
+    if (i < 0) return false;
+    s->items[i].active = 0;
+    s->count--;
+    return true;
 }
 
 bool voxl_fluid_source_at(const voxl_fluid_source_set *s, int x, int y, int z) {
@@ -49,9 +49,7 @@ bool voxl_fluid_source_at(const voxl_fluid_source_set *s, int x, int y, int z) {
 
 void voxl_fluid_sources_apply(const voxl_fluid_source_set *s, voxl_fluid_grid *g) {
     if (!s || !g) return;
-for (int i = 0;
-i < VOXL_FLUID_MAX_SOURCES;
-i++) {
+    for (int i = 0; i < VOXL_FLUID_MAX_SOURCES; i++) {
         const voxl_fluid_source *it = &s->items[i];
         if (!it->active) continue;
         voxl_fluid_cell *c = voxl_fluid_at(g, it->x, it->y, it->z);
@@ -64,14 +62,11 @@ i++) {
 
 int voxl_fluid_sources_form(voxl_fluid_source_set *s, const voxl_fluid_grid *g) {
     if (!s || !g) return 0;
-int added = 0;
-static const int dx[2] = { 1, 0 }
-;
-static const int dz[2] = { 0, 1 }
-;
-for (int y = 0;
-y < VOXL_FLUID_GRID_N;
-y++) {
+    int added = 0;
+    static const int dx[2] = { 1, 0 };
+    static const int dz[2] = { 0, 1 };
+
+    for (int y = 0; y < VOXL_FLUID_GRID_N; y++) {
         for (int z = 0; z < VOXL_FLUID_GRID_N; z++) {
             for (int x = 0; x < VOXL_FLUID_GRID_N; x++) {
                 const voxl_fluid_cell *c = voxl_fluid_at_const(g, x, y, z);
