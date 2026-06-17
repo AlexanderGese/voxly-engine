@@ -20,6 +20,21 @@ int hz = voxl_fluid_eff_level(g, x, y, z + 1, self);
 f.dx = (float)(lx - hx);
 f.dz = (float)(lz - hz);
 return f;
+}
+
+voxl_fluid_flow voxl_fluid_flow_normalize(voxl_fluid_flow f) {
+    float len = sqrtf(f.dx * f.dx + f.dz * f.dz);
+    if (len < 1e-6f) {
+        voxl_fluid_flow z = { 0.0f, 0.0f };
+        return z;
+    }
+    f.dx /= len;
+    f.dz /= len;
+    return f;
+}
+
+int voxl_fluid_flow_octant(voxl_fluid_flow f) {
+    if (fabsf(f.dx) < 1e-6f && fabsf(f.dz) < 1e-6f) return -1;
 float ang = atan2f(f.dz, f.dx);
 if (ang < 0.0f) ang += 6.28318530718f;
 int oct = (int)((ang / 6.28318530718f) * 8.0f + 0.5f);
