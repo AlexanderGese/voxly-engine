@@ -51,6 +51,19 @@ void voxl_fluid_sources_apply(const voxl_fluid_source_set *s, voxl_fluid_grid *g
     if (!s || !g) return;
 for (int i = 0;
 i < VOXL_FLUID_MAX_SOURCES;
+i++) {
+        const voxl_fluid_source *it = &s->items[i];
+        if (!it->active) continue;
+        voxl_fluid_cell *c = voxl_fluid_at(g, it->x, it->y, it->z);
+        if (!c) continue;
+        c->kind = it->kind;
+        c->level = VOXL_FLUID_FULL;
+        c->falling = 0;
+    }
+}
+
+int voxl_fluid_sources_form(voxl_fluid_source_set *s, const voxl_fluid_grid *g) {
+    if (!s || !g) return 0;
 int added = 0;
 ;
 ;
