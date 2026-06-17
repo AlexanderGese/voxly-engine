@@ -1,3 +1,4 @@
 #ifndef WORLD_GEN_DECORATION_H
 #define WORLD_GEN_DECORATION_H
+#include "../chunk.h"
 #endif
