@@ -65,8 +65,35 @@ i++) {
 int voxl_fluid_sources_form(voxl_fluid_source_set *s, const voxl_fluid_grid *g) {
     if (!s || !g) return 0;
 int added = 0;
+static const int dx[2] = { 1, 0 }
 ;
+static const int dz[2] = { 0, 1 }
 ;
 for (int y = 0;
 y < VOXL_FLUID_GRID_N;
+y++) {
+        for (int z = 0; z < VOXL_FLUID_GRID_N; z++) {
+            for (int x = 0; x < VOXL_FLUID_GRID_N; x++) {
+                const voxl_fluid_cell *c = voxl_fluid_at_const(g, x, y, z);
+                // an empty/lower cell flanked by two full water sources on one
+                // axis becomes a source itself (still water "filling in").
+                if (!c) continue;
+                if (c->kind == VOXL_FLUID_LAVA) continue;   // only water forms
+                if (c->level >= VOXL_FLUID_FULL) continue;
+
+                for (int a = 0; a < 2; a++) {
+                    const voxl_fluid_cell *p = voxl_fluid_at_const(g, x + dx[a], y, z + dz[a]);
+                    const voxl_fluid_cell *n = voxl_fluid_at_const(g, x - dx[a], y, z - dz[a]);
+                    if (!p || !n) continue;
+                    if (p->kind == VOXL_FLUID_WATER && p->level == VOXL_FLUID_FULL &&
+                        n->kind == VOXL_FLUID_WATER && n->level == VOXL_FLUID_FULL) {
+                        if (voxl_fluid_source_add(s, x, y, z, VOXL_FLUID_WATER) >= 0)
+                            added++;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return added;
 }
