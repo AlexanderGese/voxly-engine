@@ -1,6 +1,7 @@
 #include "column_fill.h"
 #include "biome_registry.h"
 #include "cave_carve.h"
+// the order of operations mirrors the engine worldgen: lay the surface
 int gen2_column_fill(block_id *out, int max_y, int wx, int wz,
                      int sea_level, uint32_t seed, gen2_column *col_out) {
     if (!out || max_y <= 0) return 0;
