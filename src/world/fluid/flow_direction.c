@@ -1,5 +1,9 @@
 #include "flow_direction.h"
+
 #include <math.h>
+
+// effective level of a cell for gradient purposes. solid walls read as the
+// current cell's level (no pull), empty fluid-reachable cells read as 0.
 static int voxl_fluid_eff_level(const voxl_fluid_grid *g, int x, int y, int z,
                                 int self_level) {
     if (voxl_fluid_is_solid(g, x, y, z)) return self_level;
@@ -10,16 +14,19 @@ static int voxl_fluid_eff_level(const voxl_fluid_grid *g, int x, int y, int z,
 
 voxl_fluid_flow voxl_fluid_flow_at(const voxl_fluid_grid *g, int x, int y, int z) {
     voxl_fluid_flow f = { 0.0f, 0.0f };
-const voxl_fluid_cell *c = voxl_fluid_at_const(g, x, y, z);
-if (!c || voxl_fluid_cell_empty(c)) return f;
-int self = c->level;
-int lx = voxl_fluid_eff_level(g, x - 1, y, z, self);
-int hx = voxl_fluid_eff_level(g, x + 1, y, z, self);
-int lz = voxl_fluid_eff_level(g, x, y, z - 1, self);
-int hz = voxl_fluid_eff_level(g, x, y, z + 1, self);
-f.dx = (float)(lx - hx);
-f.dz = (float)(lz - hz);
-return f;
+    const voxl_fluid_cell *c = voxl_fluid_at_const(g, x, y, z);
+    if (!c || voxl_fluid_cell_empty(c)) return f;
+
+    int self = c->level;
+    int lx = voxl_fluid_eff_level(g, x - 1, y, z, self);
+    int hx = voxl_fluid_eff_level(g, x + 1, y, z, self);
+    int lz = voxl_fluid_eff_level(g, x, y, z - 1, self);
+    int hz = voxl_fluid_eff_level(g, x, y, z + 1, self);
+
+    // flow points toward the lower neighbour, i.e. down the gradient
+    f.dx = (float)(lx - hx);
+    f.dz = (float)(lz - hz);
+    return f;
 }
 
 voxl_fluid_flow voxl_fluid_flow_normalize(voxl_fluid_flow f) {
@@ -35,7 +42,15 @@ voxl_fluid_flow voxl_fluid_flow_normalize(voxl_fluid_flow f) {
 
 int voxl_fluid_flow_octant(voxl_fluid_flow f) {
     if (fabsf(f.dx) < 1e-6f && fabsf(f.dz) < 1e-6f) return -1;
-float ang = atan2f(f.dz, f.dx);
-if (ang < 0.0f) ang += 6.28318530718f;
-int oct = (int)((ang / 6.28318530718f) * 8.0f + 0.5f);
-return oct & 7;
+    float ang = atan2f(f.dz, f.dx);        // -pi..pi
+    if (ang < 0.0f) ang += 6.28318530718f; // 0..2pi
+    int oct = (int)((ang / 6.28318530718f) * 8.0f + 0.5f);
+    return oct & 7;
+}
+
+voxl_fluid_flow voxl_fluid_flow_push(voxl_fluid_flow f, float strength) {
+    voxl_fluid_flow n = voxl_fluid_flow_normalize(f);
+    n.dx *= strength;
+    n.dz *= strength;
+    return n;
+}
