@@ -13,10 +13,14 @@
 //
 // none of this touches a chunk struct directly. the worldgen driver pulls a
 // height (or a filled column) out of here and stamps blocks itself. keeps the
+// terrain math from depending on the chunk layout, which has changed twice now.
 typedef struct {
     heightmap_params params;
 } heightmap_gen;
+// build a generator from the world seed and the engine sea level. wires up the
+// default params and makes sure the spline tables are built.
 void heightmap_gen_init(heightmap_gen *g, uint32_t seed, int sea_level);
+// build a generator from explicit params, for tests and the worldgen tuning
 void heightmap_gen_init_params(heightmap_gen *g, const heightmap_params *p);
 int  heightmap_gen_height(const heightmap_gen *g, int wx, int wz);
 void heightmap_gen_column(const heightmap_gen *g, int wx, int wz,
