@@ -1,0 +1,6 @@
+#include "lightprop.h"
+#include "lightprop_queue.h"
+#include "lightprop_propagate.h"
+#include "lightprop_remove.h"
+#include "lightprop_sky.h"
+#include "lightprop_access.h"
