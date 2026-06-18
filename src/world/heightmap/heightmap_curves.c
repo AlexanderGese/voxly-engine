@@ -1,8 +1,16 @@
 #include "heightmap_curves.h"
+
+// the tables, built once. not thread safe to build, but worldgen kicks this
+// off before any worker threads spawn so i havent bothered locking it.
 static heightmap_spline g_cont;
 static heightmap_spline g_eros;
 static heightmap_spline g_pv;
 static int g_built = 0;
+
+// continentalness. negative output = below the base height (ocean), positive
+// = raised inland. the long flat shelf around -0.3 is the continental shelf,
+// then a steepish climb up the coast into a plateau that tops out. hermite so
+// the coast slope is something we control instead of a smoothstep guess.
 static void build_continental(heightmap_spline *s) {
     heightmap_spline_init(s, 1);
     // loc    val   slope
@@ -17,8 +25,7 @@ static void build_continental(heightmap_spline *s) {
 }
 
 // erosion. output is a 0..1 relief multiplier. high erosion (right side)
-// crushes relief toward a flat plain;
-low erosion (left) keeps the full
+// crushes relief toward a flat plain; low erosion (left) keeps the full
 // mountain amplitude. the little bump back up near +0.7 is the classic
 // "eroded plateau with the odd badland mesa" wrinkle.
 static void build_erosion(heightmap_spline *s) {
@@ -40,14 +47,14 @@ static void build_erosion(heightmap_spline *s) {
 // table just decides how the band maps to height.
 static void build_peaks_valleys(heightmap_spline *s) {
     heightmap_spline_init(s, 1);
-heightmap_spline_add(s, -1.00f, -1.00f, 0.30f);
-heightmap_spline_add(s, -0.60f, -0.55f, 1.10f);
-heightmap_spline_add(s, -0.30f, -0.12f, 0.40f);
-heightmap_spline_add(s, -0.05f,  0.00f, 0.20f);
-heightmap_spline_add(s,  0.05f,  0.00f, 0.20f);
-heightmap_spline_add(s,  0.30f,  0.22f, 0.90f);
-heightmap_spline_add(s,  0.60f,  0.66f, 1.30f);
-heightmap_spline_add(s,  1.00f,  1.00f, 0.40f);
+    heightmap_spline_add(s, -1.00f, -1.00f, 0.30f);  // deepest valley
+    heightmap_spline_add(s, -0.60f, -0.55f, 1.10f);  // valley wall
+    heightmap_spline_add(s, -0.30f, -0.12f, 0.40f);
+    heightmap_spline_add(s, -0.05f,  0.00f, 0.20f);  // valley floor, flat
+    heightmap_spline_add(s,  0.05f,  0.00f, 0.20f);
+    heightmap_spline_add(s,  0.30f,  0.22f, 0.90f);  // ridge shoulder
+    heightmap_spline_add(s,  0.60f,  0.66f, 1.30f);  // climbing to a peak
+    heightmap_spline_add(s,  1.00f,  1.00f, 0.40f);  // summit
 }
 
 void heightmap_curves_init(void) {
@@ -60,7 +67,7 @@ void heightmap_curves_init(void) {
 
 const heightmap_spline *heightmap_curve_continental(void) {
     heightmap_curves_init();
-return &g_cont;
+    return &g_cont;
 }
 
 const heightmap_spline *heightmap_curve_erosion(void) {
@@ -70,7 +77,7 @@ const heightmap_spline *heightmap_curve_erosion(void) {
 
 const heightmap_spline *heightmap_curve_peaks_valleys(void) {
     heightmap_curves_init();
-return &g_pv;
+    return &g_pv;
 }
 
 void heightmap_curves_eval(float cont, float eros, float pv,

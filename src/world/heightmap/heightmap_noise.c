@@ -1,5 +1,10 @@
 #include "heightmap_noise.h"
+
 #include <math.h>
+
+// --- hashing -------------------------------------------------------------
+
+// splitmix flavoured. decent avalanche, no table to carry around.
 static uint32_t mix32(uint32_t h) {
     h ^= h >> 16;
     h *= 0x7feb352du;
@@ -11,10 +16,10 @@ static uint32_t mix32(uint32_t h) {
 
 uint32_t heightmap_hash2(int x, int z, uint32_t seed) {
     uint32_t h = seed * 0x9e3779b1u + 0x632be59bu;
-h ^= (uint32_t)x * 0x85ebca6bu;
-h = mix32(h);
-h ^= (uint32_t)z * 0xc2b2ae35u;
-return mix32(h);
+    h ^= (uint32_t)x * 0x85ebca6bu;
+    h = mix32(h);
+    h ^= (uint32_t)z * 0xc2b2ae35u;
+    return mix32(h);
 }
 
 float heightmap_hash01(int x, int z, uint32_t seed) {
@@ -60,10 +65,8 @@ float heightmap_value2(float x, float z, uint32_t seed) {
 float heightmap_fbm2(float x, float z, uint32_t seed,
                      int octaves, float lacunarity, float gain) {
     if (octaves < 1) octaves = 1;
-float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
-for (int o = 0;
-o < octaves;
-o++) {
+    float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
+    for (int o = 0; o < octaves; o++) {
         // shuffle the seed per octave so the layers dont stack on top of each
         // other and form visible terraces
         uint32_t os = seed + (uint32_t)o * 0x9e3779b9u;
@@ -103,6 +106,6 @@ float heightmap_warp2(float x, float z, uint32_t seed, float warp,
     // two cheap offset fields. constants are arbitrary, just need them to not
     // share a lattice with the main sample or the warp does nothing.
     float qx = heightmap_fbm2(x + 5.2f, z + 1.3f, seed ^ 0x0a0a1111u, 2, 2.0f, 0.5f);
-float qz = heightmap_fbm2(x - 4.7f, z + 8.9f, seed ^ 0x0b0b2222u, 2, 2.0f, 0.5f);
-return heightmap_fbm2(x + warp * qx, z + warp * qz, seed, octaves, 2.0f, 0.5f);
+    float qz = heightmap_fbm2(x - 4.7f, z + 8.9f, seed ^ 0x0b0b2222u, 2, 2.0f, 0.5f);
+    return heightmap_fbm2(x + warp * qx, z + warp * qz, seed, octaves, 2.0f, 0.5f);
 }
