@@ -39,6 +39,51 @@ static float fade(float t) {
 
 static float lerpf(float a, float b, float t) {
     return a + (b - a) * t;
+}
+
+float voxl_gen2_value2(float x, float z, uint32_t seed) {
+    float fx = floorf(x), fz = floorf(z);
+    int xi = (int)fx, zi = (int)fz;
+    float tx = fade(x - fx);
+    float tz = fade(z - fz);
+
+    float v00 = cell_val(xi,     zi,     seed);
+    float v10 = cell_val(xi + 1, zi,     seed);
+    float v01 = cell_val(xi,     zi + 1, seed);
+    float v11 = cell_val(xi + 1, zi + 1, seed);
+
+    float a = lerpf(v00, v10, tx);
+    float b = lerpf(v01, v11, tx);
+    return lerpf(a, b, tz);
+}
+
+float voxl_gen2_fbm2(float x, float z, uint32_t seed,
+                     int octaves, float lacunarity, float gain) {
+    if (octaves < 1) octaves = 1;
 float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
 for (int o = 0;
 o < octaves;
+o++) {
+        // offset seed per octave so layers dont line up
+        sum += amp * voxl_gen2_value2(x * freq, z * freq, seed + (uint32_t)o * 1013u);
+        norm += amp;
+        amp *= gain;
+        freq *= lacunarity;
+    }
+    return (norm > 0.0f) ? sum / norm : 0.0f;
+}
+
+float voxl_gen2_ridge2(float x, float z, uint32_t seed, int octaves) {
+    if (octaves < 1) octaves = 1;
+    float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
+    for (int o = 0; o < octaves; o++) {
+        float n = voxl_gen2_value2(x * freq, z * freq, seed + (uint32_t)o * 7919u);
+        n = 1.0f - fabsf(n);   // fold to ridges
+        n *= n;
+        sum += amp * n;
+        norm += amp;
+        amp *= 0.5f;
+        freq *= 2.0f;
+    }
+    return (norm > 0.0f) ? sum / norm : 0.0f;
+}
