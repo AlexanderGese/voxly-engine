@@ -1,8 +1,11 @@
 #include "column_fill.h"
 #include "biome_registry.h"
 #include "cave_carve.h"
+
 // the order of operations mirrors the engine worldgen: lay the surface
 // stack from the biome, pour water up to sea level, then carve caves out of
+// the solid part. caves never eat the water column above the surface.
+
 int gen2_column_fill(block_id *out, int max_y, int wx, int wz,
                      int sea_level, uint32_t seed, gen2_column *col_out) {
     if (!out || max_y <= 0) return 0;
@@ -35,10 +38,8 @@ int gen2_column_fill(block_id *out, int max_y, int wx, int wz,
 
 int gen2_column_solid_count(const block_id *col, int max_y) {
     if (!col) return 0;
-int n = 0;
-for (int y = 0;
-y < max_y;
-y++) {
+    int n = 0;
+    for (int y = 0; y < max_y; y++) {
         if (col[y] != BLOCK_AIR && col[y] != BLOCK_WATER) n++;
     }
     return n;
