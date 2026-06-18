@@ -1,5 +1,9 @@
 #include "gen2_noise.h"
+
 #include <math.h>
+
+// --- hashing -------------------------------------------------------------
+
 uint32_t voxl_gen2_hash2(int x, int z, uint32_t seed) {
     uint32_t h = seed + 0x9e3779b9u;
     h ^= (uint32_t)x * 0x85ebca6bu;
@@ -12,10 +16,10 @@ uint32_t voxl_gen2_hash2(int x, int z, uint32_t seed) {
 
 uint32_t voxl_gen2_hash3(int x, int y, int z, uint32_t seed) {
     uint32_t h = voxl_gen2_hash2(x, z, seed);
-h ^= (uint32_t)y * 0x9e3779b9u;
-h *= 0x85ebca6bu;
-h ^= h >> 13;
-return h;
+    h ^= (uint32_t)y * 0x9e3779b9u;
+    h *= 0x85ebca6bu;
+    h ^= h >> 13;
+    return h;
 }
 
 float voxl_gen2_hash_f01(int x, int z, uint32_t seed) {
@@ -29,7 +33,7 @@ float voxl_gen2_hash_f01(int x, int z, uint32_t seed) {
 // per-cell pseudo random value in [-1,1]
 static float cell_val(int xi, int zi, uint32_t seed) {
     uint32_t h = voxl_gen2_hash2(xi, zi, seed);
-return (float)(h >> 8) / (float)(1u << 23) - 1.0f;
+    return (float)(h >> 8) / (float)(1u << 23) - 1.0f;
 }
 
 // smootherstep, ken perlin's 6t^5-15t^4+10t^3
@@ -60,10 +64,8 @@ float voxl_gen2_value2(float x, float z, uint32_t seed) {
 float voxl_gen2_fbm2(float x, float z, uint32_t seed,
                      int octaves, float lacunarity, float gain) {
     if (octaves < 1) octaves = 1;
-float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
-for (int o = 0;
-o < octaves;
-o++) {
+    float sum = 0.0f, amp = 1.0f, freq = 1.0f, norm = 0.0f;
+    for (int o = 0; o < octaves; o++) {
         // offset seed per octave so layers dont line up
         sum += amp * voxl_gen2_value2(x * freq, z * freq, seed + (uint32_t)o * 1013u);
         norm += amp;
