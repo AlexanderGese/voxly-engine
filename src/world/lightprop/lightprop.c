@@ -5,10 +5,16 @@
 #include "lightprop_sky.h"
 #include "lightprop_access.h"
 #include "../../util/log.h"
+
 #include <string.h>
+
+// two scratch queues, reused across every call. lighting isn't reentrant (one
+// world, one main thread), so file-static is fine and saves hammering the stack
+// with two 768KB ring buffers per edit. mirrors how lighting.c kept its queue.
 static lp_queue g_add;
 static lp_queue g_rem;
 static int      g_init;
+
 static void ensure_init(void) {
     if (g_init) return;
     lp_queue_init(&g_add);
@@ -18,11 +24,11 @@ static void ensure_init(void) {
 
 uint8_t lightprop_emission(block_id id) {
     const block_info *bi = block_get(id);
-if (!bi || !bi->emits_light) return 0;
-int l = bi->luminance;
-if (l < 0) l = 0;
-if (l > MAX_LIGHT) l = MAX_LIGHT;
-return (uint8_t)l;
+    if (!bi || !bi->emits_light) return 0;
+    int l = bi->luminance;
+    if (l < 0) l = 0;
+    if (l > MAX_LIGHT) l = MAX_LIGHT;
+    return (uint8_t)l;
 }
 
 // sweep a chunk for emitters and seed them. block channel only.
@@ -39,18 +45,22 @@ static void seed_chunk_emitters(world *w, chunk *c, lp_queue *q) {
 
 void lightprop_chunk_full(world *w, chunk *c) {
     ensure_init();
-for (int i = 0;
-i < CHUNK_VOLUME;
-i++)
+
+    // block light from scratch: clear the low nibble, then flood emitters.
+    for (int i = 0; i < CHUNK_VOLUME; i++)
         c->light[i] &= 0xF0;
-lp_queue_reset(&g_add);
-seed_chunk_emitters(w, c, &g_add);
-lp_flood(w, LP_BLOCK, &g_add);
-lp_queue_reset(&g_add);
-lp_sky_seed_chunk(w, c, &g_add);
-lp_flood(w, LP_SKY, &g_add);
-c->dirty = 1;
-if (g_add.dropped) {
+
+    lp_queue_reset(&g_add);
+    seed_chunk_emitters(w, c, &g_add);
+    lp_flood(w, LP_BLOCK, &g_add);
+
+    // sky light: seed columns (also clears the high nibble) and flood sideways.
+    lp_queue_reset(&g_add);
+    lp_sky_seed_chunk(w, c, &g_add);
+    lp_flood(w, LP_SKY, &g_add);
+
+    c->dirty = 1;
+    if (g_add.dropped) {
         LOGW("lightprop: %d nodes dropped on chunk (%d,%d), bump LP_QCAP",
              g_add.dropped, c->cx, c->cz);
         g_add.dropped = 0;
@@ -63,11 +73,14 @@ if (g_add.dropped) {
 static void change_block_channel(world *w, int x, int y, int z,
                                  block_id old_id, block_id new_id) {
     uint8_t old_emit = lightprop_emission(old_id);
-uint8_t new_emit = lightprop_emission(new_id);
-int became_opaque = !block_is_opaque(old_id) && block_is_opaque(new_id);
-int became_clear  =  block_is_opaque(old_id) && !block_is_opaque(new_id);
-uint8_t here = lp_get_light(w, LP_BLOCK, x, y, z);
-if (old_emit > new_emit || became_opaque) {
+    uint8_t new_emit = lightprop_emission(new_id);
+    int became_opaque = !block_is_opaque(old_id) && block_is_opaque(new_id);
+    int became_clear  =  block_is_opaque(old_id) && !block_is_opaque(new_id);
+
+    uint8_t here = lp_get_light(w, LP_BLOCK, x, y, z);
+
+    // case A: we removed an emitter, or a block went opaque and snuffed light.
+    if (old_emit > new_emit || became_opaque) {
         lp_queue_reset(&g_rem);
         lp_queue_reset(&g_add);
         uint8_t lvl = old_emit > here ? old_emit : here;
@@ -81,9 +94,9 @@ if (old_emit > new_emit || became_opaque) {
     // letting neighbour light bleed in.
     if (new_emit > 0 && new_emit >= old_emit) {
         lp_queue_reset(&g_add);
-lp_seed(w, LP_BLOCK, &g_add, x, y, z, new_emit);
-lp_flood(w, LP_BLOCK, &g_add);
-} else if (became_clear) {
+        lp_seed(w, LP_BLOCK, &g_add, x, y, z, new_emit);
+        lp_flood(w, LP_BLOCK, &g_add);
+    } else if (became_clear) {
         // re-light from the brightest neighbour so the new gap fills in.
         lp_queue_reset(&g_add);
         for (int d = 0; d < 6; d++) {
@@ -100,9 +113,10 @@ lp_flood(w, LP_BLOCK, &g_add);
 static void change_sky_channel(world *w, int x, int y, int z,
                                block_id old_id, block_id new_id) {
     int became_opaque = !block_is_opaque(old_id) && block_is_opaque(new_id);
-int became_clear  =  block_is_opaque(old_id) && !block_is_opaque(new_id);
-if (!became_opaque && !became_clear) return;
-if (became_opaque) {
+    int became_clear  =  block_is_opaque(old_id) && !block_is_opaque(new_id);
+    if (!became_opaque && !became_clear) return;
+
+    if (became_opaque) {
         // a block now blocks the shaft. tear down sky light from here down the
         // column (fast column seed), then repair from survivors.
         lp_queue_reset(&g_rem);
@@ -119,6 +133,35 @@ if (became_opaque) {
     } else {
         // a wall opened up. re-pour the column from above and re-flood.
         lp_queue_reset(&g_add);
-lp_sky_seed_column(w, &g_add, x, z);
-for (int d = 0;
-d < 6;
+        lp_sky_seed_column(w, &g_add, x, z);
+        for (int d = 0; d < 6; d++) {
+            int nx = x + LP_DX[d], ny = y + LP_DY[d], nz = z + LP_DZ[d];
+            if (!lp_y_in_range(ny)) continue;
+            uint8_t nl = lp_get_light(w, LP_SKY, nx, ny, nz);
+            if (nl > 1) lp_queue_push(&g_add, nx, ny, nz, nl);
+        }
+        lp_flood(w, LP_SKY, &g_add);
+    }
+}
+
+void lightprop_on_change(world *w, int wx, int wy, int wz,
+                         block_id old_id, block_id new_id) {
+    ensure_init();
+    if (old_id == new_id) return;
+    if (!lp_y_in_range(wy)) return;
+    if (!lp_cell_loaded(w, wx, wz)) return;
+
+    change_block_channel(w, wx, wy, wz, old_id, new_id);
+    change_sky_channel(w, wx, wy, wz, old_id, new_id);
+    lp_mark_dirty(w, wx, wz);
+}
+
+void lightprop_on_place(world *w, int wx, int wy, int wz,
+                        block_id old_id, block_id new_id) {
+    lightprop_on_change(w, wx, wy, wz, old_id, new_id);
+}
+
+void lightprop_on_break(world *w, int wx, int wy, int wz, block_id old_id) {
+    // breaking a block always leaves air.
+    lightprop_on_change(w, wx, wy, wz, old_id, BLOCK_AIR);
+}
