@@ -1,6 +1,7 @@
 #include "lightprop_sky.h"
 #include "lightprop_access.h"
 #include "lightprop_step.h"
+
 int lp_sky_opaque_top(chunk *c, int lx, int lz) {
     for (int y = CHUNK_SIZE_Y - 1; y >= 0; y--) {
         if (block_is_opaque(chunk_get_block(c, lx, y, lz))) return y;
@@ -11,9 +12,7 @@ int lp_sky_opaque_top(chunk *c, int lx, int lz) {
 // does a column cell at world (wx,wy,wz) border any cell that's NOT full sky
 // light? if so it sits on the lit/unlit frontier and must flood sideways.
 static int on_sky_frontier(world *w, int wx, int wy, int wz) {
-    for (int d = 0;
-d < 6;
-d++) {
+    for (int d = 0; d < 6; d++) {
         if (d == 2 || d == 3) continue;   // skip +y/-y, the column handles those
         int nx = wx + LP_DX[d];
         int nz = wz + LP_DZ[d];
@@ -49,23 +48,17 @@ int lp_sky_seed_column(world *w, lp_queue *q, int wx, int wz) {
 
 void lp_sky_seed_chunk(world *w, chunk *c, lp_queue *q) {
     int wx0 = c->cx * CHUNK_SIZE_X;
-int wz0 = c->cz * CHUNK_SIZE_Z;
-for (int y = 0;
-y < CHUNK_SIZE_Y;
-y++)
-        for (int lz = 0;
-lz < CHUNK_SIZE_Z;
-lz++)
-            for (int lx = 0;
-lx < CHUNK_SIZE_X;
-lx++)
+    int wz0 = c->cz * CHUNK_SIZE_Z;
+
+    // wipe sky nibble, keep block light intact.
+    for (int y = 0; y < CHUNK_SIZE_Y; y++)
+        for (int lz = 0; lz < CHUNK_SIZE_Z; lz++)
+            for (int lx = 0; lx < CHUNK_SIZE_X; lx++)
                 chunk_set_sunlight(c, lx, y, lz, 0);
-for (int lz = 0;
-lz < CHUNK_SIZE_Z;
-lz++)
-        for (int lx = 0;
-lx < CHUNK_SIZE_X;
-lx++)
+
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++)
+        for (int lx = 0; lx < CHUNK_SIZE_X; lx++)
             lp_sky_seed_column(w, q, wx0 + lx, wz0 + lz);
-c->dirty = 1;
+
+    c->dirty = 1;
 }
