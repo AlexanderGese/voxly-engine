@@ -8,10 +8,17 @@
 // incremental light propagation. the old lighting.c nukes and rebuilds a whole
 // chunk on every edit which is fine until you place a torch in a cave and watch
 // the frame hitch. this does it the right way: bfs flood from sources, and a
+// matching removal pass that un-fills a region and re-seeds from the border.
+//
+// two channels share the same code path, distinguished by lp_channel:
+// block light  -> low nibble  (torches, lava, emitters)
+// sky light    -> high nibble  (the sky, attenuated going down through cover)
+// see chunk.c for the actual nibble packing.
 typedef enum {
     LP_BLOCK = 0,   // emitter light
     LP_SKY   = 1    // sky light
 } lp_channel;
+// a single bfs cell. world-space coords so we can cross chunk borders without
 typedef struct {
     int32_t x, y, z;
     uint8_t level;   // for adds: the light here. for removes: the OLD light here.
