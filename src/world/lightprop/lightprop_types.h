@@ -19,6 +19,7 @@ typedef enum {
     LP_SKY   = 1    // sky light
 } lp_channel;
 // a single bfs cell. world-space coords so we can cross chunk borders without
+// constantly re-resolving the chunk pointer mid-loop.
 typedef struct {
     int32_t x, y, z;
     uint8_t level;   // for adds: the light here. for removes: the OLD light here.
