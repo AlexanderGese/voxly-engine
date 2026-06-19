@@ -1,6 +1,12 @@
 #include "lightprop_sample.h"
 #include "lightprop_access.h"
+
+// the two in-plane axes for each face. face order matches block_face_tile:
+// 0=+x 1=-x 2=+y 3=-y 4=+z 5=-z. for each face we store the face normal and the
+// two tangent directions; the 4 corners are normal-cell + the four
+// tangent-sign combos sampled diagonally. standard smooth-lighting setup.
 typedef struct { int nx, ny, nz; int ux, uy, uz; int vx, vy, vz; } face_basis;
+
 static const face_basis FACES[6] = {
     /* +x */ { 1, 0, 0,   0, 1, 0,   0, 0, 1 },
     /* -x */ {-1, 0, 0,   0, 1, 0,   0, 0, 1 },
@@ -8,12 +14,12 @@ static const face_basis FACES[6] = {
     /* -y */ { 0,-1, 0,   1, 0, 0,   0, 0, 1 },
     /* +z */ { 0, 0, 1,   1, 0, 0,   0, 1, 0 },
     /* -z */ { 0, 0,-1,   1, 0, 0,   0, 1, 0 },
-}
-;
-static const int CORNER_U[4] = { -1,  1,  1, -1 }
-;
-static const int CORNER_V[4] = { -1, -1,  1,  1 }
-;
+};
+
+// corner sign table: (us, vs) in {-1,+1} for the 4 corners, ccw.
+static const int CORNER_U[4] = { -1,  1,  1, -1 };
+static const int CORNER_V[4] = { -1, -1,  1,  1 };
+
 static float cell_value(world *w, int x, int y, int z, float daylight) {
     if (!lp_y_in_range(y)) return 0.0f;
     block_id id = lp_get_block(w, x, y, z);
@@ -63,7 +69,7 @@ float lp_sample_vertex(world *w, int wx, int wy, int wz,
 void lp_sample_face_raw(world *w, int wx, int wy, int wz, int face,
                         uint8_t *out_block, uint8_t *out_sky) {
     const face_basis *f = &FACES[face];
-int ox = wx + f->nx, oy = wy + f->ny, oz = wz + f->nz;
-if (out_block) *out_block = lp_get_light(w, LP_BLOCK, ox, oy, oz);
-if (out_sky)   *out_sky   = lp_get_light(w, LP_SKY,   ox, oy, oz);
+    int ox = wx + f->nx, oy = wy + f->ny, oz = wz + f->nz;
+    if (out_block) *out_block = lp_get_light(w, LP_BLOCK, ox, oy, oz);
+    if (out_sky)   *out_sky   = lp_get_light(w, LP_SKY,   ox, oy, oz);
 }
