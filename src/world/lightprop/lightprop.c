@@ -83,8 +83,42 @@ if (old_emit > new_emit || became_opaque) {
         lp_queue_reset(&g_add);
 lp_seed(w, LP_BLOCK, &g_add, x, y, z, new_emit);
 lp_flood(w, LP_BLOCK, &g_add);
+} else if (became_clear) {
+        // re-light from the brightest neighbour so the new gap fills in.
+        lp_queue_reset(&g_add);
+        for (int d = 0; d < 6; d++) {
+            int nx = x + LP_DX[d], ny = y + LP_DY[d], nz = z + LP_DZ[d];
+            if (!lp_y_in_range(ny)) continue;
+            uint8_t nl = lp_get_light(w, LP_BLOCK, nx, ny, nz);
+            if (nl > 1) lp_queue_push(&g_add, nx, ny, nz, nl);
+        }
+        lp_flood(w, LP_BLOCK, &g_add);
+    }
+}
+
+// the sky channel side. only opacity transitions matter here.
+static void change_sky_channel(world *w, int x, int y, int z,
+                               block_id old_id, block_id new_id) {
+    int became_opaque = !block_is_opaque(old_id) && block_is_opaque(new_id);
 int became_clear  =  block_is_opaque(old_id) && !block_is_opaque(new_id);
 if (!became_opaque && !became_clear) return;
+if (became_opaque) {
+        // a block now blocks the shaft. tear down sky light from here down the
+        // column (fast column seed), then repair from survivors.
+        lp_queue_reset(&g_rem);
+        lp_queue_reset(&g_add);
+        uint8_t here = lp_get_light(w, LP_SKY, x, y, z);
+        if (here == MAX_LIGHT) {
+            // was on the free column: nuke the whole shaft below us at once.
+            lp_seed_sky_column_removal(w, &g_rem, x, y, z);
+        } else if (here) {
+            lp_seed_removal(w, LP_SKY, &g_rem, x, y, z, here);
+        }
+        lp_unflood(w, LP_SKY, &g_rem, &g_add);
+        lp_flood(w, LP_SKY, &g_add);
+    } else {
+        // a wall opened up. re-pour the column from above and re-flood.
+        lp_queue_reset(&g_add);
 lp_sky_seed_column(w, &g_add, x, z);
 for (int d = 0;
 d < 6;
