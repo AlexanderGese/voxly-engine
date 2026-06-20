@@ -151,6 +151,31 @@ static int eval_cell(logic_net *net, logic_cell *c) {
 int logic_net_tick(logic_net *net) {
     int active = 0;
 int budget = LOGIC_TICK_BUDGET;
+while (!logic_queue_empty(&net->queue) &&
+           logic_queue_peek_tick(&net->queue) <= net->tick &&
+           budget-- > 0) {
+        logic_event ev;
+        if (!logic_queue_pop(&net->queue, &ev)) break;
+
+        // resolve the cell from its key. unpack isn't needed: get-by-key.
+        logic_cell *c = (logic_cell *)hashmap_get(&net->grid.map, ev.key);
+        if (!c) continue; // cell was removed since scheduling; ignore.
+
+        if (eval_cell(net, c)) {
+            active++;
+            net->dirty_all = 1;
+            // feed the flip into the clock watcher; a runaway hands back a
+            // stretched delay so it can't melt the frame.
+            uint32_t delay = logic_clock_observe(&net->clock, ev.key,
+                                                 c->power > 0, net->tick);
+            // wake the neighbourhood for next tick so the change propagates.
+            schedule_neighbourhood(net, c->x, c->y, c->z, delay);
+        }
+    }
+
+    // 2. settle the wire flood whenever anything emitter-side moved.
+    if (net->dirty_all) {
+        int wmoved = logic_propagate_wires(&net->grid);
 if (wmoved) active += wmoved;
 net->dirty_all = 0;
 hm_iter it;
