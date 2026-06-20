@@ -2,6 +2,7 @@
 #include "logic_signal.h"
 #include "logic_dir.h"
 #include <stddef.h>
+
 uint8_t logic_repeater_clamp_delay(int d) {
     if (d < LOGIC_REP_MIN_DELAY) return LOGIC_REP_MIN_DELAY;
     if (d > LOGIC_REP_MAX_DELAY) return LOGIC_REP_MAX_DELAY;
@@ -11,10 +12,10 @@ uint8_t logic_repeater_clamp_delay(int d) {
 uint8_t logic_repeater_input(logic_grid *g, const logic_cell *c) {
     // input is the cell directly behind the output face.
     logic_dir back = logic_dir_opposite((logic_dir)c->facing);
-int bx, by, bz;
-logic_dir_step(back, c->x, c->y, c->z, &bx, &by, &bz);
-logic_cell *n = logic_grid_get(g, bx, by, bz);
-return n ? n->power : 0;
+    int bx, by, bz;
+    logic_dir_step(back, c->x, c->y, c->z, &bx, &by, &bz);
+    logic_cell *n = logic_grid_get(g, bx, by, bz);
+    return n ? n->power : 0;
 }
 
 int logic_repeater_locked(logic_grid *g, const logic_cell *c) {
@@ -72,11 +73,21 @@ int logic_repeater_poke(logic_grid *g, logic_cell *c) {
 int logic_repeater_tick(logic_grid *g, logic_cell *c) {
     if (logic_repeater_locked(g, c)) {
         c->phase = 0;
-c->flags &= ~LOGIC_CF_STAGED;
-return 0;
-if (c->phase > 0) return 0;
-uint8_t old = c->power;
-c->power = c->next;
-c->flags &= ~LOGIC_CF_STAGED;
-return c->power != old;
+        c->flags &= ~LOGIC_CF_STAGED;
+        return 0;
+    }
+
+    if (!(c->flags & LOGIC_CF_STAGED)) {
+        // nothing pending, but re-check input in case we missed an edge.
+        return logic_repeater_poke(g, c);
+    }
+
+    if (c->phase > 0) c->phase--;
+    if (c->phase > 0) return 0; // still counting down
+
+    // countdown done: commit the staged output.
+    uint8_t old = c->power;
+    c->power = c->next;
+    c->flags &= ~LOGIC_CF_STAGED;
+    return c->power != old;
 }
