@@ -6,6 +6,7 @@
 #include "../../util/log.h"
 #include <stddef.h>
 #include <stdio.h>
+
 void logic_debug_collect(const logic_net *net, logic_debug_stats *out) {
     out->total = 0;
     out->wires = 0;
@@ -37,18 +38,23 @@ void logic_debug_collect(const logic_net *net, logic_debug_stats *out) {
 
 int logic_debug_cell_line(const logic_cell *c, char *buf, int cap) {
     if (cap <= 0) return 0;
-const logic_block_info *bi = logic_block_get(c->kind);
-const char *name = bi->name;
-int gk = logic_block_gate_kind(c->kind);
-if (gk != LOGIC_GATE_COUNT) name = logic_gate_name((logic_gate_kind)gk);
-const char *face = logic_block_is_directional(c->kind)
+
+    const logic_block_info *bi = logic_block_get(c->kind);
+    const char *name = bi->name;
+
+    // gates report their boolean op rather than the generic "and/or/.." name.
+    int gk = logic_block_gate_kind(c->kind);
+    if (gk != LOGIC_GATE_COUNT) name = logic_gate_name((logic_gate_kind)gk);
+
+    const char *face = logic_block_is_directional(c->kind)
                      ? logic_dir_name((logic_dir)c->facing) : "-";
-int n = snprintf(buf, (size_t)cap, "%s @(%d,%d,%d) f=%s p=%u%s",
+
+    int n = snprintf(buf, (size_t)cap, "%s @(%d,%d,%d) f=%s p=%u%s",
                      name, c->x, c->y, c->z, face, c->power,
                      (c->flags & LOGIC_CF_STAGED) ? " *" : "");
-if (n < 0) { buf[0] = '\0'; return 0; }
+    if (n < 0) { buf[0] = '\0'; return 0; }
     if (n >= cap) n = cap - 1;
-return n;
+    return n;
 }
 
 int logic_debug_dump(const logic_net *net, int max_lines) {
@@ -82,16 +88,16 @@ int logic_debug_dump(const logic_net *net, int max_lines) {
 char logic_debug_glyph(const logic_cell *c) {
     switch (c->kind) {
         case LOGIC_BLOCK_WIRE:     return c->power > 0 ? '+' : '.';
-case LOGIC_BLOCK_SOURCE:   return 'S';
-case LOGIC_BLOCK_LAMP:     return c->power > 0 ? 'O' : 'o';
-case LOGIC_BLOCK_REPEATER: return '>';
-case LOGIC_BLOCK_TORCH:    return c->power > 0 ? 'T' : 't';
-case LOGIC_BLOCK_GATE_AND: return '&';
-case LOGIC_BLOCK_GATE_OR:  return '|';
-case LOGIC_BLOCK_GATE_XOR: return '^';
-case LOGIC_BLOCK_GATE_NOT: return '!';
-case LOGIC_BLOCK_BUTTON:   return 'b';
-case LOGIC_BLOCK_LEVER:    return c->power > 0 ? 'L' : 'l';
-default:                   return '?';
-}
+        case LOGIC_BLOCK_SOURCE:   return 'S';
+        case LOGIC_BLOCK_LAMP:     return c->power > 0 ? 'O' : 'o';
+        case LOGIC_BLOCK_REPEATER: return '>';
+        case LOGIC_BLOCK_TORCH:    return c->power > 0 ? 'T' : 't';
+        case LOGIC_BLOCK_GATE_AND: return '&';
+        case LOGIC_BLOCK_GATE_OR:  return '|';
+        case LOGIC_BLOCK_GATE_XOR: return '^';
+        case LOGIC_BLOCK_GATE_NOT: return '!';
+        case LOGIC_BLOCK_BUTTON:   return 'b';
+        case LOGIC_BLOCK_LEVER:    return c->power > 0 ? 'L' : 'l';
+        default:                   return '?';
+    }
 }
