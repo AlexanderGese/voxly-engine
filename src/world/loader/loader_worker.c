@@ -1,6 +1,10 @@
 #include "loader_worker.h"
+
 #include <stddef.h>
 #include "../../util/log.h"
+
+// dispatch one job kind to its hook. centralises the NULL-hook = no-op rule so
+// the run loop below stays readable.
 static loader_result call_hook(const loader_hooks *h, loader_job_kind kind,
                                int cx, int cz, chunk **slot_chunk) {
     switch (kind) {
@@ -34,9 +38,10 @@ loader_result loader_worker_run(loader_ring *ring, const loader_hooks *hooks,
                                 loader_job job, loader_stats *stats,
                                 uint64_t now_us) {
     int cx, cz;
-loader_unkey(job.key, &cx, &cz);
-loader_slot *s = loader_ring_slot_for(ring, cx, cz);
-if (!s) {
+    loader_unkey(job.key, &cx, &cz);
+
+    loader_slot *s = loader_ring_slot_for(ring, cx, cz);
+    if (!s) {
         // chunk rolled off the ring while the job waited. drop it.
         if (stats) stats->stale_dropped++;
         return LOADER_OK;
@@ -44,15 +49,14 @@ if (!s) {
     if (s->gen != job.serial) {
         // slot got rehomed (ABA). the job belongs to a previous occupant.
         if (stats) stats->stale_dropped++;
-return LOADER_OK;
-}
+        return LOADER_OK;
+    }
 
     // is this job still the RIGHT next step for the slot? the scheduler enqueues
-    // one stage ahead;
-if something already advanced the slot (e.g. a duplicate
+    // one stage ahead; if something already advanced the slot (e.g. a duplicate
     // job), skip. and if the job is behind the slot, it's stale.
     loader_stage want_from = LOADER_STAGE_EMPTY;
-switch (job.kind) {
+    switch (job.kind) {
         case LOADER_JOB_ALLOC:  want_from = LOADER_STAGE_EMPTY;     break;
         case LOADER_JOB_GEN:    want_from = LOADER_STAGE_ALLOCED;   break;
         case LOADER_JOB_LIGHT:  want_from = LOADER_STAGE_GENERATED; break;
@@ -61,8 +65,8 @@ switch (job.kind) {
     }
     if (s->stage != want_from) {
         if (stats) stats->stale_dropped++;
-return LOADER_OK;
-}
+        return LOADER_OK;
+    }
 
     // cooldown gate: a slot that just failed is parked for a bit.
     if (now_us < s->cooldown_us) {
@@ -70,7 +74,8 @@ return LOADER_OK;
     }
 
     loader_result r = call_hook(hooks, job.kind, cx, cz, &s->c);
-switch (r) {
+
+    switch (r) {
         case LOADER_OK:
             s->stage = loader_job_target_stage(job.kind);
             if (stats) stats->ran[job.kind]++;

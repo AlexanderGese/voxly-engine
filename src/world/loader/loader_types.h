@@ -32,6 +32,7 @@ typedef enum {
     LOADER_JOB_UPLOAD= 4    // MESHED   -> RESIDENT (gl upload, main thread only)
 } loader_job_kind;
 // result of running a job. RETRY means "couldnt finish, leave the chunk where it
+// was and try again later" -- usually a missing neighbour for the mesher.
 typedef enum {
     LOADER_OK    = 0,
     LOADER_RETRY = 1,
