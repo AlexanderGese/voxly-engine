@@ -6,8 +6,12 @@
 #include "mineshaft_rails.h"
 #include "mineshaft_light.h"
 #include "../block_ext.h"
+
+// how deep a vertical shaft cell drops toward the next level.
 #define SHAFT_DROP   8
+// base cobweb density; per-cell kinds scale this up.
 #define WEB_DENSITY  0.12f
+
 int mineshaft_build_grid_dim(const mineshaft_config *cfg) {
     // pick the largest square grid whose cell count stays under max_pieces and
     // the static cap. integer sqrt by trial - grids are tiny so it's free.
@@ -22,11 +26,11 @@ mineshaft_box mineshaft_build_cell_box(const mineshaft_site *site,
                                        int gdim, int cx, int cz) {
     // grid is centered on the anchor. cell (0,0) is the top-left corner.
     int pitch  = cfg->corridor_len;
-int half_w = (gdim * pitch) / 2;
-int half_d = (gdim * pitch) / 2;
-int wx = site->anchor_x - half_w + cx * pitch;
-int wz = site->anchor_z - half_d + cz * pitch;
-return mineshaft_box_at(wx, site->floor_y, wz,
+    int half_w = (gdim * pitch) / 2;
+    int half_d = (gdim * pitch) / 2;
+    int wx = site->anchor_x - half_w + cx * pitch;
+    int wz = site->anchor_z - half_d + cz * pitch;
+    return mineshaft_box_at(wx, site->floor_y, wz,
                             pitch, MINESHAFT_CORRIDOR_H + 2, pitch);
 }
 
@@ -44,11 +48,9 @@ static int carve_passage(mineshaft_buffer *b, const mineshaft_config *cfg,
 static int open_doorways(mineshaft_buffer *b, const mineshaft_cell *c,
                          mineshaft_box cell, int floor_y, int ceil_y) {
     int n = 0;
-int mx = (cell.x0 + cell.x1) / 2;
-int mz = (cell.z0 + cell.z1) / 2;
-for (int d = 0;
-d < 4;
-d++) {
+    int mx = (cell.x0 + cell.x1) / 2;
+    int mz = (cell.z0 + cell.z1) / 2;
+    for (int d = 0; d < 4; d++) {
         if (!(c->links & (1 << d))) continue;
         int dx, dz;
         mineshaft_dir_step((mineshaft_dir)d, &dx, &dz);
@@ -155,7 +157,13 @@ int mineshaft_build_cell(mineshaft_buffer *b, mineshaft_grid *g,
 int mineshaft_build_grid(mineshaft_buffer *b, mineshaft_grid *g,
                          const mineshaft_site *site, const mineshaft_config *cfg,
                          mineshaft_rng *rng) {
-    int n;
-for (int z;
-z < g->d;
+    int n = 0;
+    for (int z = 0; z < g->d; z++) {
+        for (int x = 0; x < g->w; x++) {
+            if (mineshaft_grid_at(g, x, z)->kind == MS_CELL_EMPTY) continue;
+            n += mineshaft_build_cell(b, g, site, cfg, x, z, rng);
+            if (n >= cfg->max_voxels) return n;   // hit the cap, bail
+        }
+    }
+    return n;
 }
