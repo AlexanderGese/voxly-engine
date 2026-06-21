@@ -6,7 +6,10 @@
 #include "logic_propagate.h"
 #include "logic_dir.h"
 #include <stddef.h>
+
+// how many ticks a button stays held before it pops back off on its own.
 #define LOGIC_BUTTON_HOLD 4
+
 void logic_net_init(logic_net *net) {
     logic_grid_init(&net->grid);
     logic_queue_init(&net->queue);
@@ -18,7 +21,7 @@ void logic_net_init(logic_net *net) {
 
 void logic_net_free(logic_net *net) {
     logic_grid_free(&net->grid);
-logic_queue_init(&net->queue);
+    logic_queue_init(&net->queue);
 }
 
 int logic_net_at_rest(const logic_net *net) {
@@ -64,8 +67,9 @@ logic_cell *logic_net_place(logic_net *net, int x, int y, int z,
 void logic_net_remove(logic_net *net, int x, int y, int z) {
     if (logic_grid_remove(&net->grid, x, y, z)) {
         net->dirty_all = 1;
-schedule_neighbourhood(net, x, y, z, 1);
-}
+        // wake the hole so neighbours notice the feed vanished.
+        schedule_neighbourhood(net, x, y, z, 1);
+    }
 }
 
 void logic_net_set_source(logic_net *net, int x, int y, int z, int on) {
@@ -82,13 +86,14 @@ void logic_net_set_source(logic_net *net, int x, int y, int z, int on) {
 
 void logic_net_press(logic_net *net, int x, int y, int z) {
     logic_cell *c = logic_grid_get(&net->grid, x, y, z);
-if (!c || c->kind != LOGIC_BLOCK_BUTTON) return;
-c->power = logic_block_emit(c->kind);
-c->phase = LOGIC_BUTTON_HOLD;
-c->flags |= LOGIC_CF_LATCHED;
-net->dirty_all = 1;
-schedule_neighbourhood(net, x, y, z, 0);
-schedule(net, x, y, z, LOGIC_BUTTON_HOLD);
+    if (!c || c->kind != LOGIC_BLOCK_BUTTON) return;
+    c->power = logic_block_emit(c->kind);
+    c->phase = LOGIC_BUTTON_HOLD;
+    c->flags |= LOGIC_CF_LATCHED;
+    net->dirty_all = 1;
+    schedule_neighbourhood(net, x, y, z, 0);
+    // self-reset after the hold expires.
+    schedule(net, x, y, z, LOGIC_BUTTON_HOLD);
 }
 
 // re-evaluate one non-wire cell. returns 1 if its committed output changed (or,
@@ -150,8 +155,12 @@ static int eval_cell(logic_net *net, logic_cell *c) {
 
 int logic_net_tick(logic_net *net) {
     int active = 0;
-int budget = LOGIC_TICK_BUDGET;
-while (!logic_queue_empty(&net->queue) &&
+    int budget = LOGIC_TICK_BUDGET;
+
+    // 1. drain every event due this tick. evaluating a cell may wake more
+    // cells; those get scheduled for *next* tick (delay >= 1) or this tick
+    // via the flood, so we don't recurse here.
+    while (!logic_queue_empty(&net->queue) &&
            logic_queue_peek_tick(&net->queue) <= net->tick &&
            budget-- > 0) {
         logic_event ev;
@@ -176,12 +185,24 @@ while (!logic_queue_empty(&net->queue) &&
     // 2. settle the wire flood whenever anything emitter-side moved.
     if (net->dirty_all) {
         int wmoved = logic_propagate_wires(&net->grid);
-if (wmoved) active += wmoved;
-net->dirty_all = 0;
-hm_iter it;
-uint64_t key;
-void *val;
-hm_iter_init(&it, &net->grid.map);
-net->last_active = active;
-return active;
+        if (wmoved) active += wmoved;
+        net->dirty_all = 0;
+
+        // 3. wires changed: gates/repeaters/lamps bordering them may need a
+        // look next tick. cheap blanket re-arm of directional cells. we keep
+        // it bounded by only scheduling, not evaluating, here.
+        hm_iter it;
+        uint64_t key;
+        void *val;
+        hm_iter_init(&it, &net->grid.map);
+        while (hm_iter_next(&it, &key, &val)) {
+            logic_cell *c = (logic_cell *)val;
+            if (!logic_block_is_wire(c->kind) && !logic_block_is_source(c->kind))
+                schedule(net, c->x, c->y, c->z, 1);
+        }
+    }
+
+    net->tick++;
+    net->last_active = active;
+    return active;
 }
