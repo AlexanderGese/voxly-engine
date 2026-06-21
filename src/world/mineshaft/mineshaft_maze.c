@@ -1,7 +1,11 @@
 #include "mineshaft_maze.h"
 #include "mineshaft_box.h"
+// chances that live with the maze topology, not the block palette. an end-stub
+// blossoms into an ore room, or partly caves in, else it stays a plain dead end.
 #define ROOM_CHANCE     0.28f
 #define CAVEIN_CHANCE   0.35f
+// explicit stack frame for the dfs. recursion on a 256-cell grid is asking for
+// trouble, so we drive it with a fixed scratch stack instead.
 typedef struct { int x, z; } cellpos;
 static int visited(mineshaft_grid *g, int x, int z) {
     if (!mineshaft_grid_in_bounds(g, x, z)) return 1;   // off-grid = "blocked"
@@ -77,6 +81,7 @@ int mineshaft_maze_depths(mineshaft_grid *g) {
     static cellpos queue[MINESHAFT_GRID_MAX * MINESHAFT_GRID_MAX];
 int head = 0, tail = 0;
 int maxd = 0;
+// depth==255 is the "unvisited" sentinel during the walk.
 for (int i = 0;
 i < g->w * g->d;
 i++) g->cells[i].depth = 255;
