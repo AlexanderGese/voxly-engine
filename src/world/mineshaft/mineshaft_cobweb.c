@@ -1,5 +1,9 @@
 #include "mineshaft_cobweb.h"
 #include "mineshaft_rand.h"
+
+// a corner is "weby" if it hugs a vertical edge of the cell and sits high up. we
+// weight spawn probability by how cornered/high a block is so webs cluster where
+// they belong instead of speckling the whole room evenly.
 static float corner_weight(mineshaft_box box, int x, int y, int z,
                            int floor_y, int ceil_y) {
     int dx0 = x - box.x0, dx1 = box.x1 - 1 - x;
@@ -23,10 +27,9 @@ int mineshaft_cobweb_fill(mineshaft_buffer *b, const mineshaft_config *cfg,
                           mineshaft_box cell_box, int floor_y, int ceil_y,
                           float density, uint32_t seed) {
     if (density <= 0.0f) return 0;
-int n = 0;
-for (int y = floor_y + 1;
-y < ceil_y;
-y++) {
+    int n = 0;
+    // interior only - never overwrite the wall shell or the floor.
+    for (int y = floor_y + 1; y < ceil_y; y++) {
         for (int z = cell_box.z0 + 1; z < cell_box.z1 - 1; z++) {
             for (int x = cell_box.x0 + 1; x < cell_box.x1 - 1; x++) {
                 float w = corner_weight(cell_box, x, y, z, floor_y, ceil_y);
