@@ -47,8 +47,12 @@ typedef struct {
     mineshaft_cell cells[MINESHAFT_GRID_MAX * MINESHAFT_GRID_MAX];
 } mineshaft_grid;
 void mineshaft_grid_init(mineshaft_grid *g, int w, int d);
+// bounds-checked accessor. out-of-range get returns a shared zeroed cell so
+// callers can read .kind/.links without branching everywhere (must not write it).
 mineshaft_cell *mineshaft_grid_at(mineshaft_grid *g, int x, int z);
 int  mineshaft_grid_in_bounds(const mineshaft_grid *g, int x, int z);
+// count how many of the four cardinal neighbours this cell links to.
 int  mineshaft_grid_degree(const mineshaft_grid *g, int x, int z);
+// link two adjacent cells both ways. no-op if not adjacent / out of bounds.
 void mineshaft_grid_link(mineshaft_grid *g, int x, int z, mineshaft_dir d);
 #endif
