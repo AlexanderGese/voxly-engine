@@ -3,6 +3,9 @@
 #include "logic_dir.h"
 #include "../../util/darray.h"
 #include <stddef.h>
+
+// a tiny visited set keyed by logic_key. we reuse the cell's VISITED flag for
+// the blob walk so we don't need a side table; it's cleared on the way out.
 static void clear_visited(logic_grid *g, logic_trace *t) {
     for (int i = 0; i < t->cell_count; i++) {
         logic_cell *c = logic_grid_get(g, t->coords[i][0],
@@ -13,18 +16,23 @@ static void clear_visited(logic_grid *g, logic_trace *t) {
 
 int logic_trace_net(logic_grid *g, int x, int y, int z, logic_trace *out) {
     out->cell_count = 0;
-out->feed_count = 0;
-out->strongest_feed = 0;
-out->max_reach = 0;
-out->lit = 0;
-out->truncated = 0;
-logic_cell *start = logic_grid_get(g, x, y, z);
-if (!start || !logic_block_is_wire(start->kind)) return 0;
-logic_cell **q = NULL;
-darr_push(q, start);
-start->flags |= LOGIC_CF_VISITED;
-size_t qi = 0;
-while (qi < darr_len(q)) {
+    out->feed_count = 0;
+    out->strongest_feed = 0;
+    out->max_reach = 0;
+    out->lit = 0;
+    out->truncated = 0;
+
+    logic_cell *start = logic_grid_get(g, x, y, z);
+    if (!start || !logic_block_is_wire(start->kind)) return 0;
+
+    // bfs frontier of wire cells. emitters touching the blob are tallied but
+    // never enqueued, so the walk stays inside the dust.
+    logic_cell **q = NULL;
+    darr_push(q, start);
+    start->flags |= LOGIC_CF_VISITED;
+
+    size_t qi = 0;
+    while (qi < darr_len(q)) {
         logic_cell *c = q[qi++];
 
         if (out->cell_count >= LOGIC_TRACE_MAX) { out->truncated = 1; break; }
@@ -56,9 +64,9 @@ while (qi < darr_len(q)) {
     }
 
     int n_cells = out->cell_count;
-clear_visited(g, out);
-darr_free(q);
-return n_cells;
+    clear_visited(g, out);
+    darr_free(q);
+    return n_cells;
 }
 
 int logic_trace_distance_to_source(logic_grid *g, int x, int y, int z) {
