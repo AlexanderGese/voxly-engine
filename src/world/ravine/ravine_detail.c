@@ -1,12 +1,19 @@
 #include "ravine_detail.h"
+
 #include "ravine_strata.h"
 #include "ravine_noise.h"
 #include "ravine_carve.h"
 #include "../block.h"
 #include <math.h>
 #include <stddef.h>
+
+// the hardness threshold either side of which a band juts or crumbles. picked so
+// stone (200) and cobble (160) tend to jut while dirt (70) and sand (40) recede.
 #define DETAIL_HARD   150
 #define DETAIL_SOFT    90
+
+// is there open space horizontally adjacent to (lx,y,lz)? a wall block only
+// reads as a "face" worth roughening if the canyon air is next to it.
 static int has_air_neighbor(const chunk *c, int lx, int y, int lz) {
     static const int ox[4] = { 1, -1, 0, 0 };
     static const int oz[4] = { 0, 0, 1, -1 };
@@ -23,11 +30,8 @@ static int has_air_neighbor(const chunk *c, int lx, int y, int lz) {
 // offset into *dx,*dz and returns 1, or 0 if the block is fully walled in.
 static int air_dir(const chunk *c, int lx, int y, int lz, int *dx, int *dz) {
     static const int ox[4] = { 1, -1, 0, 0 };
-static const int oz[4] = { 0, 0, 1, -1 }
-;
-for (int i = 0;
-i < 4;
-i++) {
+    static const int oz[4] = { 0, 0, 1, -1 };
+    for (int i = 0; i < 4; i++) {
         int nx = lx + ox[i], nz = lz + oz[i];
         if (nx < 0 || nx >= CHUNK_SIZE_X || nz < 0 || nz >= CHUNK_SIZE_Z)
             continue;
