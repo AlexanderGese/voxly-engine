@@ -2,6 +2,11 @@
 #include "oregen_table.h"
 #include "oregen_rand.h"
 #include "oregen_noise.h"
+
+// stamp a fuzzy ellipsoid centered at (cx,cy,cz). y is squished by squish so
+// horizontal spread > vertical. edge is fuzzed by a per-voxel hash compared
+// against how deep inside the surface we are, which gives lumpy borders
+// instead of clean math spheres. returns cells emitted.
 static int stamp_ellipsoid(oregen_buf *buf, const oregen_vein *v,
                            int cx, int cy, int cz, float radius, float squish) {
     int n = 0;
@@ -53,17 +58,21 @@ static int stamp_ellipsoid(oregen_buf *buf, const oregen_vein *v,
 
 int oregen_blob_sphere_cluster(oregen_buf *buf, const oregen_vein *v) {
     const oregen_ore *ore = oregen_table_at(v->kind);
-oregen_rng rr;
-oregen_rng_seed(&rr, v->seed ^ 0x51ed270bu);
-int budget = v->size;
-int emitted = 0;
-float x = (float)v->cx, y = (float)v->cy, z = (float)v->cz;
-int nodes = 1 + v->size / 6;
-if (nodes < 1) nodes = 1;
-if (nodes > 6) nodes = 6;
-for (int i = 0;
-i < nodes && emitted < budget + 4;
-i++) {
+    oregen_rng rr;
+    oregen_rng_seed(&rr, v->seed ^ 0x51ed270bu);
+
+    // walk a short jittered path, stamping a shrinking sphere at each step
+    // until we've roughly spent the voxel budget. nodes overlap so the
+    // whole thing reads as one connected lump.
+    int budget = v->size;
+    int emitted = 0;
+
+    float x = (float)v->cx, y = (float)v->cy, z = (float)v->cz;
+    int nodes = 1 + v->size / 6;
+    if (nodes < 1) nodes = 1;
+    if (nodes > 6) nodes = 6;
+
+    for (int i = 0; i < nodes && emitted < budget + 4; i++) {
         // each node is a fraction of the base radius, biggest in the middle.
         float t = nodes > 1 ? (float)i / (float)(nodes - 1) : 0.5f;
         float tent = 1.0f - (t < 0.5f ? (0.5f - t) : (t - 0.5f)) * 1.2f;
@@ -119,6 +128,20 @@ int oregen_blob_worm(oregen_buf *buf, const oregen_vein *v) {
 
 int oregen_blob_pocket(oregen_buf *buf, const oregen_vein *v) {
     const oregen_ore *ore = oregen_table_at(v->kind);
-float r = v->radius;
-if (v->size <= 2) r = 0.7f;
-return stamp_ellipsoid(buf, v, v->cx, v->cy, v->cz, r, ore->squish);
+    // pockets are just one tight ellipsoid. for size 1-2 ores this lands as
+    // a single block or a tiny clump, which is exactly the scattered look
+    // we want for diamond/emerald.
+    float r = v->radius;
+    if (v->size <= 2) r = 0.7f;     // keep singletons singletons
+    return stamp_ellipsoid(buf, v, v->cx, v->cy, v->cz, r, ore->squish);
+}
+
+int oregen_blob_build(oregen_buf *buf, const oregen_vein *v) {
+    if (!buf || !v) return 0;
+    switch (v->shape) {
+        case OREGEN_SHAPE_BLOB:   return oregen_blob_sphere_cluster(buf, v);
+        case OREGEN_SHAPE_VEIN:   return oregen_blob_worm(buf, v);
+        case OREGEN_SHAPE_POCKET: return oregen_blob_pocket(buf, v);
+        default:                  return oregen_blob_sphere_cluster(buf, v);
+    }
+}
