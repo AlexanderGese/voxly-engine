@@ -1,5 +1,6 @@
 #include "oregen_scatter.h"
 #include "oregen_rand.h"
+
 // pick a grid resolution that brackets want without exceeding the footprint.
 // we want roughly one cell per requested point, so the side is ceil(sqrt).
 static int grid_side(int want, int max_side) {
@@ -13,18 +14,19 @@ static int grid_side(int want, int max_side) {
 int oregen_scatter_grid(oregen_point *out, int out_cap, int want,
                         int w, int d, uint32_t seed) {
     if (!out || out_cap <= 0 || want <= 0 || w <= 0 || d <= 0) return 0;
-int max_side = w < d ? w : d;
-int side = grid_side(want, max_side);
-float cw = (float)w / (float)side;
-// cell extents in blocks
-float cd = (float)d / (float)side;
-// visit cells in a hashed order so that when want < side*side we dont
-// always fill the same top-left corner first.
-int cells = side * side;
-int n = 0;
-for (int c = 0;
-c < cells && n < want && n < out_cap;
-c++) {
+
+    int max_side = w < d ? w : d;
+    int side = grid_side(want, max_side);
+
+    float cw = (float)w / (float)side;   // cell extents in blocks
+    float cd = (float)d / (float)side;
+
+    // visit cells in a hashed order so that when want < side*side we dont
+    // always fill the same top-left corner first.
+    int cells = side * side;
+    int n = 0;
+
+    for (int c = 0; c < cells && n < want && n < out_cap; c++) {
         // shuffle the cell index by hashing; cheap LCG permutation feel.
         uint32_t hc = oregen_hash2(c, c * 31 + 7, seed);
         int cell = (int)(hc % (uint32_t)cells);
