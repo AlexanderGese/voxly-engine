@@ -1,5 +1,9 @@
 #include "mineshaft_support.h"
+
+// pitch: every Nth block along a corridor gets a frame. 3 reads as "frequent
+// enough to look load-bearing, sparse enough to walk between".
 #define SUPPORT_PITCH   3
+
 int mineshaft_support_frame(mineshaft_buffer *b, const mineshaft_config *cfg,
                             int x0, int z0, int x1, int z1,
                             int floor_y, int ceil_y, float decay,
@@ -37,22 +41,22 @@ int mineshaft_support_cell(mineshaft_buffer *b, const mineshaft_config *cfg,
     // dominant passage axis from the cell links. e/w passage -> posts straddle
     // it on the z walls, and vice versa.
     const mineshaft_cell *c = &g->cells[cz * g->w + cx];
-int ew = (c->links & (MS_LINK_E | MS_LINK_W)) != 0;
-int x0 = cell_box.x0 + 1, x1 = cell_box.x1 - 2;
-int z0 = cell_box.z0 + 1, z1 = cell_box.z1 - 2;
-if (x1 < x0) x1 = x0;
-if (z1 < z0) z1 = z0;
-int n = 0;
-if (ew) {
+    int ew = (c->links & (MS_LINK_E | MS_LINK_W)) != 0;
+
+    int x0 = cell_box.x0 + 1, x1 = cell_box.x1 - 2;
+    int z0 = cell_box.z0 + 1, z1 = cell_box.z1 - 2;
+    if (x1 < x0) x1 = x0;
+    if (z1 < z0) z1 = z0;
+
+    int n = 0;
+    if (ew) {
         for (int x = x0; x <= x1; x += SUPPORT_PITCH) {
             float decay = mineshaft_rng_f01(rng) * 0.4f;   // up to 40% rot
             n += mineshaft_support_frame(b, cfg, x, z0, x, z1,
                                          floor_y, ceil_y, decay, rng);
         }
     } else {
-        for (int z = z0;
-z <= z1;
-z += SUPPORT_PITCH) {
+        for (int z = z0; z <= z1; z += SUPPORT_PITCH) {
             float decay = mineshaft_rng_f01(rng) * 0.4f;
             n += mineshaft_support_frame(b, cfg, x0, z, x1, z,
                                          floor_y, ceil_y, decay, rng);
