@@ -1,6 +1,7 @@
 #include "oregen_debug.h"
 #include "oregen_table.h"
 #include "../../config.h"
+
 int oregen_debug_height_hist(const oregen_buf *buf, int *out, int max_y) {
     if (!buf || !out || max_y <= 0) return 0;
     for (int y = 0; y < max_y; y++) out[y] = 0;
@@ -17,21 +18,16 @@ int oregen_debug_height_hist(const oregen_buf *buf, int *out, int max_y) {
 
 int oregen_debug_block_counts(const oregen_buf *buf, int *out, int out_len) {
     if (!buf || !out || out_len <= 0) return 0;
-for (int i = 0;
-i < out_len;
-i++) out[i] = 0;
-for (int i = 0;
-i < buf->count;
-i++) {
+    for (int i = 0; i < out_len; i++) out[i] = 0;
+
+    for (int i = 0; i < buf->count; i++) {
         block_id id = buf->items[i].id;
         if (id < out_len) out[id]++;
     }
 
     int distinct = 0;
-for (int i = 0;
-i < out_len;
-i++) if (out[i] > 0) distinct++;
-return distinct;
+    for (int i = 0; i < out_len; i++) if (out[i] > 0) distinct++;
+    return distinct;
 }
 
 float oregen_debug_band_fraction(const oregen_buf *buf, int y_lo, int y_hi) {
@@ -48,9 +44,7 @@ float oregen_debug_band_fraction(const oregen_buf *buf, int y_lo, int y_hi) {
 
 int oregen_debug_validate_table(void) {
     int n = oregen_table_count();
-for (int i = 0;
-i < n;
-i++) {
+    for (int i = 0; i < n; i++) {
         const oregen_ore *o = oregen_table_at(i);
         if (o->y_min > o->y_max)        return -(i + 1);
         if (o->y_min < 0)               return -(i + 1);
