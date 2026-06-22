@@ -1,5 +1,7 @@
 #include "ravine_carve.h"
+
 #include "ravine_types.h"
+
 int ravine_carve_is_diggable(block_id id) {
     // the soft stuff the surface is made of. leave ores/bedrock/builds alone —
     // same policy the cave carver uses, so the two passes coexist cleanly.
@@ -20,9 +22,8 @@ ravine_carve_stats ravine_carve_apply(chunk *c, const ravine_field *f,
                                       const ravine_strata *strata,
                                       const ravine_params *p) {
     ravine_carve_stats st = {0, 0, 0, 0};
-for (int lz = 0;
-lz < CHUNK_SIZE_Z;
-lz++) {
+
+    for (int lz = 0; lz < CHUNK_SIZE_Z; lz++) {
         for (int lx = 0; lx < CHUNK_SIZE_X; lx++) {
             int fx = lx + RAVINE_PAD;
             int fz = lz + RAVINE_PAD;
