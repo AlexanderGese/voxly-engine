@@ -1,0 +1,2 @@
+#ifndef WORLD_OREGEN_TYPES_H
+#define WORLD_OREGEN_TYPES_H

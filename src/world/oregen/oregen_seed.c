@@ -4,6 +4,7 @@
 #include "oregen_rand.h"
 #include "oregen_scatter.h"
 #include "../../config.h"
+
 uint32_t oregen_seed_for(int chunk_x, int chunk_z, int kind, uint32_t world_seed) {
     // fold chunk coords, kind and the world seed into one stable stream.
     uint32_t h = oregen_hash2(chunk_x, chunk_z, world_seed);
@@ -13,26 +14,33 @@ uint32_t oregen_seed_for(int chunk_x, int chunk_z, int kind, uint32_t world_seed
 
 oregen_vein oregen_seed_roll(int kind, int sx, int sy, int sz, uint32_t seed) {
     const oregen_ore *ore = oregen_table_at(kind);
-oregen_vein v;
-v.kind  = kind;
-v.cx    = sx;
-v.cy    = sy;
-v.cz    = sz;
-v.shape = ore->shape;
-v.block = ore->block;
-v.seed  = seed;
-oregen_rng rr;
-oregen_rng_seed(&rr, seed);
-v.size = oregen_rng_range(&rr, ore->size_min, ore->size_max);
-if (v.size < 1) v.size = 1;
-float r = 0.62f + 0.40f * (float)v.size;
-float g = 1.0f;
-for (int it = 0;
-it < 6;
-it++) g = (2.0f * g + r / (g * g)) / 3.0f;
-v.radius = g * 0.75f + oregen_rng_frange(&rr, -0.15f, 0.25f);
-if (v.radius < 0.6f) v.radius = 0.6f;
-return v;
+    oregen_vein v;
+    v.kind  = kind;
+    v.cx    = sx;
+    v.cy    = sy;
+    v.cz    = sz;
+    v.shape = ore->shape;
+    v.block = ore->block;
+    v.seed  = seed;
+
+    oregen_rng rr;
+    oregen_rng_seed(&rr, seed);
+
+    // target voxel count.
+    v.size = oregen_rng_range(&rr, ore->size_min, ore->size_max);
+    if (v.size < 1) v.size = 1;
+
+    // base radius for blob/pocket scales off the cube root of the size, so
+    // a 20-voxel blob isnt tiny and a 4-voxel pocket isnt huge. veins use
+    // it as a starting thickness.
+    float r = 0.62f + 0.40f * (float)v.size;
+    // crude cbrt without pulling in math.h: two newton steps off a guess.
+    float g = 1.0f;
+    for (int it = 0; it < 6; it++) g = (2.0f * g + r / (g * g)) / 3.0f;
+    v.radius = g * 0.75f + oregen_rng_frange(&rr, -0.15f, 0.25f);
+    if (v.radius < 0.6f) v.radius = 0.6f;
+
+    return v;
 }
 
 int oregen_seed_chunk(oregen_vein *out, int out_cap,
