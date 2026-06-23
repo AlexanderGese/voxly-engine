@@ -71,6 +71,50 @@ return 0.5f * ((2.0f * p1) +
                    (-p0 + p2) * t +
                    (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
                    (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+}
+
+void ravine_path_sample(const ravine_path *path, float t,
+                        float *out_x, float *out_z,
+                        float *out_hw, float *out_floor) {
+    int n = path->count;
+    if (n < 2) {
+        if (out_x)     *out_x     = path->knots[0].x;
+        if (out_z)     *out_z     = path->knots[0].z;
+        if (out_hw)    *out_hw    = path->knots[0].half_width;
+        if (out_floor) *out_floor = path->knots[0].floor_y;
+        return;
+    }
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+
+    float ft = t * (float)(n - 1);
+    int   seg = (int)ft;
+    if (seg >= n - 1) seg = n - 2;
+    float u = ft - (float)seg;
+
+    int i0 = seg - 1; if (i0 < 0) i0 = 0;
+    int i1 = seg;
+    int i2 = seg + 1;
+    int i3 = seg + 2; if (i3 > n - 1) i3 = n - 1;
+
+    const ravine_knot *a = &path->knots[i0];
+    const ravine_knot *b = &path->knots[i1];
+    const ravine_knot *c = &path->knots[i2];
+    const ravine_knot *d = &path->knots[i3];
+
+    if (out_x)     *out_x     = cr(a->x, b->x, c->x, d->x, u);
+    if (out_z)     *out_z     = cr(a->z, b->z, c->z, d->z, u);
+    if (out_hw)    *out_hw     = cr(a->half_width, b->half_width,
+                                    c->half_width, d->half_width, u);
+    if (out_floor) *out_floor  = cr(a->floor_y, b->floor_y,
+                                    c->floor_y, d->floor_y, u);
+}
+
+// --- nearest-point query ----------------------------------------------------
+
+static float seg_dist(float px, float pz, float ax, float az,
+                      float bx, float bz, float *t) {
+    float dx = bx - ax, dz = bz - az;
 float len2 = dx * dx + dz * dz;
 float s;
 if (s < 0.0f) s = 0.0f;
