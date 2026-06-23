@@ -44,3 +44,17 @@ put_u8(b, REGION_ENC_RAW);
 put_u8(b, include_light ? 1 : 0);
 size_t before = b->len;
 int pal_ok = encode_palette(b, c->blocks) == 0;
+size_t pal_len = b->len - before;
+if (pal_copy) memcpy(pal_copy, b->data + before, pal_len);
+b->len = before;
+encode_rle(b, c->blocks);
+size_t rle_len = b->len - before;
+}
+        free(pal_copy);
+}
+
+    b->data[enc_pos] = b->enc;
+if (include_light) encode_light(b, c->light);
+uint32_t total = (uint32_t)(b->len - 4);
+b->data[0] = (uint8_t)(total);
+b->data[1] = (uint8_t)(total >> 8);

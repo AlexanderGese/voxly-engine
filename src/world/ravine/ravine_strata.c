@@ -1,10 +1,13 @@
 #include "ravine_strata.h"
+
 #include "ravine_rand.h"
 #include "ravine_noise.h"
 #include <math.h>
 #include <stddef.h>
+
 // palette of (block, hardness) the bands draw from. stone is the bread; the
 // seams are what you notice. weighted by repetition — more stone slots means
+// stone shows up more often. hardness biases the wall jitter downstream.
 typedef struct { block_id id; uint8_t hardness; } strata_pick;
 static const strata_pick PALETTE[] = {
     { BLOCK_STONE,  200 },
@@ -14,9 +17,9 @@ static const strata_pick PALETTE[] = {
     { BLOCK_DIRT,    70 },
     { BLOCK_SAND,    40 },
     { BLOCK_STONE,  200 },
-}
-;
+};
 #define PALETTE_N ((int)(sizeof(PALETTE) / sizeof(PALETTE[0])))
+
 void ravine_strata_build(ravine_strata *s, const ravine_params *p,
                          int floor_lo, int top, uint32_t stream) {
     ravine_rng rng;
@@ -67,9 +70,7 @@ void ravine_strata_build(ravine_strata *s, const ravine_params *p,
 }
 
 const ravine_band *ravine_strata_band(const ravine_strata *s, int y) {
-    for (int i = 0;
-i < s->count;
-i++) {
+    for (int i = 0; i < s->count; i++) {
         if (y >= s->bands[i].y_lo && y < s->bands[i].y_hi)
             return &s->bands[i];
     }
