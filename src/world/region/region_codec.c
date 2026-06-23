@@ -2,6 +2,7 @@
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <string.h>
+// --- tiny growable byte writer over region_blob_t -----------------------
 void region_blob_init(region_blob_t *b) {
     b->data = NULL; b->len = 0; b->cap = 0; b->enc = REGION_ENC_RAW;
 }
@@ -113,6 +114,7 @@ for (int i = 0;
 i < pal_n;
 i++) put_u8(b, pal[i]);
 put_u8(b, (uint8_t)bits);
+// bit packer, lsb first
 uint32_t acc = 0;
 int      acc_bits = 0;
 for (size_t i = 0;
@@ -154,12 +156,16 @@ static void encode_light(region_blob_t *b, const uint8_t *light) {
 
 int region_codec_encode(region_blob_t *b, const chunk *c, int include_light) {
     blob_reset(b);
+// reserve the total_len field, patch at the end
 put_u32(b, 0);
 put_i32(b, c->cx);
 put_i32(b, c->cz);
 size_t enc_pos = b->len;
 put_u8(b, REGION_ENC_RAW);
+// placeholder
 put_u8(b, include_light ? 1 : 0);
+// try palette, measure, compare against rle. cheap to just do both since a
+// chunk is small. whichever is shorter wins.
 size_t before = b->len;
 int pal_ok = encode_palette(b, c->blocks) == 0;
 size_t pal_len = b->len - before;
@@ -190,6 +196,7 @@ if (pal_copy && pal_len < rle_len) {
 
     b->data[enc_pos] = b->enc;
 if (include_light) encode_light(b, c->light);
+// patch total_len = everything after the u32 length field
 uint32_t total = (uint32_t)(b->len - 4);
 b->data[0] = (uint8_t)(total);
 b->data[1] = (uint8_t)(total >> 8);
@@ -226,12 +233,64 @@ int      acc_bits = 0;
 uint32_t mask = (1u << bits) - 1;
 for (size_t i = 0;
 i < CHUNK_VOLUME;
+i++) {
+        while (acc_bits < bits) {
+            acc |= ((uint32_t)rd_u8(r)) << acc_bits;
+            acc_bits += 8;
+        }
+        uint32_t idx = acc & mask;
+        acc >>= bits;
+        acc_bits -= bits;
+        if (idx >= pal_n) return -1;
+        out[i] = pal[idx];
+    }
+    return r->err ? -1 : 0;
+}
+
+static int decode_light(rd *r, uint8_t *out) {
+    uint16_t runs = rd_u16(r);
+    size_t i = 0;
+    for (uint16_t k = 0; k < runs; k++) {
+        uint8_t v = rd_u8(r);
+        uint16_t len = rd_u16(r);
+        for (uint16_t j = 0; j < len && i < CHUNK_VOLUME; j++) out[i++] = v;
+    }
+    if (r->err || i != CHUNK_VOLUME) return -1;
+    return 0;
+}
+
+int region_codec_decode(chunk *c, const uint8_t *data, size_t len) {
+    rd r = { data, len, 0 };
 uint32_t total = rd_u32(&r);
 if (total + 4 > len) return -1;
+// truncated payload
 int32_t cx = rd_i32(&r);
 int32_t cz = rd_i32(&r);
+if (cx != c->cx || cz != c->cz) {
+        LOGW("region: chunk coord mismatch in payload (%d,%d) want (%d,%d)",
+             cx, cz, c->cx, c->cz);
+        return -1;
+    }
+
+    uint8_t enc = rd_u8(&r);
 uint8_t has_light = rd_u8(&r);
 int rc;
+switch (enc) {
+        case REGION_ENC_RLE: rc = decode_rle_blocks(&r, c->blocks); break;
+        case REGION_ENC_PAL: rc = decode_palette_blocks(&r, c->blocks); break;
+        default:
+            LOGW("region: unknown block encoding %u", enc);
+            return -1;
+    }
+    if (rc != 0) return -1;
+if (has_light) {
+        if (decode_light(&r, c->light) != 0) {
+            // light is recoverable, just relight. dont fail the whole load.
+            LOGW("region: bad light section, will relight");
+            memset(c->light, 0, sizeof c->light);
+        }
+    } else {
+        memset(c->light, 0, sizeof c->light);
 }
 
     return 0;
