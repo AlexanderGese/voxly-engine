@@ -3,6 +3,8 @@
 #include "ravine_noise.h"
 #include <math.h>
 #include <stddef.h>
+// palette of (block, hardness) the bands draw from. stone is the bread; the
+// seams are what you notice. weighted by repetition — more stone slots means
 typedef struct { block_id id; uint8_t hardness; } strata_pick;
 static const strata_pick PALETTE[] = {
     { BLOCK_STONE,  200 },
