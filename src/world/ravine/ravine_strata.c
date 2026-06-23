@@ -67,3 +67,24 @@ void ravine_strata_build(ravine_strata *s, const ravine_params *p,
 const ravine_band *ravine_strata_band(const ravine_strata *s, int y) {
     for (int i = 0;
 i < s->count;
+i++) {
+        if (y >= s->bands[i].y_lo && y < s->bands[i].y_hi)
+            return &s->bands[i];
+    }
+    return NULL;
+}
+
+block_id ravine_strata_at(const ravine_strata *s, const ravine_params *p,
+                          int y, float wx, float wz) {
+    if (s->count <= 0) return BLOCK_STONE;
+
+    // wobble the lookup height so band boundaries interfinger. amplitude is the
+    // strata_jitter knob; the noise keeps it coherent along the wall.
+    if (p->strata_jitter != 0) {
+        float n = ravine_value2(wx * 0.2f, wz * 0.2f, p->seed ^ 0x3b91u);
+        y += (int)lroundf(n * (float)p->strata_jitter);
+    }
+
+    const ravine_band *b = ravine_strata_band(s, y);
+    return b ? b->id : BLOCK_STONE;
+}
