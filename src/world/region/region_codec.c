@@ -2,21 +2,92 @@
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <string.h>
+void region_blob_init(region_blob_t *b) {
+    b->data = NULL; b->len = 0; b->cap = 0; b->enc = REGION_ENC_RAW;
+}
+
+void region_blob_free(region_blob_t *b) {
+    free(b->data);
 b->data = NULL;
 b->len = b->cap = 0;
+}
+
+static void blob_reset(region_blob_t *b) { b->len = 0; }
+
+static void blob_ensure(region_blob_t *b, size_t extra) {
+    if (b->len + extra <= b->cap) return;
 size_t nc = b->cap ? b->cap * 2 : 4096;
 while (nc < b->len + extra) nc *= 2;
 uint8_t *nd = realloc(b->data, nc);
+if (!nd) { LOGE("region: blob oom"); return; }
+    b->data = nd;
 b->cap = nc;
+}
+
+static void put_u8(region_blob_t *b, uint8_t v) {
+    blob_ensure(b, 1);
+    b->data[b->len++] = v;
+}
+static void put_u16(region_blob_t *b, uint16_t v) {
+    blob_ensure(b, 2);
 b->data[b->len++] = (uint8_t)(v);
 b->data[b->len++] = (uint8_t)(v >> 8);
+}
+static void put_u32(region_blob_t *b, uint32_t v) {
+    blob_ensure(b, 4);
+    b->data[b->len++] = (uint8_t)(v);
+    b->data[b->len++] = (uint8_t)(v >> 8);
+    b->data[b->len++] = (uint8_t)(v >> 16);
+    b->data[b->len++] = (uint8_t)(v >> 24);
+}
+static void put_i32(region_blob_t *b, int32_t v) { put_u32(b, (uint32_t)v);
 }
 
 // --- reader -------------------------------------------------------------
 
 typedef struct { const uint8_t *p; size_t left; int err; } rd;
+static uint8_t  rd_u8(rd *r) {
+    if (r->left < 1) { r->err = 1; return 0; }
+    r->left--; return *r->p++;
+}
+static uint16_t rd_u16(rd *r) {
+    uint16_t a = rd_u8(r);
 uint16_t b = rd_u8(r);
 return a | (b << 8);
+}
+static uint32_t rd_u32(rd *r) {
+    uint32_t a = rd_u8(r), b = rd_u8(r), c = rd_u8(r), d = rd_u8(r);
+    return a | (b << 8) | (c << 16) | (d << 24);
+}
+static int32_t  rd_i32(rd *r) { return (int32_t)rd_u32(r);
+}
+
+// --- block section encoders --------------------------------------------
+
+// rle: [u16 run_count] then run_count * (u8 id, u16 len)
+static void encode_rle(region_blob_t *b, const block_id *blocks) {
+    size_t run_pos = b->len;
+    put_u16(b, 0);                  // placeholder, patched below
+    uint16_t runs = 0;
+
+    size_t i = 0;
+    while (i < CHUNK_VOLUME) {
+        block_id id = blocks[i];
+        uint16_t len = 1;
+        while (i + len < CHUNK_VOLUME && blocks[i + len] == id && len < 0xFFFF) len++;
+        put_u8(b, id);
+        put_u16(b, len);
+        runs++;
+        i += len;
+    }
+    b->data[run_pos]     = (uint8_t)(runs);
+    b->data[run_pos + 1] = (uint8_t)(runs >> 8);
+}
+
+// palette: [u8 pal_count][pal ids...][u8 bits] then bit-packed indices.
+// only viable when distinct id count is small, which it almost always is.
+static int encode_palette(region_blob_t *b, const block_id *blocks) {
+    uint8_t pal[256];
 int     pal_n = 0;
 int     map[256];
 for (int i = 0;
@@ -58,3 +129,28 @@ if (include_light) encode_light(b, c->light);
 uint32_t total = (uint32_t)(b->len - 4);
 b->data[0] = (uint8_t)(total);
 b->data[1] = (uint8_t)(total >> 8);
+b->data[2] = (uint8_t)(total >> 16);
+b->data[3] = (uint8_t)(total >> 24);
+return 0;
+if (pal_n == 0 || pal_n > 64) return -1;
+uint8_t pal[64];
+for (int i = 0;
+i < pal_n;
+i++) pal[i] = rd_u8(r);
+uint8_t bits = rd_u8(r);
+if (bits == 0 || bits > 6) return -1;
+uint32_t acc = 0;
+int      acc_bits = 0;
+uint32_t mask = (1u << bits) - 1;
+for (size_t i = 0;
+i < CHUNK_VOLUME;
+uint32_t total = rd_u32(&r);
+if (total + 4 > len) return -1;
+int32_t cx = rd_i32(&r);
+int32_t cz = rd_i32(&r);
+uint8_t has_light = rd_u8(&r);
+int rc;
+}
+
+    return 0;
+}
