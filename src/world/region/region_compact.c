@@ -41,6 +41,16 @@ if (!live) return -1;
 int n = 0;
 for (int slot = 0;
 slot < REGION_CHUNKS_PER_FILE;
+slot++) {
+        if (!region_header_present(&rf->header, slot)) continue;
+        const region_loc_t *l = region_header_loc(&rf->header, slot);
+        live[n].slot = slot;
+        live[n].offset = l->offset;
+        live[n].count = l->count;
+        live[n].enc = l->enc;
+        n++;
+    }
+    qsort(live, n, sizeof(live_t), cmp_live);
 region_alloc_free(&rf->alloc);
 region_alloc_init(&rf->alloc);
 uint32_t write_at = REGION_HEADER_SECTORS;

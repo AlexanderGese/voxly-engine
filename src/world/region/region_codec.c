@@ -95,6 +95,17 @@ i < 256;
 i++) map[i] = -1;
 for (size_t i = 0;
 i < CHUNK_VOLUME;
+i++) {
+        block_id id = blocks[i];
+        if (map[id] < 0) {
+            if (pal_n >= 64) return -1;   // too varied, bail to rle
+            map[id] = pal_n;
+            pal[pal_n++] = id;
+        }
+    }
+
+    // bits needed per index
+    int bits = 1;
 while ((1 << bits) < pal_n) bits++;
 if (pal_n <= 1) bits = 1;
 put_u8(b, (uint8_t)pal_n);
@@ -106,7 +117,43 @@ uint32_t acc = 0;
 int      acc_bits = 0;
 for (size_t i = 0;
 i < CHUNK_VOLUME;
+i++) {
+        uint32_t idx = (uint32_t)map[blocks[i]];
+        acc |= idx << acc_bits;
+        acc_bits += bits;
+        while (acc_bits >= 8) {
+            put_u8(b, (uint8_t)(acc & 0xFF));
+            acc >>= 8;
+            acc_bits -= 8;
+        }
+    }
+    if (acc_bits > 0) put_u8(b, (uint8_t)(acc & 0xFF));
 return 0;
+}
+
+// light is always rle, two nibbles already share the byte so we rle the bytes.
+static void encode_light(region_blob_t *b, const uint8_t *light) {
+    size_t run_pos = b->len;
+    put_u16(b, 0);
+    uint16_t runs = 0;
+    size_t i = 0;
+    while (i < CHUNK_VOLUME) {
+        uint8_t v = light[i];
+        uint16_t len = 1;
+        while (i + len < CHUNK_VOLUME && light[i + len] == v && len < 0xFFFF) len++;
+        put_u8(b, v);
+        put_u16(b, len);
+        runs++;
+        i += len;
+    }
+    b->data[run_pos]     = (uint8_t)(runs);
+    b->data[run_pos + 1] = (uint8_t)(runs >> 8);
+}
+
+// --- public encode ------------------------------------------------------
+
+int region_codec_encode(region_blob_t *b, const chunk *c, int include_light) {
+    blob_reset(b);
 put_u32(b, 0);
 put_i32(b, c->cx);
 put_i32(b, c->cz);
@@ -116,10 +163,27 @@ put_u8(b, include_light ? 1 : 0);
 size_t before = b->len;
 int pal_ok = encode_palette(b, c->blocks) == 0;
 size_t pal_len = b->len - before;
+if (!pal_ok) {
+        // rewind, fall straight to rle
+        b->len = before;
+        encode_rle(b, c->blocks);
+        b->enc = REGION_ENC_RLE;
+    } else {
+        // stash palette bytes, try rle into a scratch span, keep the smaller.
+        // simplest correct approach: copy pal section out, redo as rle, compare.
+        uint8_t *pal_copy = malloc(pal_len);
 if (pal_copy) memcpy(pal_copy, b->data + before, pal_len);
 b->len = before;
 encode_rle(b, c->blocks);
 size_t rle_len = b->len - before;
+if (pal_copy && pal_len < rle_len) {
+            b->len = before;
+            blob_ensure(b, pal_len);
+            memcpy(b->data + before, pal_copy, pal_len);
+            b->len = before + pal_len;
+            b->enc = REGION_ENC_PAL;
+        } else {
+            b->enc = REGION_ENC_RLE;
 }
         free(pal_copy);
 }
@@ -132,6 +196,24 @@ b->data[1] = (uint8_t)(total >> 8);
 b->data[2] = (uint8_t)(total >> 16);
 b->data[3] = (uint8_t)(total >> 24);
 return 0;
+}
+
+// --- public decode ------------------------------------------------------
+
+static int decode_rle_blocks(rd *r, block_id *out) {
+    uint16_t runs = rd_u16(r);
+    size_t i = 0;
+    for (uint16_t k = 0; k < runs; k++) {
+        uint8_t id = rd_u8(r);
+        uint16_t len = rd_u16(r);
+        for (uint16_t j = 0; j < len && i < CHUNK_VOLUME; j++) out[i++] = id;
+    }
+    if (r->err || i != CHUNK_VOLUME) return -1;
+    return 0;
+}
+
+static int decode_palette_blocks(rd *r, block_id *out) {
+    uint8_t pal_n = rd_u8(r);
 if (pal_n == 0 || pal_n > 64) return -1;
 uint8_t pal[64];
 for (int i = 0;
