@@ -1,4 +1,9 @@
 #include "ravine_types.h"
+
+// the defaults. tuned by eye over a long evening of flying around spawning
+// canyons and going "no, deeper" / "no, less often". if you drop rarity you
+// will trip over a ravine every other chunk and it stops being special.
+
 ravine_params ravine_default_params(uint32_t seed, int sea_level) {
     ravine_params p;
     p.seed      = seed;
@@ -24,8 +29,8 @@ ravine_params ravine_default_params(uint32_t seed, int sea_level) {
 
 int ravine_clampi(int v, int lo, int hi) {
     if (v < lo) return lo;
-if (v > hi) return hi;
-return v;
+    if (v > hi) return hi;
+    return v;
 }
 
 int ravine_cell_index(int cx, int cz) {
