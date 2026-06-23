@@ -117,6 +117,10 @@ static float seg_dist(float px, float pz, float ax, float az,
     float dx = bx - ax, dz = bz - az;
 float len2 = dx * dx + dz * dz;
 float s;
+if (len2 < 1e-6f) {
+        s = 0.0f;
+    } else {
+        s = ((px - ax) * dx + (pz - az) * dz) / len2;
 if (s < 0.0f) s = 0.0f;
 if (s > 1.0f) s = 1.0f;
 }
@@ -124,6 +128,38 @@ if (s > 1.0f) s = 1.0f;
 float ex = px - cx, ez = pz - cz;
 *t = s;
 return sqrtf(ex * ex + ez * ez);
+}
+
+int ravine_path_nearest(const ravine_path *path, float cx, float cz,
+                        float *out_dist, float *out_hw, float *out_floor) {
+    int n = path->count;
+    if (n < 2) return 0;
+
+    float best = 1e30f;
+    int   best_seg = 0;
+    float best_t = 0.0f;
+
+    // the control polygon tracks the spline closely at our knot spacing, so the
+    // distance test against the straight segments is plenty accurate.
+    for (int i = 0; i < n - 1; i++) {
+        const ravine_knot *a = &path->knots[i];
+        const ravine_knot *b = &path->knots[i + 1];
+        float t;
+        float d = seg_dist(cx, cz, a->x, a->z, b->x, b->z, &t);
+        if (d < best) { best = d; best_seg = i; best_t = t; }
+    }
+
+    const ravine_knot *a = &path->knots[best_seg];
+    const ravine_knot *b = &path->knots[best_seg + 1];
+    if (out_dist)  *out_dist  = best;
+    if (out_hw)    *out_hw    = a->half_width + (b->half_width - a->half_width) * best_t;
+    if (out_floor) *out_floor = a->floor_y   + (b->floor_y   - a->floor_y)   * best_t;
+    return 1;
+}
+
+int ravine_path_touches(const ravine_path *path,
+                        float min_x, float min_z, float max_x, float max_z) {
+    float lx = path->min_x - path->reach, hx = path->max_x + path->reach;
 float lz = path->min_z - path->reach, hz = path->max_z + path->reach;
 if (max_x < lx || min_x > hx) return 0;
 if (max_z < lz || min_z > hz) return 0;
