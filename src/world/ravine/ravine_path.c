@@ -1,8 +1,12 @@
 #include "ravine_path.h"
+
 #include "ravine_rand.h"
 #include "ravine_noise.h"
 #include <math.h>
 #include <stddef.h>
+
+// --- construction -----------------------------------------------------------
+
 void ravine_path_build(ravine_path *path, const ravine_params *p,
                        float ax, float az, int floor_top, uint32_t stream) {
     ravine_rng rng;
@@ -67,7 +71,7 @@ void ravine_path_build(ravine_path *path, const ravine_params *p,
 
 static float cr(float p0, float p1, float p2, float p3, float t) {
     float t2 = t * t, t3 = t2 * t;
-return 0.5f * ((2.0f * p1) +
+    return 0.5f * ((2.0f * p1) +
                    (-p0 + p2) * t +
                    (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 +
                    (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
@@ -115,19 +119,19 @@ void ravine_path_sample(const ravine_path *path, float t,
 static float seg_dist(float px, float pz, float ax, float az,
                       float bx, float bz, float *t) {
     float dx = bx - ax, dz = bz - az;
-float len2 = dx * dx + dz * dz;
-float s;
-if (len2 < 1e-6f) {
+    float len2 = dx * dx + dz * dz;
+    float s;
+    if (len2 < 1e-6f) {
         s = 0.0f;
     } else {
         s = ((px - ax) * dx + (pz - az) * dz) / len2;
-if (s < 0.0f) s = 0.0f;
-if (s > 1.0f) s = 1.0f;
-}
+        if (s < 0.0f) s = 0.0f;
+        if (s > 1.0f) s = 1.0f;
+    }
     float cx = ax + dx * s, cz = az + dz * s;
-float ex = px - cx, ez = pz - cz;
-*t = s;
-return sqrtf(ex * ex + ez * ez);
+    float ex = px - cx, ez = pz - cz;
+    *t = s;
+    return sqrtf(ex * ex + ez * ez);
 }
 
 int ravine_path_nearest(const ravine_path *path, float cx, float cz,
@@ -160,8 +164,8 @@ int ravine_path_nearest(const ravine_path *path, float cx, float cz,
 int ravine_path_touches(const ravine_path *path,
                         float min_x, float min_z, float max_x, float max_z) {
     float lx = path->min_x - path->reach, hx = path->max_x + path->reach;
-float lz = path->min_z - path->reach, hz = path->max_z + path->reach;
-if (max_x < lx || min_x > hx) return 0;
-if (max_z < lz || min_z > hz) return 0;
-return 1;
+    float lz = path->min_z - path->reach, hz = path->max_z + path->reach;
+    if (max_x < lx || min_x > hx) return 0;
+    if (max_z < lz || min_z > hz) return 0;
+    return 1;
 }
