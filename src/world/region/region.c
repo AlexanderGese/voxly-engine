@@ -2,13 +2,24 @@
 #include "region_cache.h"
 #include "region_coord.h"
 #include "../../util/log.h"
+
 #include <string.h>
 #include <sys/stat.h>
+
+// single global region context. the engine only ever has one world loaded at a
+// time so a singleton is fine and keeps the call sites clean. if we ever go
+// multi-world this becomes a handle you pass around, but not today.
+
 static struct {
     region_cache_t cache;
     int            ready;
 } g_region;
+
+// whether load/save embeds the lighting arrays. off by default - relighting on
+// load is cheap enough and halves the file size. flip it on for worlds with
+// lots of placed torches where relight order matters.
 static int g_include_light = 0;
+
 void region_set_dir(const char *dir) {
     if (g_region.ready) region_cache_shutdown(&g_region.cache);
 
@@ -20,8 +31,8 @@ void region_set_dir(const char *dir) {
 
 void region_shutdown(void) {
     if (!g_region.ready) return;
-region_cache_shutdown(&g_region.cache);
-g_region.ready = 0;
+    region_cache_shutdown(&g_region.cache);
+    g_region.ready = 0;
 }
 
 static region_file_t *acquire(int cx, int cz, int create) {
@@ -34,9 +45,10 @@ static region_file_t *acquire(int cx, int cz, int create) {
 
 int region_load_chunk(chunk *c) {
     region_file_t *rf = acquire(c->cx, c->cz, 0);
-if (!rf) return 0;
-int rc = region_file_read_chunk(rf, c);
-if (rc == 1) {
+    if (!rf) return 0;                  // no region file -> not saved yet
+
+    int rc = region_file_read_chunk(rf, c);
+    if (rc == 1) {
         c->saved = 1;
         c->dirty = 1;                   // needs a remesh
     }
@@ -50,10 +62,11 @@ int region_save_chunk(chunk *c) {
 
 int region_save_chunk_force(chunk *c) {
     region_file_t *rf = acquire(c->cx, c->cz, 1);
-if (!rf) return -1;
-int rc = region_file_write_chunk(rf, c, g_include_light);
-if (rc == 0) c->saved = 1;
-return rc;
+    if (!rf) return -1;
+
+    int rc = region_file_write_chunk(rf, c, g_include_light);
+    if (rc == 0) c->saved = 1;
+    return rc;
 }
 
 int region_drop_chunk(int cx, int cz) {
@@ -64,8 +77,8 @@ int region_drop_chunk(int cx, int cz) {
 
 int region_chunk_exists(int cx, int cz) {
     region_file_t *rf = acquire(cx, cz, 0);
-if (!rf) return 0;
-return region_file_has_chunk(rf, cx, cz);
+    if (!rf) return 0;
+    return region_file_has_chunk(rf, cx, cz);
 }
 
 void region_checkpoint(void) {
