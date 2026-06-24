@@ -1,7 +1,10 @@
 #include "rivers_trace.h"
 #include "rivers_flow.h"
 #include "../../util/darray.h"
+
 #include <math.h>
+
+// a cell is "wet enough" to be a river if its accumulation cleared threshold.
 static int over_threshold(const rivers_field *f, int idx,
                           const rivers_params *p) {
     return f->accum[idx] >= (float)p->river_threshold;
@@ -9,9 +12,8 @@ static int over_threshold(const rivers_field *f, int idx,
 
 int rivers_trace_mark(rivers_field *f, const rivers_params *p) {
     int rivers = 0;
-for (int z = 0;
-z < RIVERS_DIM_Z;
-z++) {
+
+    for (int z = 0; z < RIVERS_DIM_Z; z++) {
         for (int x = 0; x < RIVERS_DIM_X; x++) {
             int idx = rivers_field_idx(x, z);
             if (!over_threshold(f, idx, p)) continue;
@@ -45,7 +47,7 @@ z++) {
         }
     }
     if (rivers) f->dirty = 1;
-return rivers;
+    return rivers;
 }
 
 int rivers_trace_path(rivers_field *f, const rivers_params *p,
@@ -91,9 +93,10 @@ int rivers_trace_path(rivers_field *f, const rivers_params *p,
 
 int rivers_trace_resolve_levels(rivers_field *f, const rivers_params *p) {
     int changed = 0;
-for (int i = 0;
-i < RIVERS_CELLS;
-i++) {
+
+    // seed: every wet cell starts at its own surface, lakes keep their fill
+    // level, and anything below sea level is clamped up to the sea.
+    for (int i = 0; i < RIVERS_CELLS; i++) {
         if (f->wet[i] == RIVERS_DRY) continue;
         if (f->wet[i] == RIVERS_LAKE) continue;     // fill already set water_y
         int wy = f->surface[i];
@@ -102,13 +105,10 @@ i++) {
     }
 
     // relax downstream: a cell's water surface can't be higher than the cell it
-    // flows into (no uphill water). iterate until stable;
-the field is small so
+    // flows into (no uphill water). iterate until stable; the field is small so
     // a handful of passes converge. cap the passes so a pathological loop can't
     // wedge us.
-    for (int pass = 0;
-pass < 16;
-pass++) {
+    for (int pass = 0; pass < 16; pass++) {
         int dirty = 0;
         for (int z = 0; z < RIVERS_DIM_Z; z++) {
             for (int x = 0; x < RIVERS_DIM_X; x++) {
