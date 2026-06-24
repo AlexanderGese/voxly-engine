@@ -5,7 +5,9 @@
 #include "rivers_outlet.h"
 #include "rivers_carve.h"
 #include "../../util/darray.h"
+
 #include <stdlib.h>
+
 void rivers_ctx_init(rivers_ctx *ctx, uint32_t seed, int sea_level,
                      rivers_height_fn height, void *user) {
     ctx->field      = rivers_field_create();
@@ -21,7 +23,7 @@ void rivers_ctx_init(rivers_ctx *ctx, uint32_t seed, int sea_level,
 
 void rivers_ctx_free(rivers_ctx *ctx) {
     rivers_field_destroy(ctx->field);
-ctx->field = NULL;
+    ctx->field = NULL;
 }
 
 // pull the surface heightmap for the region out of the driver's sampler.
@@ -49,20 +51,36 @@ static void load_surface(rivers_ctx *ctx, int chunk_cx, int chunk_cz) {
 int rivers_generate_region(rivers_ctx *ctx, int chunk_cx, int chunk_cz,
                            rivers_cell **out) {
     rivers_field *f = ctx->field;
-const rivers_params *p = &ctx->params;
-load_surface(ctx, chunk_cx, chunk_cz);
-ctx->lake_cells = rivers_fill_run(f, p);
-ctx->peak_accum = rivers_flow_run(f, p);
-ctx->river_cells = rivers_trace_mark(f, p);
-rivers_outlet_carve(f, p);
-rivers_trace_resolve_levels(f, p);
-ctx->bank_cells = rivers_carve_mark_banks(f, p);
-rivers_cell *all = NULL;
-int n = rivers_carve_emit(f, p, &all);
-int kept = 0;
-for (int i = 0;
-i < n;
-i++) {
+    const rivers_params *p = &ctx->params;
+
+    load_surface(ctx, chunk_cx, chunk_cz);
+
+    // 1. fill depressions and pond the basins into lakes.
+    ctx->lake_cells = rivers_fill_run(f, p);
+
+    // 2. flow directions + accumulation off the corrected surface.
+    ctx->peak_accum = rivers_flow_run(f, p);
+
+    // 3. threshold cells -> rivers, springs -> sources.
+    ctx->river_cells = rivers_trace_mark(f, p);
+
+    // 3b. notch lake outlets so the overflow becomes downstream river. do this
+    // before resolving levels so the new channel gets a sane surface.
+    rivers_outlet_carve(f, p);
+
+    // 4. resolve a monotone water surface, no uphill water.
+    rivers_trace_resolve_levels(f, p);
+
+    // 5. flag the shores.
+    ctx->bank_cells = rivers_carve_mark_banks(f, p);
+
+    // 6. emit edits. we only stamp cells inside the real chunk footprint; the
+    // pad existed purely so flow lined up across the seam.
+    rivers_cell *all = NULL;
+    int n = rivers_carve_emit(f, p, &all);
+
+    int kept = 0;
+    for (int i = 0; i < n; i++) {
         rivers_cell c = all[i];
         // clip to this chunk's world column. neighbouring regions own the pad.
         int lx = c.x - f->origin.base_x;
@@ -73,5 +91,18 @@ i++) {
         kept++;
     }
     darr_free(all);
-ctx->edits = kept;
-return kept;
+
+    ctx->edits = kept;
+    return kept;
+}
+
+rivers_wet rivers_query(const rivers_ctx *ctx, int wx, int wz, int *water_y) {
+    int x, z;
+    if (!rivers_field_from_world(ctx->field, wx, wz, &x, &z)) {
+        if (water_y) *water_y = 0;
+        return RIVERS_DRY;
+    }
+    int idx = rivers_field_idx(x, z);
+    if (water_y) *water_y = ctx->field->water_y[idx];
+    return (rivers_wet)ctx->field->wet[idx];
+}
