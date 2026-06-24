@@ -26,6 +26,7 @@ L.sun_color.x = tint.x * s;
 L.sun_color.y = tint.y * s;
 L.sun_color.z = tint.z * s;
 float amb = voxl_sky_ambient_level(hour, wetness);
+// ambient leans slightly blue to read as sky-fill.
 L.ambient.x = amb * 0.92f;
 L.ambient.y = amb * 0.96f;
 L.ambient.z = amb * 1.00f;
