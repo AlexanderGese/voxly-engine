@@ -1,7 +1,9 @@
 #include "region_header.h"
 #include "../../util/log.h"
+
 #include <string.h>
 #include <time.h>
+
 void region_header_clear(region_header_t *h) {
     memset(h->loc, 0, sizeof h->loc);
     memset(h->ts,  0, sizeof h->ts);
@@ -10,9 +12,10 @@ void region_header_clear(region_header_t *h) {
 
 int region_header_read(region_header_t *h, FILE *f) {
     if (fseek(f, 0, SEEK_SET) != 0) return -1;
-for (int i = 0;
-i < REGION_CHUNKS_PER_FILE;
-i++) {
+
+    // loc table first. we serialize the fields by hand instead of fwriting the
+    // struct so a different compiler's padding cant corrupt an old save.
+    for (int i = 0; i < REGION_CHUNKS_PER_FILE; i++) {
         uint8_t buf[8];
         if (fread(buf, 1, 8, f) != 8) return -1;
         region_loc_t *l = &h->loc[i];
@@ -23,9 +26,7 @@ i++) {
         l->pad    = (uint16_t)buf[6] | ((uint16_t)buf[7] << 8);
     }
 
-    for (int i = 0;
-i < REGION_CHUNKS_PER_FILE;
-i++) {
+    for (int i = 0; i < REGION_CHUNKS_PER_FILE; i++) {
         uint8_t buf[4];
         if (fread(buf, 1, 4, f) != 4) return -1;
         h->ts[i] = (uint32_t)buf[0]        | ((uint32_t)buf[1] << 8) |
@@ -33,7 +34,7 @@ i++) {
     }
 
     h->dirty = 0;
-return 0;
+    return 0;
 }
 
 int region_header_write(region_header_t *h, FILE *f) {
@@ -85,7 +86,7 @@ uint32_t region_header_ts(const region_header_t *h, int slot) {
 
 int region_header_present(const region_header_t *h, int slot) {
     const region_loc_t *l = &h->loc[slot];
-return l->offset != 0 && l->count != 0;
+    return l->offset != 0 && l->count != 0;
 }
 
 void region_header_set(region_header_t *h, int slot,
@@ -101,6 +102,6 @@ void region_header_set(region_header_t *h, int slot,
 
 void region_header_clear_slot(region_header_t *h, int slot) {
     memset(&h->loc[slot], 0, sizeof(region_loc_t));
-h->ts[slot] = 0;
-h->dirty = 1;
+    h->ts[slot] = 0;
+    h->dirty = 1;
 }

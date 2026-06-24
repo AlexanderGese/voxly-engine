@@ -1,28 +1,28 @@
 #include "region_codec.h"
 #include "../../util/log.h"
+
 #include <stdlib.h>
 #include <string.h>
+
 // --- tiny growable byte writer over region_blob_t -----------------------
+
 void region_blob_init(region_blob_t *b) {
     b->data = NULL; b->len = 0; b->cap = 0; b->enc = REGION_ENC_RAW;
 }
 
 void region_blob_free(region_blob_t *b) {
-    free(b->data);
-b->data = NULL;
-b->len = b->cap = 0;
+    free(b->data); b->data = NULL; b->len = b->cap = 0;
 }
 
 static void blob_reset(region_blob_t *b) { b->len = 0; }
 
 static void blob_ensure(region_blob_t *b, size_t extra) {
     if (b->len + extra <= b->cap) return;
-size_t nc = b->cap ? b->cap * 2 : 4096;
-while (nc < b->len + extra) nc *= 2;
-uint8_t *nd = realloc(b->data, nc);
-if (!nd) { LOGE("region: blob oom"); return; }
-    b->data = nd;
-b->cap = nc;
+    size_t nc = b->cap ? b->cap * 2 : 4096;
+    while (nc < b->len + extra) nc *= 2;
+    uint8_t *nd = realloc(b->data, nc);
+    if (!nd) { LOGE("region: blob oom"); return; }
+    b->data = nd; b->cap = nc;
 }
 
 static void put_u8(region_blob_t *b, uint8_t v) {
@@ -31,8 +31,7 @@ static void put_u8(region_blob_t *b, uint8_t v) {
 }
 static void put_u16(region_blob_t *b, uint16_t v) {
     blob_ensure(b, 2);
-b->data[b->len++] = (uint8_t)(v);
-b->data[b->len++] = (uint8_t)(v >> 8);
+    b->data[b->len++] = (uint8_t)(v); b->data[b->len++] = (uint8_t)(v >> 8);
 }
 static void put_u32(region_blob_t *b, uint32_t v) {
     blob_ensure(b, 4);
@@ -41,27 +40,24 @@ static void put_u32(region_blob_t *b, uint32_t v) {
     b->data[b->len++] = (uint8_t)(v >> 16);
     b->data[b->len++] = (uint8_t)(v >> 24);
 }
-static void put_i32(region_blob_t *b, int32_t v) { put_u32(b, (uint32_t)v);
-}
+static void put_i32(region_blob_t *b, int32_t v) { put_u32(b, (uint32_t)v); }
 
 // --- reader -------------------------------------------------------------
 
 typedef struct { const uint8_t *p; size_t left; int err; } rd;
+
 static uint8_t  rd_u8(rd *r) {
     if (r->left < 1) { r->err = 1; return 0; }
     r->left--; return *r->p++;
 }
 static uint16_t rd_u16(rd *r) {
-    uint16_t a = rd_u8(r);
-uint16_t b = rd_u8(r);
-return a | (b << 8);
+    uint16_t a = rd_u8(r); uint16_t b = rd_u8(r); return a | (b << 8);
 }
 static uint32_t rd_u32(rd *r) {
     uint32_t a = rd_u8(r), b = rd_u8(r), c = rd_u8(r), d = rd_u8(r);
     return a | (b << 8) | (c << 16) | (d << 24);
 }
-static int32_t  rd_i32(rd *r) { return (int32_t)rd_u32(r);
-}
+static int32_t  rd_i32(rd *r) { return (int32_t)rd_u32(r); }
 
 // --- block section encoders --------------------------------------------
 
@@ -89,14 +85,11 @@ static void encode_rle(region_blob_t *b, const block_id *blocks) {
 // only viable when distinct id count is small, which it almost always is.
 static int encode_palette(region_blob_t *b, const block_id *blocks) {
     uint8_t pal[256];
-int     pal_n = 0;
-int     map[256];
-for (int i = 0;
-i < 256;
-i++) map[i] = -1;
-for (size_t i = 0;
-i < CHUNK_VOLUME;
-i++) {
+    int     pal_n = 0;
+    int     map[256];
+    for (int i = 0; i < 256; i++) map[i] = -1;
+
+    for (size_t i = 0; i < CHUNK_VOLUME; i++) {
         block_id id = blocks[i];
         if (map[id] < 0) {
             if (pal_n >= 64) return -1;   // too varied, bail to rle
@@ -107,19 +100,17 @@ i++) {
 
     // bits needed per index
     int bits = 1;
-while ((1 << bits) < pal_n) bits++;
-if (pal_n <= 1) bits = 1;
-put_u8(b, (uint8_t)pal_n);
-for (int i = 0;
-i < pal_n;
-i++) put_u8(b, pal[i]);
-put_u8(b, (uint8_t)bits);
-// bit packer, lsb first
-uint32_t acc = 0;
-int      acc_bits = 0;
-for (size_t i = 0;
-i < CHUNK_VOLUME;
-i++) {
+    while ((1 << bits) < pal_n) bits++;
+    if (pal_n <= 1) bits = 1;
+
+    put_u8(b, (uint8_t)pal_n);
+    for (int i = 0; i < pal_n; i++) put_u8(b, pal[i]);
+    put_u8(b, (uint8_t)bits);
+
+    // bit packer, lsb first
+    uint32_t acc = 0;
+    int      acc_bits = 0;
+    for (size_t i = 0; i < CHUNK_VOLUME; i++) {
         uint32_t idx = (uint32_t)map[blocks[i]];
         acc |= idx << acc_bits;
         acc_bits += bits;
@@ -130,7 +121,7 @@ i++) {
         }
     }
     if (acc_bits > 0) put_u8(b, (uint8_t)(acc & 0xFF));
-return 0;
+    return 0;
 }
 
 // light is always rle, two nibbles already share the byte so we rle the bytes.
@@ -156,20 +147,22 @@ static void encode_light(region_blob_t *b, const uint8_t *light) {
 
 int region_codec_encode(region_blob_t *b, const chunk *c, int include_light) {
     blob_reset(b);
-// reserve the total_len field, patch at the end
-put_u32(b, 0);
-put_i32(b, c->cx);
-put_i32(b, c->cz);
-size_t enc_pos = b->len;
-put_u8(b, REGION_ENC_RAW);
-// placeholder
-put_u8(b, include_light ? 1 : 0);
-// try palette, measure, compare against rle. cheap to just do both since a
-// chunk is small. whichever is shorter wins.
-size_t before = b->len;
-int pal_ok = encode_palette(b, c->blocks) == 0;
-size_t pal_len = b->len - before;
-if (!pal_ok) {
+
+    // reserve the total_len field, patch at the end
+    put_u32(b, 0);
+    put_i32(b, c->cx);
+    put_i32(b, c->cz);
+    size_t enc_pos = b->len;
+    put_u8(b, REGION_ENC_RAW);          // placeholder
+    put_u8(b, include_light ? 1 : 0);
+
+    // try palette, measure, compare against rle. cheap to just do both since a
+    // chunk is small. whichever is shorter wins.
+    size_t before = b->len;
+    int pal_ok = encode_palette(b, c->blocks) == 0;
+    size_t pal_len = b->len - before;
+
+    if (!pal_ok) {
         // rewind, fall straight to rle
         b->len = before;
         encode_rle(b, c->blocks);
@@ -178,11 +171,12 @@ if (!pal_ok) {
         // stash palette bytes, try rle into a scratch span, keep the smaller.
         // simplest correct approach: copy pal section out, redo as rle, compare.
         uint8_t *pal_copy = malloc(pal_len);
-if (pal_copy) memcpy(pal_copy, b->data + before, pal_len);
-b->len = before;
-encode_rle(b, c->blocks);
-size_t rle_len = b->len - before;
-if (pal_copy && pal_len < rle_len) {
+        if (pal_copy) memcpy(pal_copy, b->data + before, pal_len);
+        b->len = before;
+        encode_rle(b, c->blocks);
+        size_t rle_len = b->len - before;
+
+        if (pal_copy && pal_len < rle_len) {
             b->len = before;
             blob_ensure(b, pal_len);
             memcpy(b->data + before, pal_copy, pal_len);
@@ -190,19 +184,21 @@ if (pal_copy && pal_len < rle_len) {
             b->enc = REGION_ENC_PAL;
         } else {
             b->enc = REGION_ENC_RLE;
-}
+        }
         free(pal_copy);
-}
+    }
 
     b->data[enc_pos] = b->enc;
-if (include_light) encode_light(b, c->light);
-// patch total_len = everything after the u32 length field
-uint32_t total = (uint32_t)(b->len - 4);
-b->data[0] = (uint8_t)(total);
-b->data[1] = (uint8_t)(total >> 8);
-b->data[2] = (uint8_t)(total >> 16);
-b->data[3] = (uint8_t)(total >> 24);
-return 0;
+
+    if (include_light) encode_light(b, c->light);
+
+    // patch total_len = everything after the u32 length field
+    uint32_t total = (uint32_t)(b->len - 4);
+    b->data[0] = (uint8_t)(total);
+    b->data[1] = (uint8_t)(total >> 8);
+    b->data[2] = (uint8_t)(total >> 16);
+    b->data[3] = (uint8_t)(total >> 24);
+    return 0;
 }
 
 // --- public decode ------------------------------------------------------
@@ -221,19 +217,16 @@ static int decode_rle_blocks(rd *r, block_id *out) {
 
 static int decode_palette_blocks(rd *r, block_id *out) {
     uint8_t pal_n = rd_u8(r);
-if (pal_n == 0 || pal_n > 64) return -1;
-uint8_t pal[64];
-for (int i = 0;
-i < pal_n;
-i++) pal[i] = rd_u8(r);
-uint8_t bits = rd_u8(r);
-if (bits == 0 || bits > 6) return -1;
-uint32_t acc = 0;
-int      acc_bits = 0;
-uint32_t mask = (1u << bits) - 1;
-for (size_t i = 0;
-i < CHUNK_VOLUME;
-i++) {
+    if (pal_n == 0 || pal_n > 64) return -1;
+    uint8_t pal[64];
+    for (int i = 0; i < pal_n; i++) pal[i] = rd_u8(r);
+    uint8_t bits = rd_u8(r);
+    if (bits == 0 || bits > 6) return -1;
+
+    uint32_t acc = 0;
+    int      acc_bits = 0;
+    uint32_t mask = (1u << bits) - 1;
+    for (size_t i = 0; i < CHUNK_VOLUME; i++) {
         while (acc_bits < bits) {
             acc |= ((uint32_t)rd_u8(r)) << acc_bits;
             acc_bits += 8;
@@ -261,21 +254,23 @@ static int decode_light(rd *r, uint8_t *out) {
 
 int region_codec_decode(chunk *c, const uint8_t *data, size_t len) {
     rd r = { data, len, 0 };
-uint32_t total = rd_u32(&r);
-if (total + 4 > len) return -1;
-// truncated payload
-int32_t cx = rd_i32(&r);
-int32_t cz = rd_i32(&r);
-if (cx != c->cx || cz != c->cz) {
+
+    uint32_t total = rd_u32(&r);
+    if (total + 4 > len) return -1;     // truncated payload
+
+    int32_t cx = rd_i32(&r);
+    int32_t cz = rd_i32(&r);
+    if (cx != c->cx || cz != c->cz) {
         LOGW("region: chunk coord mismatch in payload (%d,%d) want (%d,%d)",
              cx, cz, c->cx, c->cz);
         return -1;
     }
 
     uint8_t enc = rd_u8(&r);
-uint8_t has_light = rd_u8(&r);
-int rc;
-switch (enc) {
+    uint8_t has_light = rd_u8(&r);
+
+    int rc;
+    switch (enc) {
         case REGION_ENC_RLE: rc = decode_rle_blocks(&r, c->blocks); break;
         case REGION_ENC_PAL: rc = decode_palette_blocks(&r, c->blocks); break;
         default:
@@ -283,7 +278,8 @@ switch (enc) {
             return -1;
     }
     if (rc != 0) return -1;
-if (has_light) {
+
+    if (has_light) {
         if (decode_light(&r, c->light) != 0) {
             // light is recoverable, just relight. dont fail the whole load.
             LOGW("region: bad light section, will relight");
@@ -291,7 +287,7 @@ if (has_light) {
         }
     } else {
         memset(c->light, 0, sizeof c->light);
-}
+    }
 
     return 0;
 }
