@@ -2,7 +2,9 @@
 #include "rivers_flow.h"
 #include "../../util/darray.h"
 #include "../../config.h"
+
 #include <math.h>
+
 int rivers_carve_depth(const rivers_params *p, float accum) {
     if (accum < (float)p->river_threshold) return 1;
     // depth grows with log2 of accumulation so a trunk river is deeper than a
@@ -16,11 +18,13 @@ int rivers_carve_depth(const rivers_params *p, float accum) {
 
 int rivers_carve_mark_banks(rivers_field *f, const rivers_params *p) {
     int marked = 0;
-int w = p->bank_width;
-if (w < 1) return 0;
-for (int z = 0;
-z < RIVERS_DIM_Z;
-z++) {
+    int w = p->bank_width;
+    if (w < 1) return 0;
+
+    // a dry cell within bank_width of a river/lake/source cell becomes a bank.
+    // we scan a small box per wet cell rather than the whole grid per dry cell;
+    // bank_width is tiny so this stays cheap.
+    for (int z = 0; z < RIVERS_DIM_Z; z++) {
         for (int x = 0; x < RIVERS_DIM_X; x++) {
             int idx = rivers_field_idx(x, z);
             uint8_t s = f->wet[idx];
@@ -55,9 +59,8 @@ static void emit(rivers_cell **out, int wx, int wy, int wz, block_id id) {
 int rivers_carve_emit(rivers_field *f, const rivers_params *p,
                       rivers_cell **out) {
     int emitted = 0;
-for (int z = 0;
-z < RIVERS_DIM_Z;
-z++) {
+
+    for (int z = 0; z < RIVERS_DIM_Z; z++) {
         for (int x = 0; x < RIVERS_DIM_X; x++) {
             int idx = rivers_field_idx(x, z);
             uint8_t s = f->wet[idx];
@@ -106,5 +109,5 @@ z++) {
     }
 
     if (emitted) f->dirty = 1;
-return emitted;
+    return emitted;
 }
