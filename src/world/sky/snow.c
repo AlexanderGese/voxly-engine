@@ -1,7 +1,9 @@
 #include "snow.h"
 #include "sky_math.h"
 #include "sky_color.h"
+
 #include <math.h>
+
 static void respawn(voxl_sky_snow *s, voxl_sky_flake *f, vec3 center) {
     f->pos.x = center.x + voxl_sky_rand_range(&s->rng, -s->box, s->box);
     f->pos.z = center.z + voxl_sky_rand_range(&s->rng, -s->box, s->box);
@@ -15,21 +17,19 @@ static void respawn(voxl_sky_snow *s, voxl_sky_flake *f, vec3 center) {
 
 void voxl_sky_snow_init(voxl_sky_snow *s, unsigned seed, float box, float top) {
     voxl_sky_rand_seed(&s->rng, (uint32_t)seed);
-s->count = 0;
-s->box = box > 1.0f ? box : 1.0f;
-s->top = top > 1.0f ? top : 1.0f;
-s->t = 0.0f;
-for (int i = 0;
-i < VOXL_SKY_SNOW_MAX;
-i++) {
+    s->count = 0;
+    s->box = box > 1.0f ? box : 1.0f;
+    s->top = top > 1.0f ? top : 1.0f;
+    s->t = 0.0f;
+    for (int i = 0; i < VOXL_SKY_SNOW_MAX; i++) {
         s->flakes[i].alive = 0;
     }
 }
 
 void voxl_sky_snow_set_intensity(voxl_sky_snow *s, float intensity) {
     intensity = voxl_sky_clampf(intensity, 0.0f, 1.0f);
-s->count = (int)(intensity * VOXL_SKY_SNOW_MAX);
-if (s->count > VOXL_SKY_SNOW_MAX) s->count = VOXL_SKY_SNOW_MAX;
+    s->count = (int)(intensity * VOXL_SKY_SNOW_MAX);
+    if (s->count > VOXL_SKY_SNOW_MAX) s->count = VOXL_SKY_SNOW_MAX;
 }
 
 void voxl_sky_snow_update(voxl_sky_snow *s, float dt, vec3 center) {
@@ -57,12 +57,12 @@ void voxl_sky_snow_update(voxl_sky_snow *s, float dt, vec3 center) {
 
 vec4 voxl_sky_snow_color(float hour, float intensity) {
     intensity = voxl_sky_clampf(intensity, 0.0f, 1.0f);
-float day = voxl_sky_sun_brightness(hour);
-float b = voxl_sky_lerpf(0.55f, 1.0f, day);
-vec4 c;
-c.x = b * 0.96f;
-c.y = b * 0.98f;
-c.z = b * 1.00f;
-c.w = voxl_sky_lerpf(0.30f, 0.75f, intensity);
-return c;
+    float day = voxl_sky_sun_brightness(hour);
+    float b = voxl_sky_lerpf(0.55f, 1.0f, day);   // snow stays bright-ish
+    vec4 c;
+    c.x = b * 0.96f;
+    c.y = b * 0.98f;
+    c.z = b * 1.00f;
+    c.w = voxl_sky_lerpf(0.30f, 0.75f, intensity);
+    return c;
 }
