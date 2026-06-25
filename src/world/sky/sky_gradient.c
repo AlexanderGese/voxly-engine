@@ -1,12 +1,15 @@
 #include "sky_gradient.h"
 #include "sky_math.h"
+
 // keyframed sky bands across the day. index by phase, then we lerp between
 // the two nearest phases. tuned by eye, not physically accurate.
+
 typedef struct {
     float hour;
     vec3  zenith;
     vec3  horizon;
 } sky_key;
+
 // must stay sorted by hour, and wrap (00 == 24).
 static const sky_key voxl_sky_keys[] = {
     {  0.0f, {0.02f, 0.02f, 0.06f}, {0.04f, 0.04f, 0.10f} },  // deep night
@@ -18,9 +21,10 @@ static const sky_key voxl_sky_keys[] = {
     { 18.5f, {0.24f, 0.28f, 0.55f}, {0.98f, 0.48f, 0.28f} },  // sunset
     { 20.0f, {0.08f, 0.09f, 0.22f}, {0.30f, 0.16f, 0.22f} },  // dusk
     { 24.0f, {0.02f, 0.02f, 0.06f}, {0.04f, 0.04f, 0.10f} },  // wrap to night
-}
-;
+};
+
 #define VOXL_SKY_KEY_COUNT (int)(sizeof(voxl_sky_keys) / sizeof(voxl_sky_keys[0]))
+
 voxl_sky_band voxl_sky_gradient_band(float hour) {
     hour = voxl_sky_wrap24(hour);
 
@@ -47,8 +51,8 @@ voxl_sky_band voxl_sky_gradient_band(float hour) {
 
 vec3 voxl_sky_gradient_at(float hour, float t) {
     voxl_sky_band band = voxl_sky_gradient_band(hour);
-t = voxl_sky_clampf(t, 0.0f, 1.0f);
-// bias toward horizon near the bottom so the band feels thicker low down.
-float k = voxl_sky_smooth(0.0f, 1.0f, t);
-return voxl_sky_mix3(band.horizon, band.zenith, k);
+    t = voxl_sky_clampf(t, 0.0f, 1.0f);
+    // bias toward horizon near the bottom so the band feels thicker low down.
+    float k = voxl_sky_smooth(0.0f, 1.0f, t);
+    return voxl_sky_mix3(band.horizon, band.zenith, k);
 }
