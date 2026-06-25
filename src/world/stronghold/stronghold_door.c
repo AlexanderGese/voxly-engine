@@ -1,4 +1,10 @@
 #include "stronghold_door.h"
+
+// we dont have a real door block in the palette, so plank doors are faked with
+// a planks block in the lower hole + air above (you "open" by mining, classic
+// early-build behavior) and iron bars are faked with glass: see-through, blocks
+// movement. grates are a half-height gap with a planks lintel.
+
 stronghold_door_kind stronghold_door_classify(const stronghold_room *r,
                                               const stronghold_door *d,
                                               stronghold_rng *rng) {
@@ -24,9 +30,9 @@ stronghold_door_kind stronghold_door_classify(const stronghold_room *r,
 int stronghold_door_decorate(const stronghold_room *r, const stronghold_door *d,
                              stronghold_door_kind kind, stronghold_buffer *out) {
     (void)r;
-int x = d->x, y = d->y, z = d->z;
-int n = 0;
-switch (kind) {
+    int x = d->x, y = d->y, z = d->z;
+    int n = 0;
+    switch (kind) {
         case STRONGHOLD_DOOR_ARCH:
             // already air from the carve. drop a brick lintel one above for the
             // arched look (carve left a solid lintel, so this is a no-op mostly,
