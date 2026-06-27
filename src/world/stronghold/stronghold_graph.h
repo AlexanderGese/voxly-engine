@@ -1,15 +1,24 @@
 #ifndef WORLD_STRONGHOLD_GRAPH_H
 #define WORLD_STRONGHOLD_GRAPH_H
+
 #include "stronghold_types.h"
 #include "stronghold_box.h"
 #include "stronghold_rand.h"
+
 // the room graph. this is the heart of the generator. we grow a graph of typed
 // rooms by a guided random walk: pick an open room, pick a free side, project a
 // corridor stub + a new room footprint, reject on overlap, repeat until we hit
 // the room budget or run out of frontier. then we type the rooms (one portal,
+// some libraries/prisons) and hand the graph to the carver.
+//
+// the graph stays abstract here: just boxes, edges, and types. no voxels, no
+// world access. that separation is what lets us reject overlaps cheaply before
+// committing any geometry.
+
 #define STRONGHOLD_MAX_ROOMS   64
 #define STRONGHOLD_MAX_EDGES   96
 #define STRONGHOLD_ROOM_DOORS   6   // doors stored per room
+
 typedef struct {
     stronghold_box       box;        // world-space footprint (carve target)
     stronghold_room_type type;
@@ -19,12 +28,16 @@ typedef struct {
     stronghold_door      doors[STRONGHOLD_ROOM_DOORS];
     int                  door_count;
 } stronghold_room;
+
+// an edge is a corridor between two rooms. it remembers the side it left the
+// source room on so the carver can punch matching doorways at both ends.
 typedef struct {
     int            a, b;       // room indices
     stronghold_dir side_a;     // dir the corridor leaves room a
     int            length;     // axial corridor length in blocks
     int            stair;      // 1 if the corridor steps down a level
 } stronghold_edge;
+
 typedef struct {
     stronghold_room  rooms[STRONGHOLD_MAX_ROOMS];
     int              room_count;
@@ -33,11 +46,24 @@ typedef struct {
     int              portal_room;    // index of the one portal room, or -1
     stronghold_box   bounds;         // running union of all footprints
 } stronghold_graph;
+
+// reset to empty. origin is the world cell the first (portal-adjacent) room
+// roots near; the grower walks outward from there.
 void stronghold_graph_init(stronghold_graph *g);
+
+// grow the graph. seeds an initial room at (ox,oy,oz), then random-walks new
+// rooms until the budget runs out. returns the room count.
 int  stronghold_graph_grow(stronghold_graph *g, const stronghold_config *cfg,
                            int ox, int oy, int oz, stronghold_rng *rng);
+
+// assign room types: pick the deepest dead-end as the portal, sprinkle
+// libraries/prisons by chance, leave the rest as halls/junctions. idempotent
+// on a grown graph.
 void stronghold_graph_assign_types(stronghold_graph *g, const stronghold_config *cfg,
                                    stronghold_rng *rng);
+
+// register a door on a room (clamped to the door array). used by the carver.
 void stronghold_room_add_door(stronghold_room *r, int x, int y, int z,
                               stronghold_dir facing, int gated);
+
 #endif
