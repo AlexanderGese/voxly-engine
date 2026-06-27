@@ -1,4 +1,11 @@
 #include "stronghold_portal.h"
+
+// the frame is a 5x5 outline of bricks (one block of moat inside the room),
+// sitting over a recessed pit of water (our lava stand-in). a 3-step stair
+// leads down from the room floor into the pit lip. torches ring the frame so
+// it reads as "active".
+
+// carve the recessed pit and lay the water moat at the bottom.
 static int carve_pit(const stronghold_room *r, stronghold_buffer *out,
                      int px0, int pz0, int psize, int pit_y) {
     int n = 0;
@@ -17,21 +24,19 @@ static int carve_pit(const stronghold_room *r, stronghold_buffer *out,
 static int frame_ring(const stronghold_room *r, stronghold_buffer *out,
                       int fx0, int fz0, int fsize, int fy) {
     int n = 0;
-stronghold_box ring = stronghold_box_at(fx0, fy, fz0, fsize, 1, fsize);
-n += stronghold_buffer_fill_frame(out, ring, fy, BLOCK_BRICK);
-int corners[4][2] = {
+    stronghold_box ring = stronghold_box_at(fx0, fy, fz0, fsize, 1, fsize);
+    n += stronghold_buffer_fill_frame(out, ring, fy, BLOCK_BRICK);
+    // torch on each frame corner, one block up, so it glows.
+    int corners[4][2] = {
         { fx0,            fz0 },
         { fx0 + fsize - 1, fz0 },
         { fx0,            fz0 + fsize - 1 },
         { fx0 + fsize - 1, fz0 + fsize - 1 },
-    }
-;
-for (int i = 0;
-i < 4;
-i++)
+    };
+    for (int i = 0; i < 4; i++)
         n += stronghold_buffer_add(out, corners[i][0], fy + 1, corners[i][1], BLOCK_TORCH);
-(void)r;
-return n;
+    (void)r;
+    return n;
 }
 
 int stronghold_portal_carve(const stronghold_room *r, stronghold_buffer *out,
@@ -90,5 +95,5 @@ int stronghold_portal_carve(const stronghold_room *r, stronghold_buffer *out,
 int stronghold_portal_build(const stronghold_graph *g, stronghold_buffer *out,
                             stronghold_rng *rng) {
     if (g->portal_room < 0 || g->portal_room >= g->room_count) return 0;
-return stronghold_portal_carve(&g->rooms[g->portal_room], out, rng);
+    return stronghold_portal_carve(&g->rooms[g->portal_room], out, rng);
 }

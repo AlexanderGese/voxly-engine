@@ -1,5 +1,6 @@
 #include "stronghold_graph.h"
 #include <stddef.h>
+
 // room sizing. rooms are squat boxes; halls are wider, the portal room is the
 // biggest fixed-size box so the frame always fits.
 #define ROOM_MIN_W   5
@@ -7,13 +8,14 @@
 #define ROOM_H       6
 #define PORTAL_W    11
 #define PORTAL_H     8
+
 static int dir_bit(stronghold_dir d) { return 1 << (int)d; }
 
 void stronghold_graph_init(stronghold_graph *g) {
     g->room_count = 0;
-g->edge_count = 0;
-g->portal_room = -1;
-g->bounds = stronghold_box_make(0, 0, 0, 0, 0, 0);
+    g->edge_count = 0;
+    g->portal_room = -1;
+    g->bounds = stronghold_box_make(0, 0, 0, 0, 0, 0);
 }
 
 // can this box go in without kissing an existing room? pad of 2 keeps a stone
@@ -28,18 +30,16 @@ static int box_fits(const stronghold_graph *g, const stronghold_box *box) {
 // commit a room, return its index or -1 if the table is full.
 static int push_room(stronghold_graph *g, stronghold_box box, int level, uint32_t seed) {
     if (g->room_count >= STRONGHOLD_MAX_ROOMS) return -1;
-int idx = g->room_count++;
-stronghold_room *r = &g->rooms[idx];
-r->box = box;
-r->type = STRONGHOLD_ROOM_HALL;
-// typed later
-r->level = level;
-r->seed = seed;
-r->open_sides = 0x0F;
-// all four sides free
-r->door_count = 0;
-g->bounds = (g->room_count == 1) ? box : stronghold_box_union(g->bounds, box);
-return idx;
+    int idx = g->room_count++;
+    stronghold_room *r = &g->rooms[idx];
+    r->box = box;
+    r->type = STRONGHOLD_ROOM_HALL;   // typed later
+    r->level = level;
+    r->seed = seed;
+    r->open_sides = 0x0F;             // all four sides free
+    r->door_count = 0;
+    g->bounds = (g->room_count == 1) ? box : stronghold_box_union(g->bounds, box);
+    return idx;
 }
 
 static int push_edge(stronghold_graph *g, int a, int b, stronghold_dir side, int len, int stair) {
@@ -56,12 +56,8 @@ static int push_edge(stronghold_graph *g, int a, int b, stronghold_dir side, int
 void stronghold_room_add_door(stronghold_room *r, int x, int y, int z,
                               stronghold_dir facing, int gated) {
     if (r->door_count >= STRONGHOLD_ROOM_DOORS) return;
-stronghold_door *d = &r->doors[r->door_count++];
-d->x = x;
-d->y = y;
-d->z = z;
-d->facing = facing;
-d->gated = gated;
+    stronghold_door *d = &r->doors[r->door_count++];
+    d->x = x; d->y = y; d->z = z; d->facing = facing; d->gated = gated;
 }
 
 // pick a random still-open side of a room, or -1 if it's fully wired.
@@ -78,18 +74,21 @@ static int pick_open_side(const stronghold_room *r, stronghold_rng *rng) {
 static stronghold_box project_room(const stronghold_room *from, stronghold_dir side,
                                    int len, int w, int d, int drop, int *out_y) {
     int dx, dz;
-stronghold_dir_step(side, &dx, &dz);
-// start from from's center face, walk len+gap blocks outward, drop in y.
-int fcx, fcy, fcz;
-stronghold_box fb = from->box;
-stronghold_box_center(&fb, &fcx, &fcy, &fcz);
-int reach = (dx ? stronghold_box_width(&fb) : stronghold_box_depth(&fb)) / 2 + len;
-int nx = fcx + dx * reach;
-int nz = fcz + dz * reach;
-int ny = from->box.y0 - drop;
-if (out_y) *out_y = ny;
-// center the new room on the axis we walked.
-return stronghold_box_at(nx - w / 2, ny, nz - d / 2, w, ROOM_H, d);
+    stronghold_dir_step(side, &dx, &dz);
+
+    // start from from's center face, walk len+gap blocks outward, drop in y.
+    int fcx, fcy, fcz;
+    stronghold_box fb = from->box;
+    stronghold_box_center(&fb, &fcx, &fcy, &fcz);
+
+    int reach = (dx ? stronghold_box_width(&fb) : stronghold_box_depth(&fb)) / 2 + len;
+    int nx = fcx + dx * reach;
+    int nz = fcz + dz * reach;
+    int ny = from->box.y0 - drop;
+    if (out_y) *out_y = ny;
+
+    // center the new room on the axis we walked.
+    return stronghold_box_at(nx - w / 2, ny, nz - d / 2, w, ROOM_H, d);
 }
 
 int stronghold_graph_grow(stronghold_graph *g, const stronghold_config *cfg,
@@ -157,13 +156,10 @@ int stronghold_graph_grow(stronghold_graph *g, const stronghold_config *cfg,
 // dead-end that gets the portal. iterative, small fixed stack.
 static int graph_depth_of(const stronghold_graph *g, int target) {
     int dist[STRONGHOLD_MAX_ROOMS];
-for (int i = 0;
-i < g->room_count;
-i++) dist[i] = -1;
-int stack[STRONGHOLD_MAX_ROOMS], sp = 0;
-dist[0] = 0;
-stack[sp++] = 0;
-while (sp > 0) {
+    for (int i = 0; i < g->room_count; i++) dist[i] = -1;
+    int stack[STRONGHOLD_MAX_ROOMS], sp = 0;
+    dist[0] = 0; stack[sp++] = 0;
+    while (sp > 0) {
         int cur = stack[--sp];
         for (int e = 0; e < g->edge_count; e++) {
             int nb = -1;
@@ -189,11 +185,11 @@ static int room_degree(const stronghold_graph *g, int idx) {
 void stronghold_graph_assign_types(stronghold_graph *g, const stronghold_config *cfg,
                                    stronghold_rng *rng) {
     if (g->room_count == 0) return;
-// portal: the dead-end farthest (by graph distance) from the spawn hub.
-int best = -1, best_depth = -1, best_fallback = -1, fb_depth = -1;
-for (int i = 1;
-i < g->room_count;
-i++) {
+
+    // portal: the dead-end farthest (by graph distance) from the spawn hub.
+    // fall back to the plain farthest room if nothing is a dead-end.
+    int best = -1, best_depth = -1, best_fallback = -1, fb_depth = -1;
+    for (int i = 1; i < g->room_count; i++) {
         int depth = graph_depth_of(g, i);
         if (depth > fb_depth) { fb_depth = depth; best_fallback = i; }
         if (room_degree(g, i) <= 1 && depth > best_depth) {
@@ -201,21 +197,19 @@ i++) {
         }
     }
     if (best < 0) best = best_fallback >= 0 ? best_fallback : 0;
-g->portal_room = best;
-g->rooms[best].type = STRONGHOLD_ROOM_PORTAL;
-{
+    g->portal_room = best;
+    g->rooms[best].type = STRONGHOLD_ROOM_PORTAL;
+    // upsize the portal room so the frame + lava moat always fits.
+    {
         int cx, cy, cz;
         stronghold_box_center(&g->rooms[best].box, &cx, &cy, &cz);
         g->rooms[best].box = stronghold_box_at(cx - PORTAL_W / 2, g->rooms[best].box.y0,
                                                cz - PORTAL_W / 2, PORTAL_W, PORTAL_H, PORTAL_W);
     }
 
-    // type the rest. dead-ends prefer libraries;
-through-rooms can be prisons
+    // type the rest. dead-ends prefer libraries; through-rooms can be prisons
     // or junctions. the hub (room 0) and the portal stay as-is.
-    for (int i = 0;
-i < g->room_count;
-i++) {
+    for (int i = 0; i < g->room_count; i++) {
         if (i == g->portal_room || i == 0) continue;
         int deg = room_degree(g, i);
         if (deg <= 1 && stronghold_rng_chance(rng, cfg->library_chance)) {
@@ -231,9 +225,7 @@ i++) {
 
     // tag stairwell rooms: any room reached by a stair edge gets the type so
     // the carver knows to drop a ladder shaft on that wall.
-    for (int e = 0;
-e < g->edge_count;
-e++) {
+    for (int e = 0; e < g->edge_count; e++) {
         if (!g->edges[e].stair) continue;
         int lo = g->edges[e].b;   // dst is always the deeper one in grow()
         if (g->rooms[lo].type == STRONGHOLD_ROOM_HALL)
