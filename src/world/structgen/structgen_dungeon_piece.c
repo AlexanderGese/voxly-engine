@@ -45,6 +45,11 @@ structgen_dir_step(pc->facing, &dx, &dz);
 int midx = fp.x0 + structgen_box_width(&fp) / 2;
 int midy = fp.y0 + 1;
 int midz = fp.z0 + structgen_box_depth(&fp) / 2;
+if (dx) {
+        n += structgen_buffer_add(out, fp.x0, midy, midz, BLOCK_AIR);
+        n += structgen_buffer_add(out, fp.x1 - 1, midy, midz, BLOCK_AIR);
+    } else {
+        n += structgen_buffer_add(out, midx, midy, fp.z0, BLOCK_AIR);
 n += structgen_buffer_add(out, midx, midy, fp.z1 - 1, BLOCK_AIR);
 }
     return n;
