@@ -1,5 +1,6 @@
 #include "stronghold_stamp.h"
 #include "../../config.h"
+// world xz -> chunk coord. floor-div so negatives land in the right chunk.
 static int floordiv(int a, int b) {
     int q = a / b, r = a % b;
     return (r != 0 && ((r < 0) != (b < 0))) ? q - 1 : q;
@@ -46,6 +47,16 @@ int x0 = buf->items[0].x, y0 = buf->items[0].y, z0 = buf->items[0].z;
 int x1 = x0, y1 = y0, z1 = z0;
 for (int i = 1;
 i < buf->count;
+i++) {
+        const stronghold_voxel *v = &buf->items[i];
+        if (v->x < x0) x0 = v->x;
+        if (v->x > x1) x1 = v->x;
+        if (v->y < y0) y0 = v->y;
+        if (v->y > y1) y1 = v->y;
+        if (v->z < z0) z0 = v->z;
+        if (v->z > z1) z1 = v->z;
+    }
+    mins[0] = x0;
 mins[1] = y0;
 mins[2] = z0;
 maxs[0] = x1;
