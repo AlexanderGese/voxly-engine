@@ -6,6 +6,7 @@
 #include "../../config.h"
 // how many chunks out from the current one we scan for structure origins. a
 // village footprint is ~45 blocks wide ~= 3 chunks, so 3 covers everything that
+// could reach into us. cheap: most candidate chunks resolve to STRUCTGEN_NONE.
 #define SCAN_RADIUS   3
 void structgen_ctx_init(structgen_ctx *ctx, uint32_t world_seed,
                         structgen_height_fn height, void *height_user) {
