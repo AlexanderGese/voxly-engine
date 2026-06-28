@@ -1,12 +1,19 @@
 #include "structgen_dungeon.h"
 #include "structgen_rand.h"
+
+// how deep below the surface the dungeon's ceiling starts.
 #define DUNGEON_DEPTH   6
 #define ROOM_BUDGET     7
 #define CORRIDOR_LEN    4
+
+// remember each placed room's box + facing so we can branch off it later.
 typedef struct {
     structgen_box box;
     int           exits_used;   // dont overload one room with corridors
 } room_slot;
+
+// project a corridor of CORRIDOR_LEN out from `side` of `from`, then a new room
+// past it. returns 1 and writes the corridor/room boxes if it can be sized.
 static int project_room(const structgen_box *from, structgen_dir side,
                         structgen_rng *r, structgen_box *corr, structgen_box *room) {
     int dx, dz;
@@ -37,16 +44,22 @@ static int project_room(const structgen_box *from, structgen_dir side,
 
 void structgen_dungeon_layout(structgen_plan *plan, const structgen_site *site) {
     structgen_rng rng;
-structgen_rng_seed(&rng, site->seed ^ 0xd0a6e0u);
-int top_y = site->ground_y - DUNGEON_DEPTH;
-int floor_y = top_y - 4;
-if (floor_y < 2) floor_y = 2;
-structgen_plan_init(plan, site->anchor_x, floor_y, site->anchor_z);
-room_slot rooms[ROOM_BUDGET];
-int nrooms = 0;
-structgen_box first = structgen_box_at(site->anchor_x - 3, floor_y,
+    structgen_rng_seed(&rng, site->seed ^ 0xd0a6e0u);
+
+    // ceiling sits DUNGEON_DEPTH under the surface; room floor a bit lower.
+    int top_y = site->ground_y - DUNGEON_DEPTH;
+    int floor_y = top_y - 4;
+    if (floor_y < 2) floor_y = 2;   // dont punch through bedrock
+
+    structgen_plan_init(plan, site->anchor_x, floor_y, site->anchor_z);
+
+    room_slot rooms[ROOM_BUDGET];
+    int nrooms = 0;
+
+    // entry room centered on the anchor.
+    structgen_box first = structgen_box_at(site->anchor_x - 3, floor_y,
                                            site->anchor_z - 3, 7, 4, 7);
-if (structgen_plan_try_add(plan, PIECE_ROOM, first, STRUCTGEN_NORTH,
+    if (structgen_plan_try_add(plan, PIECE_ROOM, first, STRUCTGEN_NORTH,
                                structgen_seed_mix(site->seed, 1u))) {
         rooms[nrooms].box = first;
         rooms[nrooms].exits_used = 0;
@@ -55,7 +68,7 @@ if (structgen_plan_try_add(plan, PIECE_ROOM, first, STRUCTGEN_NORTH,
 
     // grow. each iteration: pick a room with spare exits, pick a side, project.
     int attempts = 0;
-while (nrooms < ROOM_BUDGET && attempts < ROOM_BUDGET * 6) {
+    while (nrooms < ROOM_BUDGET && attempts < ROOM_BUDGET * 6) {
         attempts++;
         // weighted toward newer rooms so the dungeon snakes rather than blobs.
         int pick = structgen_rng_range(&rng, nrooms / 2, nrooms - 1);
@@ -87,6 +100,6 @@ while (nrooms < ROOM_BUDGET && attempts < ROOM_BUDGET * 6) {
 
 int structgen_dungeon_generate(structgen_buffer *out, const structgen_site *site) {
     structgen_plan plan;
-structgen_dungeon_layout(&plan, site);
-return structgen_plan_build(&plan, out);
+    structgen_dungeon_layout(&plan, site);
+    return structgen_plan_build(&plan, out);
 }

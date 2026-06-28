@@ -1,5 +1,6 @@
 #include "stronghold_stamp.h"
 #include "../../config.h"
+
 // world xz -> chunk coord. floor-div so negatives land in the right chunk.
 static int floordiv(int a, int b) {
     int q = a / b, r = a % b;
@@ -8,11 +9,10 @@ static int floordiv(int a, int b) {
 
 int stronghold_stamp_chunk(const stronghold_buffer *buf, chunk *c, int overwrite_air) {
     int written = 0;
-int base_x = c->cx * CHUNK_SIZE_X;
-int base_z = c->cz * CHUNK_SIZE_Z;
-for (int i = 0;
-i < buf->count;
-i++) {
+    int base_x = c->cx * CHUNK_SIZE_X;
+    int base_z = c->cz * CHUNK_SIZE_Z;
+
+    for (int i = 0; i < buf->count; i++) {
         const stronghold_voxel *v = &buf->items[i];
 
         // y outside the column? skip. strongholds live well inside [0,128) but
@@ -43,11 +43,9 @@ int stronghold_stamp_touches(const stronghold_buffer *buf, int cx, int cz) {
 
 int stronghold_stamp_bounds(const stronghold_buffer *buf, int *mins, int *maxs) {
     if (buf->count == 0) return 0;
-int x0 = buf->items[0].x, y0 = buf->items[0].y, z0 = buf->items[0].z;
-int x1 = x0, y1 = y0, z1 = z0;
-for (int i = 1;
-i < buf->count;
-i++) {
+    int x0 = buf->items[0].x, y0 = buf->items[0].y, z0 = buf->items[0].z;
+    int x1 = x0, y1 = y0, z1 = z0;
+    for (int i = 1; i < buf->count; i++) {
         const stronghold_voxel *v = &buf->items[i];
         if (v->x < x0) x0 = v->x;
         if (v->x > x1) x1 = v->x;
@@ -56,11 +54,7 @@ i++) {
         if (v->z < z0) z0 = v->z;
         if (v->z > z1) z1 = v->z;
     }
-    mins[0] = x0;
-mins[1] = y0;
-mins[2] = z0;
-maxs[0] = x1;
-maxs[1] = y1;
-maxs[2] = z1;
-return 1;
+    mins[0] = x0; mins[1] = y0; mins[2] = z0;
+    maxs[0] = x1; maxs[1] = y1; maxs[2] = z1;
+    return 1;
 }
