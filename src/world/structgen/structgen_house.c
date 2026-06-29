@@ -19,6 +19,30 @@ structgen_box floor = structgen_box_make(fp.x0, y0, fp.z0, fp.x1, y0 + 1, fp.z1)
 n += structgen_buffer_fill_box(out, floor, BLOCK_PLANKS);
 for (int h = 1;
 h <= wall_h;
+h++) {
+        int y = y0 + h;
+        for (int z = fp.z0; z < fp.z1; z++) {
+            for (int x = fp.x0; x < fp.x1; x++) {
+                int edge = (x == fp.x0 || x == fp.x1 - 1 ||
+                            z == fp.z0 || z == fp.z1 - 1);
+                if (!edge) continue;
+
+                // window band at mid height, every other wall column. corners
+                // are kept solid so the structure doesnt lose its corner posts.
+                int local = (x - fp.x0) + (z - fp.z0);
+                int corner = (x == fp.x0 || x == fp.x1 - 1) &&
+                             (z == fp.z0 || z == fp.z1 - 1);
+                if (h == 2 && !corner && (local % 2 == 0)) {
+                    n += structgen_buffer_add(out, x, y, z, BLOCK_GLASS);
+                    continue;
+                }
+                n += structgen_buffer_add(out, x, y, z, wall_block(&rng));
+            }
+        }
+    }
+
+    // door: punch a 2-tall air gap on the facing wall, centered.
+    int dx, dz;
 structgen_dir_step(pc->facing, &dx, &dz);
 int cxw = fp.x0 + w / 2;
 int czw = fp.z0 + d / 2;
