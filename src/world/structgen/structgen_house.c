@@ -1,4 +1,7 @@
 #include "structgen_piece.h"
+// village house. planks walls, cobble foundation, glass windows, a door gap on
+// the facing side, and a simple gable-ish flat roof. small interior props.
+// everything is derived from the piece seed so it's stable across reloads.
 static block_id wall_block(structgen_rng *r) {
     // mostly planks, occasional cobble accent so a street doesnt look stamped.
     return structgen_rng_chance(r, 0.15f) ? BLOCK_COBBLE : BLOCK_PLANKS;
@@ -12,11 +15,16 @@ int w = structgen_box_width(&fp);
 int d = structgen_box_depth(&fp);
 int y0 = fp.y0;
 int wall_h = 3 + structgen_rng_range(&rng, 0, 1);
+// 3..4
 int n = 0;
+// foundation: a solid cobble ring one block tall at y0-1 keeps the house
+// from floating if the ground dips slightly. cheap and forgiving.
 structgen_box found = structgen_box_make(fp.x0, y0 - 1, fp.z0, fp.x1, y0, fp.z1);
 n += structgen_buffer_fill_box(out, found, BLOCK_COBBLE);
+// floor at y0.
 structgen_box floor = structgen_box_make(fp.x0, y0, fp.z0, fp.x1, y0 + 1, fp.z1);
 n += structgen_buffer_fill_box(out, floor, BLOCK_PLANKS);
+// walls: perimeter frame for each wall layer. windows punched in.
 for (int h = 1;
 h <= wall_h;
 h++) {
