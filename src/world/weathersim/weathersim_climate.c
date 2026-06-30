@@ -1,6 +1,10 @@
 #include "weathersim_climate.h"
 #include "weathersim_rand.h"
+
 #include <math.h>
+
+// smoothstep-interpolated value noise on the cell lattice. one helper, called
+// at two frequencies and summed. amplitude in whatever unit the caller wants.
 static float vnoise(float x, float z, uint32_t seed) {
     int x0 = (int)floorf(x), z0 = (int)floorf(z);
     float fx = x - x0, fz = z - z0;
@@ -22,9 +26,9 @@ static float vnoise(float x, float z, uint32_t seed) {
 // two-octave fractal in [0,1]-ish, recentred to roughly [-1,1].
 static float fbm(float x, float z, uint32_t seed) {
     float n = vnoise(x, z, seed) * 0.65f;
-n += vnoise(x * 2.17f + 11.3f, z * 2.17f - 7.1f,
+    n += vnoise(x * 2.17f + 11.3f, z * 2.17f - 7.1f,
                 weathersim_seed_mix(seed, 0x51ed)) * 0.35f;
-return n * 2.0f - 1.0f;
+    return n * 2.0f - 1.0f;
 }
 
 weathersim_climate weathersim_climate_sample(int cell_x, int cell_z,
@@ -60,9 +64,7 @@ weathersim_climate weathersim_climate_sample(int cell_x, int cell_z,
 
 int weathersim_climate_seed_field(weathersim_field *f, uint32_t seed, int force) {
     int touched = 0;
-for (int gz = 0;
-gz < WEATHERSIM_DIM;
-++gz) {
+    for (int gz = 0; gz < WEATHERSIM_DIM; ++gz) {
         for (int gx = 0; gx < WEATHERSIM_DIM; ++gx) {
             weathersim_cell *cell = &f->cells[weathersim_field_idx(gx, gz)];
             if (!force && !isnan(cell->temp)) continue;
@@ -83,5 +85,5 @@ gz < WEATHERSIM_DIM;
         }
     }
     f->seeded = 1;
-return touched;
+    return touched;
 }
