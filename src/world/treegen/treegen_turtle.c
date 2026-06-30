@@ -1,6 +1,8 @@
 #include "treegen_turtle.h"
 #include <math.h>
+
 #define DEG2RAD (3.14159265358979323846f / 180.0f)
+
 void treegen_turtle_init(treegen_turtle_state *t, float length, float radius) {
     treegen_turtle *c = &t->cur;
     c->pos    = VEC3_ZERO;
@@ -14,8 +16,8 @@ void treegen_turtle_init(treegen_turtle_state *t, float length, float radius) {
 
 int treegen_turtle_push(treegen_turtle_state *t) {
     if (t->sp >= TREEGEN_STACK_MAX) return 0;
-t->stack[t->sp++] = t->cur;
-return 1;
+    t->stack[t->sp++] = t->cur;
+    return 1;
 }
 
 int treegen_turtle_pop(treegen_turtle_state *t) {
@@ -27,14 +29,13 @@ int treegen_turtle_pop(treegen_turtle_state *t) {
 // rotate v about unit axis k by angle (rad). rodrigues' rotation formula.
 static vec3 rot_axis(vec3 v, vec3 k, float ang) {
     float c = cosf(ang), s = sinf(ang);
-vec3 term1 = vec3_scale(v, c);
-vec3 term2 = vec3_scale(vec3_cross(k, v), s);
-vec3 term3 = vec3_scale(k, vec3_dot(k, v) * (1.0f - c));
-return vec3_add(vec3_add(term1, term2), term3);
+    vec3 term1 = vec3_scale(v, c);
+    vec3 term2 = vec3_scale(vec3_cross(k, v), s);
+    vec3 term3 = vec3_scale(k, vec3_dot(k, v) * (1.0f - c));
+    return vec3_add(vec3_add(term1, term2), term3);
 }
 
-// drift can creep in over many rotations;
-re-derive an orthonormal frame from
+// drift can creep in over many rotations; re-derive an orthonormal frame from
 // head + up so we don't slowly turn into a parallelogram.
 static void reortho(treegen_turtle *c) {
     c->head = vec3_normalize(c->head);
@@ -44,10 +45,10 @@ static void reortho(treegen_turtle *c) {
 
 void treegen_turtle_yaw(treegen_turtle_state *t, float deg) {
     treegen_turtle *c = &t->cur;
-float a = deg * DEG2RAD;
-c->head = rot_axis(c->head, c->up, a);
-c->left = rot_axis(c->left, c->up, a);
-reortho(c);
+    float a = deg * DEG2RAD;
+    c->head = rot_axis(c->head, c->up, a);
+    c->left = rot_axis(c->left, c->up, a);
+    reortho(c);
 }
 
 void treegen_turtle_pitch(treegen_turtle_state *t, float deg) {
@@ -60,10 +61,10 @@ void treegen_turtle_pitch(treegen_turtle_state *t, float deg) {
 
 void treegen_turtle_roll(treegen_turtle_state *t, float deg) {
     treegen_turtle *c = &t->cur;
-float a = deg * DEG2RAD;
-c->left = rot_axis(c->left, c->head, a);
-c->up   = rot_axis(c->up,   c->head, a);
-reortho(c);
+    float a = deg * DEG2RAD;
+    c->left = rot_axis(c->left, c->head, a);
+    c->up   = rot_axis(c->up,   c->head, a);
+    reortho(c);
 }
 
 // walk a 3d line from a..b stamping wood. amanatides-ish but we don't need exact
@@ -84,12 +85,14 @@ static void wood_line(treegen_buffer *out, block_id id, vec3 a, vec3 b) {
 void treegen_turtle_forward(treegen_turtle_state *t, treegen_buffer *out,
                             block_id id, int *ox, int *oy, int *oz) {
     treegen_turtle *c = &t->cur;
-vec3 start = c->pos;
-vec3 end   = vec3_add(start, vec3_scale(c->head, c->length));
-c->pos = end;
-if (out && id != BLOCK_AIR)
+    vec3 start = c->pos;
+    vec3 end   = vec3_add(start, vec3_scale(c->head, c->length));
+    c->pos = end;
+
+    if (out && id != BLOCK_AIR)
         wood_line(out, id, start, end);
-if (ox) *ox = (int)floorf(end.x + 0.5f);
-if (oy) *oy = (int)floorf(end.y + 0.5f);
-if (oz) *oz = (int)floorf(end.z + 0.5f);
+
+    if (ox) *ox = (int)floorf(end.x + 0.5f);
+    if (oy) *oy = (int)floorf(end.y + 0.5f);
+    if (oz) *oz = (int)floorf(end.z + 0.5f);
 }
