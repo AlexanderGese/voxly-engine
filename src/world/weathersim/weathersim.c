@@ -139,6 +139,36 @@ ws->precip_fraction = weathersim_precip_step(&ws->field, &ws->fronts,
                                                  &ws->params, dt);
 ws->wind_peak = weathersim_wind_peak(&ws->field);
 ++ws->ticks;
+}
+
+void weathersim_update(weathersim_ctx *ws, vec3 player_pos, float dt) {
+    // follow the player. recentering happens at most once per call regardless
+    // of how many ticks we run — the window moves much slower than the sim.
+    int ncx = weathersim_world_to_cell((int)floorf(player_pos.x));
+    int ncz = weathersim_world_to_cell((int)floorf(player_pos.z));
+    if (ncx != ws->center_cx || ncz != ws->center_cz) {
+        int reseed = weathersim_field_recenter(&ws->field, ncx, ncz);
+        if (reseed > 0)
+            weathersim_climate_seed_field(&ws->field, ws->params.seed, 0);
+        ws->center_cx = ncx;
+        ws->center_cz = ncz;
+    }
+
+    // fixed-step accumulator. guard against a huge dt (alt-tab) spiralling.
+    ws->tick_accum += dt;
+    float step = ws->params.tick_dt;
+    int budget = 8; // never run more than this many ticks in one frame
+    while (ws->tick_accum >= step && budget-- > 0) {
+        sim_tick(ws, step);
+        ws->tick_accum -= step;
+    }
+    if (ws->tick_accum > step) ws->tick_accum = step; // drop the backlog
+}
+
+// world pos -> fractional grid coords inside the current window.
+static void world_to_grid(const weathersim_ctx *ws, vec3 wp,
+                          float *gx, float *gz) {
+    float b = (float)WEATHERSIM_BLOCKS_PER_CELL;
 float cellf_x = wp.x / b - (float)ws->field.origin_cx;
 float cellf_z = wp.z / b - (float)ws->field.origin_cz;
 if (cellf_x < 0.0f) cellf_x = 0.0f;
@@ -147,6 +177,63 @@ if (cellf_x > WEATHERSIM_DIM - 1) cellf_x = WEATHERSIM_DIM - 1;
 if (cellf_z > WEATHERSIM_DIM - 1) cellf_z = WEATHERSIM_DIM - 1;
 *gx = cellf_x;
 *gz = cellf_z;
+}
+
+weathersim_sample weathersim_query(const weathersim_ctx *ws, vec3 world_pos) {
+    weathersim_sample out;
+    float gxf, gzf;
+    world_to_grid(ws, world_pos, &gxf, &gzf);
+    int gx = (int)(gxf + 0.5f), gz = (int)(gzf + 0.5f);
+
+    const weathersim_cell *c = weathersim_field_at_const(&ws->field, gx, gz);
+
+    // altitude correction: drop temperature by the lapse rate above sea level.
+    // this is the bit that lets one storm rain in the valley and snow up top.
+    float alt = world_pos.y - (float)WORLD_SEA_LEVEL;
+    float temp_here = c->temp - alt * WEATHERSIM_LAPSE;
+
+    // reclassify precip at the corrected temperature, not the cell's.
+    float over = c->humidity
+               - weathersim_precip_saturation(temp_here, ws->params.dew_bias)
+               - ws->params.precip_threshold;
+    float intensity = 0.0f;
+    weathersim_precip kind = weathersim_precip_at(&ws->field, &ws->params,
+                                                  gx, gz, &intensity);
+    // override the kind with the altitude-aware temperature so high ground
+    // freezes the same front the valley sees as rain.
+    if (kind != WEATHERSIM_PRECIP_NONE)
+        kind = weathersim_precip_classify(temp_here, over > 0 ? over : 0.001f,
+                                          ws->params.snow_temp);
+
+    out.precip      = kind;
+    out.intensity   = intensity;
+    out.temperature = temp_here;
+    out.humidity    = c->humidity;
+    out.cloud       = c->cloud;
+    out.pressure    = WEATHERSIM_P_REF + c->pressure;
+    out.wind        = weathersim_wind_bilinear(&ws->field, gxf, gzf);
+    out.accum       = c->accum;
+    return out;
+}
+
+void weathersim_to_legacy(const weathersim_ctx *ws, vec3 player_pos,
+                          weather *out) {
+    weathersim_sample s = weathersim_query(ws, player_pos);
+switch (s.precip) {
+        case WEATHERSIM_PRECIP_SNOW:
+        case WEATHERSIM_PRECIP_SLEET:
+            out->state = WEATHER_SNOW;
+            break;
+        case WEATHERSIM_PRECIP_DRIZZLE:
+        case WEATHERSIM_PRECIP_RAIN:
+        case WEATHERSIM_PRECIP_DOWNPOUR:
+            out->state = WEATHER_RAIN;
+            break;
+        default:
+            out->state = WEATHER_CLEAR;
+            break;
+    }
+    out->intensity = s.intensity;
 out->timer = 0.0f;
 out->next_change = 0.0f;
 }
