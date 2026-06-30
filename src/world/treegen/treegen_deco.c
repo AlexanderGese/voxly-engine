@@ -5,6 +5,12 @@
 #include "treegen_bush.h"
 #include "../../config.h"
 #include <stdlib.h>
+
+// the deco pass. walks the jitter-grid cells that can possibly reach this chunk,
+// grows each plant once at its world anchor, and stamps the overlapping voxels.
+// then runs the cheap per-cell ground scatter. all decisions are seed-stable so
+// a chunk decorates identically every time it's generated.
+
 treegen_deco_config treegen_deco_config_default(uint32_t seed) {
     treegen_deco_config cfg;
     cfg.seed        = seed;
@@ -18,8 +24,8 @@ treegen_deco_config treegen_deco_config_default(uint32_t seed) {
 
 void treegen_deco_init(treegen_deco *d, const treegen_deco_config *cfg) {
     d->cfg = cfg ? *cfg : treegen_deco_config_default(0);
-d->buf = malloc(sizeof(treegen_buffer));
-if (d->buf) treegen_buffer_init(d->buf);
+    d->buf = malloc(sizeof(treegen_buffer));
+    if (d->buf) treegen_buffer_init(d->buf);
 }
 
 void treegen_deco_free(treegen_deco *d) {
@@ -33,8 +39,8 @@ void treegen_deco_free(treegen_deco *d) {
 // floor-divide that works for negatives (chunk coords go below zero).
 static int floordiv(int a, int b) {
     int q = a / b, r = a % b;
-if ((r != 0) && ((r < 0) != (b < 0))) q--;
-return q;
+    if ((r != 0) && ((r < 0) != (b < 0))) q--;
+    return q;
 }
 
 // choose a species for a grid cell from substrate + a roll. grass->oak/birch,
@@ -54,11 +60,10 @@ static treegen_kind pick_species(block_id surface, treegen_rng *r) {
 static int stamp_buffer(chunk *c, const treegen_buffer *buf,
                         int anchor_wx, int anchor_y, int anchor_wz) {
     int cwx = c->cx * CHUNK_SIZE_X;
-int cwz = c->cz * CHUNK_SIZE_Z;
-int wrote = 0;
-for (int i = 0;
-i < buf->count;
-i++) {
+    int cwz = c->cz * CHUNK_SIZE_Z;
+    int wrote = 0;
+
+    for (int i = 0; i < buf->count; i++) {
         const treegen_voxel *v = &buf->items[i];
         int wx = anchor_wx + v->x;
         int wy = anchor_y  + v->y;
@@ -82,8 +87,7 @@ i++) {
 }
 
 // returns the bounding chebyshev reach a plant can have so we know which grid
-// cells outside the chunk still need growing. a generous constant;
-canopies and
+// cells outside the chunk still need growing. a generous constant; canopies and
 // branches rarely exceed this.
 #define TREEGEN_MAX_REACH  10
 
@@ -145,12 +149,11 @@ static int decorate_trees(treegen_deco *d, chunk *c,
 static int decorate_cover(treegen_deco *d, chunk *c,
                           treegen_surface_fn surf, void *user) {
     treegen_deco_config *cfg = &d->cfg;
-int cwx = c->cx * CHUNK_SIZE_X;
-int cwz = c->cz * CHUNK_SIZE_Z;
-int wrote = 0;
-for (int z = 0;
-z < CHUNK_SIZE_Z;
-z++) {
+    int cwx = c->cx * CHUNK_SIZE_X;
+    int cwz = c->cz * CHUNK_SIZE_Z;
+    int wrote = 0;
+
+    for (int z = 0; z < CHUNK_SIZE_Z; z++) {
         for (int x = 0; x < CHUNK_SIZE_X; x++) {
             int wx = cwx + x, wz = cwz + z;
             int gy; block_id surface;
