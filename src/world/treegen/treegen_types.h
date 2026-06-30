@@ -1,11 +1,14 @@
 #ifndef WORLD_TREEGEN_TYPES_H
 #define WORLD_TREEGEN_TYPES_H
+
 #include <stdint.h>
 #include "../block.h"
+
 // vegetation generator. l-system trees, bushes, grass scatter. like structgen
 // this stays chunk-free and render-free: we grow plants into a voxel buffer and
 // the deco pass hands the buffer back to the worldgen driver to stamp. keeps the
 // link clean and lets us fuzz the grammar on its own without spinning a world.
+
 // which species a slot resolved to. the grammar + tunables hang off this.
 typedef enum {
     TREEGEN_NONE = 0,
@@ -16,6 +19,9 @@ typedef enum {
     TREEGEN_BUSH,       // no real trunk, just a leaf clump
     TREEGEN_KIND_COUNT
 } treegen_kind;
+
+// turtle alphabet symbols the l-system speaks. trees are interpreted from a
+// rewritten string of these. kept tiny; anything fancier we encode in params.
 typedef enum {
     TG_SYM_FWD = 0,     // 'F' draw forward one segment, leave wood
     TG_SYM_MOVE,        // 'f' move forward, no wood (used by palms)
@@ -31,14 +37,23 @@ typedef enum {
     TG_SYM_SHRINK,      // '!'  shrink segment radius/length one step
     TG_SYM_COUNT
 } treegen_sym;
+
+// one placed voxel in plant-local space. origin is the block the trunk grows
+// from; y up. the deco driver translates to world coords on stamp.
 typedef struct {
     int x, y, z;
     block_id id;
 } treegen_voxel;
+
+// blocks a species uses. broken out so a biome can reskin (e.g. snowy pine
+// gets snow-dusted leaves) without touching the grammar.
 typedef struct {
     block_id wood;
     block_id leaf;
 } treegen_palette;
+
+// tunables for a single plant. the grammar reads angles/length, the interpreter
+// reads radius/leaf params. one struct so a species table is just data.
 typedef struct {
     treegen_kind kind;
     treegen_palette pal;
@@ -56,5 +71,8 @@ typedef struct {
     int   min_height;       // dont bother below this (sapling)
     int   max_height;       // clamp so a bad roll cant scrape the sky
 } treegen_species;
+
+// fetch the default tunables for a species. data-driven, see treegen_species.c
 treegen_species treegen_species_get(treegen_kind kind);
+
 #endif

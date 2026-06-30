@@ -97,6 +97,38 @@ static void relax_pass(weathersim_ctx *ws) {
 
 // pass 3: ground thermal inertia + evaporation. the ground temperature lags the
 // air, so morning frost survives into a warm dawn;
+damp ground keeps feeding
+// humidity back into the column so weather can self-sustain a little.
+static void thermo_pass(weathersim_ctx *ws, float dt) {
+    weathersim_field *f = &ws->field;
+    const weathersim_params *p = &ws->params;
+
+    for (int gz = 0; gz < WEATHERSIM_DIM; ++gz) {
+        for (int gx = 0; gx < WEATHERSIM_DIM; ++gx) {
+            weathersim_cell *c = &f->cells[weathersim_field_idx(gx, gz)];
+
+            // ground chases air, slowly. exponential approach so it's stable
+            // regardless of tick size.
+            float k = 1.0f - powf(p->ground_inertia, dt / 0.25f);
+            c->ground_t += (c->temp - c->ground_t) * k;
+
+            // evaporation: warmer, wetter ground feeds more moisture. tapers as
+            // the air approaches saturation so it can't run away.
+            int cx = f->origin_cx + gx, cz = f->origin_cz + gz;
+            weathersim_climate base = weathersim_climate_sample(cx, cz, p->seed);
+            float warmth = (c->ground_t + 5.0f) / 30.0f;
+            if (warmth < 0.0f) warmth = 0.0f;
+            float feed = p->humidity_gain * base.moisture_src * warmth * dt;
+            c->humidity += feed * (1.0f - c->humidity);
+            if (c->humidity > 1.0f) c->humidity = 1.0f;
+        }
+    }
+}
+
+// one fixed sim tick: the whole pipeline minus the recenter (that's amortised
+// in the outer loop, it only needs to run when the window actually moves).
+static void sim_tick(weathersim_ctx *ws, float dt) {
+    relax_pass(ws);
 thermo_pass(ws, dt);
 weathersim_front_pool_update(&ws->fronts, &ws->params, &ws->field, dt);
 weathersim_front_pool_spawn(&ws->fronts, &ws->params, &ws->field, dt);
