@@ -83,8 +83,102 @@ i++) {
 
 // returns the bounding chebyshev reach a plant can have so we know which grid
 // cells outside the chunk still need growing. a generous constant;
+canopies and
+// branches rarely exceed this.
+#define TREEGEN_MAX_REACH  10
+
+static int decorate_trees(treegen_deco *d, chunk *c,
+                          treegen_surface_fn surf, void *user) {
+    treegen_deco_config *cfg = &d->cfg;
+    int grid = cfg->tree_grid;
+    if (grid < 1) grid = 1;
+
+    int cwx = c->cx * CHUNK_SIZE_X;
+    int cwz = c->cz * CHUNK_SIZE_Z;
+
+    // grid cells whose anchor could reach into this chunk.
+    int gx0 = floordiv(cwx - TREEGEN_MAX_REACH, grid);
+    int gx1 = floordiv(cwx + CHUNK_SIZE_X - 1 + TREEGEN_MAX_REACH, grid);
+    int gz0 = floordiv(cwz - TREEGEN_MAX_REACH, grid);
+    int gz1 = floordiv(cwz + CHUNK_SIZE_Z - 1 + TREEGEN_MAX_REACH, grid);
+
+    int wrote = 0;
+    for (int gz = gz0; gz <= gz1; gz++) {
+        for (int gx = gx0; gx <= gx1; gx++) {
+            // deterministic per-cell rng: cell coords + seed.
+            uint32_t cellseed = treegen_hash2(gx, gz, cfg->seed ^ 0x7a17u);
+            treegen_rng r;
+            treegen_rng_seed(&r, cellseed);
+
+            // jitter the anchor inside the cell so the grid doesn't show.
+            int ax = gx * grid + treegen_rng_range(&r, 0, grid - 1);
+            int az = gz * grid + treegen_rng_range(&r, 0, grid - 1);
+
+            int is_tree = treegen_rng_chance(&r, cfg->tree_chance);
+            int is_bush = !is_tree && treegen_rng_chance(&r, cfg->bush_chance);
+            if (!is_tree && !is_bush) continue;
+
+            int gy; block_id surface;
+            if (!surf(user, ax, az, &gy, &surface)) continue;   // no ground
+            if (surface == BLOCK_WATER) continue;
+
+            treegen_buffer_reset(d->buf);
+            uint32_t plantseed = treegen_seed_mix(cellseed, (uint32_t)(gy * 2654435761u));
+
+            if (is_tree) {
+                treegen_kind k = pick_species(surface, &r);
+                treegen_tree_grow(d->buf, k, plantseed);
+            } else {
+                if (surface == BLOCK_SAND)
+                    treegen_bush_grow_dead(d->buf, plantseed);
+                else
+                    treegen_bush_grow(d->buf, plantseed);
+            }
+
+            // plant origin sits one block above the surface (on top of ground).
+            wrote += stamp_buffer(c, d->buf, ax, gy + 1, az);
+        }
+    }
+    return wrote;
+}
+
+static int decorate_cover(treegen_deco *d, chunk *c,
+                          treegen_surface_fn surf, void *user) {
+    treegen_deco_config *cfg = &d->cfg;
 int cwx = c->cx * CHUNK_SIZE_X;
 int cwz = c->cz * CHUNK_SIZE_Z;
 int wrote = 0;
 for (int z = 0;
 z < CHUNK_SIZE_Z;
+z++) {
+        for (int x = 0; x < CHUNK_SIZE_X; x++) {
+            int wx = cwx + x, wz = cwz + z;
+            int gy; block_id surface;
+            if (!surf(user, wx, wz, &gy, &surface)) continue;
+
+            treegen_cover cov = treegen_grass_pick(wx, wz, surface,
+                                                   &cfg->scatter, cfg->seed);
+            if (cov == TREEGEN_COVER_NONE) continue;
+
+            int y = gy + 1;
+            if (y < 0 || y >= CHUNK_SIZE_Y) continue;
+            if (chunk_get_block(c, x, y, z) != BLOCK_AIR) continue;  // dont bury
+
+            block_id b = treegen_cover_block(cov, wx, wz, cfg->seed);
+            if (b == BLOCK_AIR) continue;
+            chunk_set_block(c, x, y, z, b);
+            wrote++;
+        }
+    }
+    return wrote;
+}
+
+int treegen_deco_chunk(treegen_deco *d, chunk *c,
+                       treegen_surface_fn surf, void *user) {
+    if (!d->buf || !c || !surf) return 0;
+    int wrote = decorate_trees(d, c, surf, user);
+    if (d->cfg.place_cover)
+        wrote += decorate_cover(d, c, surf, user);
+    if (wrote > 0) c->dirty = 1;   // canopy changed the mesh
+    return wrote;
+}
