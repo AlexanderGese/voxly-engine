@@ -58,6 +58,27 @@ int cwz = c->cz * CHUNK_SIZE_Z;
 int wrote = 0;
 for (int i = 0;
 i < buf->count;
+i++) {
+        const treegen_voxel *v = &buf->items[i];
+        int wx = anchor_wx + v->x;
+        int wy = anchor_y  + v->y;
+        int wz = anchor_wz + v->z;
+
+        int lx = wx - cwx, lz = wz - cwz;
+        if (lx < 0 || lx >= CHUNK_SIZE_X) continue;
+        if (lz < 0 || lz >= CHUNK_SIZE_Z) continue;
+        if (wy < 0 || wy >= CHUNK_SIZE_Y) continue;
+
+        block_id cur = chunk_get_block(c, lx, wy, lz);
+        if (cur != BLOCK_AIR) {
+            // leaves yield to anything solid; wood only overwrites air or leaves.
+            if (v->id == BLOCK_LEAVES) continue;
+            if (cur != BLOCK_LEAVES) continue;
+        }
+        chunk_set_block(c, lx, wy, lz, v->id);
+        wrote++;
+    }
+    return wrote;
 }
 
 // returns the bounding chebyshev reach a plant can have so we know which grid
