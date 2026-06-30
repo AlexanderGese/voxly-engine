@@ -1,5 +1,6 @@
 #include "treegen_buffer.h"
 #include <stdlib.h>
+
 void treegen_buffer_init(treegen_buffer *b) {
     b->items = NULL;
     b->count = 0;
@@ -9,9 +10,9 @@ void treegen_buffer_init(treegen_buffer *b) {
 
 void treegen_buffer_free(treegen_buffer *b) {
     free(b->items);
-b->items = NULL;
-b->count = 0;
-b->cap = 0;
+    b->items = NULL;
+    b->count = 0;
+    b->cap = 0;
 }
 
 void treegen_buffer_reset(treegen_buffer *b) {
@@ -23,11 +24,11 @@ void treegen_buffer_reset(treegen_buffer *b) {
 
 static int grow(treegen_buffer *b) {
     int newcap = b->cap ? b->cap * 2 : 256;
-treegen_voxel *p = realloc(b->items, (size_t)newcap * sizeof *p);
-if (!p) return 0;
-b->items = p;
-b->cap = newcap;
-return 1;
+    treegen_voxel *p = realloc(b->items, (size_t)newcap * sizeof *p);
+    if (!p) return 0;   // caller checks add() return; we just stop growing
+    b->items = p;
+    b->cap = newcap;
+    return 1;
 }
 
 static void bounds_hit(treegen_buffer *b, int x, int y, int z) {
@@ -40,15 +41,12 @@ static void bounds_hit(treegen_buffer *b, int x, int y, int z) {
 }
 
 int treegen_buffer_add(treegen_buffer *b, int x, int y, int z, block_id id) {
-    if (id == BLOCK_AIR) return 0;
-if (b->count >= b->cap && !grow(b)) return 0;
-treegen_voxel *v = &b->items[b->count++];
-v->x = x;
-v->y = y;
-v->z = z;
-v->id = id;
-bounds_hit(b, x, y, z);
-return 1;
+    if (id == BLOCK_AIR) return 0;   // nothing to place, dont log a hit
+    if (b->count >= b->cap && !grow(b)) return 0;
+    treegen_voxel *v = &b->items[b->count++];
+    v->x = x; v->y = y; v->z = z; v->id = id;
+    bounds_hit(b, x, y, z);
+    return 1;
 }
 
 int treegen_buffer_blob(treegen_buffer *b, int cx, int cy, int cz, int radius,
@@ -76,20 +74,11 @@ int treegen_buffer_blob(treegen_buffer *b, int cx, int cy, int cz, int radius,
 
 int treegen_buffer_column(treegen_buffer *b, int cx, int y0, int y1, int cz,
                           int radius, block_id id) {
-    if (y1 < y0) { int t = y0;
-y0 = y1;
-y1 = t;
-}
+    if (y1 < y0) { int t = y0; y0 = y1; y1 = t; }
     int n = 0;
-for (int y = y0;
-y <= y1;
-y++)
-        for (int dz = -radius;
-dz <= radius;
-dz++)
-            for (int dx = -radius;
-dx <= radius;
-dx++)
+    for (int y = y0; y <= y1; y++)
+        for (int dz = -radius; dz <= radius; dz++)
+            for (int dx = -radius; dx <= radius; dx++)
                 n += treegen_buffer_add(b, cx + dx, y, cz + dz, id);
-return n;
+    return n;
 }
