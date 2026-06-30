@@ -4,7 +4,9 @@
 #include "weathersim_precip.h"
 #include "weathersim_advect.h"
 #include "weathersim_rand.h"
+
 #include <math.h>
+
 weathersim_params weathersim_default_params(uint32_t seed) {
     weathersim_params p;
     p.seed = seed;
@@ -40,17 +42,21 @@ weathersim_params weathersim_default_params(uint32_t seed) {
 
 void weathersim_init(weathersim_ctx *ws, uint32_t seed, vec3 player_pos) {
     ws->params = weathersim_default_params(seed);
-ws->center_cx = weathersim_world_to_cell((int)floorf(player_pos.x));
-ws->center_cz = weathersim_world_to_cell((int)floorf(player_pos.z));
-weathersim_field_init(&ws->field, ws->center_cx, ws->center_cz);
-weathersim_climate_seed_field(&ws->field, ws->params.seed, 1);
-weathersim_front_pool_init(&ws->fronts);
-ws->tick_accum = 0.0f;
-ws->ticks = 0;
-ws->precip_fraction = 0.0f;
-ws->wind_peak = 0.0f;
-// prime the wind field so the very first query isn't dead calm.
-weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.0f);
+
+    ws->center_cx = weathersim_world_to_cell((int)floorf(player_pos.x));
+    ws->center_cz = weathersim_world_to_cell((int)floorf(player_pos.z));
+
+    weathersim_field_init(&ws->field, ws->center_cx, ws->center_cz);
+    weathersim_climate_seed_field(&ws->field, ws->params.seed, 1);
+    weathersim_front_pool_init(&ws->fronts);
+
+    ws->tick_accum = 0.0f;
+    ws->ticks = 0;
+    ws->precip_fraction = 0.0f;
+    ws->wind_peak = 0.0f;
+
+    // prime the wind field so the very first query isn't dead calm.
+    weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.0f);
 }
 
 // pass 2: diffuse toward neighbours and relax toward the climate baseline. the
@@ -97,8 +103,7 @@ static void relax_pass(weathersim_ctx *ws) {
 }
 
 // pass 3: ground thermal inertia + evaporation. the ground temperature lags the
-// air, so morning frost survives into a warm dawn;
-damp ground keeps feeding
+// air, so morning frost survives into a warm dawn; damp ground keeps feeding
 // humidity back into the column so weather can self-sustain a little.
 static void thermo_pass(weathersim_ctx *ws, float dt) {
     weathersim_field *f = &ws->field;
@@ -130,18 +135,22 @@ static void thermo_pass(weathersim_ctx *ws, float dt) {
 // in the outer loop, it only needs to run when the window actually moves).
 static void sim_tick(weathersim_ctx *ws, float dt) {
     relax_pass(ws);
-thermo_pass(ws, dt);
-weathersim_front_pool_update(&ws->fronts, &ws->params, &ws->field, dt);
-weathersim_front_pool_spawn(&ws->fronts, &ws->params, &ws->field, dt);
-weathersim_front_pool_apply(&ws->fronts, &ws->field, &ws->params);
-weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.85f);
-// carry temp/moisture/cloud downwind before condensing — this is what makes
-// a front's rain band lead its center instead of sitting dead under it.
-weathersim_advect_step(&ws->field, dt);
-ws->precip_fraction = weathersim_precip_step(&ws->field, &ws->fronts,
+    thermo_pass(ws, dt);
+
+    weathersim_front_pool_update(&ws->fronts, &ws->params, &ws->field, dt);
+    weathersim_front_pool_spawn(&ws->fronts, &ws->params, &ws->field, dt);
+    weathersim_front_pool_apply(&ws->fronts, &ws->field, &ws->params);
+
+    weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.85f);
+
+    // carry temp/moisture/cloud downwind before condensing — this is what makes
+    // a front's rain band lead its center instead of sitting dead under it.
+    weathersim_advect_step(&ws->field, dt);
+
+    ws->precip_fraction = weathersim_precip_step(&ws->field, &ws->fronts,
                                                  &ws->params, dt);
-ws->wind_peak = weathersim_wind_peak(&ws->field);
-++ws->ticks;
+    ws->wind_peak = weathersim_wind_peak(&ws->field);
+    ++ws->ticks;
 }
 
 void weathersim_update(weathersim_ctx *ws, vec3 player_pos, float dt) {
@@ -172,14 +181,14 @@ void weathersim_update(weathersim_ctx *ws, vec3 player_pos, float dt) {
 static void world_to_grid(const weathersim_ctx *ws, vec3 wp,
                           float *gx, float *gz) {
     float b = (float)WEATHERSIM_BLOCKS_PER_CELL;
-float cellf_x = wp.x / b - (float)ws->field.origin_cx;
-float cellf_z = wp.z / b - (float)ws->field.origin_cz;
-if (cellf_x < 0.0f) cellf_x = 0.0f;
-if (cellf_z < 0.0f) cellf_z = 0.0f;
-if (cellf_x > WEATHERSIM_DIM - 1) cellf_x = WEATHERSIM_DIM - 1;
-if (cellf_z > WEATHERSIM_DIM - 1) cellf_z = WEATHERSIM_DIM - 1;
-*gx = cellf_x;
-*gz = cellf_z;
+    float cellf_x = wp.x / b - (float)ws->field.origin_cx;
+    float cellf_z = wp.z / b - (float)ws->field.origin_cz;
+    if (cellf_x < 0.0f) cellf_x = 0.0f;
+    if (cellf_z < 0.0f) cellf_z = 0.0f;
+    if (cellf_x > WEATHERSIM_DIM - 1) cellf_x = WEATHERSIM_DIM - 1;
+    if (cellf_z > WEATHERSIM_DIM - 1) cellf_z = WEATHERSIM_DIM - 1;
+    *gx = cellf_x;
+    *gz = cellf_z;
 }
 
 weathersim_sample weathersim_query(const weathersim_ctx *ws, vec3 world_pos) {
@@ -222,7 +231,8 @@ weathersim_sample weathersim_query(const weathersim_ctx *ws, vec3 world_pos) {
 void weathersim_to_legacy(const weathersim_ctx *ws, vec3 player_pos,
                           weather *out) {
     weathersim_sample s = weathersim_query(ws, player_pos);
-switch (s.precip) {
+
+    switch (s.precip) {
         case WEATHERSIM_PRECIP_SNOW:
         case WEATHERSIM_PRECIP_SLEET:
             out->state = WEATHER_SNOW;
@@ -237,6 +247,9 @@ switch (s.precip) {
             break;
     }
     out->intensity = s.intensity;
-out->timer = 0.0f;
-out->next_change = 0.0f;
+    // the legacy struct's timer/next_change are driven by its own updater; we
+    // leave them be and just keep state/intensity in sync. clear the timer so a
+    // stale legacy schedule doesn't fight our state.
+    out->timer = 0.0f;
+    out->next_change = 0.0f;
 }
