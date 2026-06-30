@@ -1,5 +1,9 @@
 #include "treegen_lsystem.h"
 #include <stddef.h>
+
+// small helpers to keep the rule tables below readable. building a successor is
+// just memcpy-ish but spelled out so the tables stay declarative.
+
 static void rule_set(treegen_rule *r, treegen_sym pred, float w,
                      const treegen_sym *succ, int n) {
     r->pred = pred;
@@ -10,9 +14,7 @@ static void rule_set(treegen_rule *r, treegen_sym pred, float w,
 
 static void axiom_set(treegen_ruleset *rs, const treegen_sym *a, int n) {
     rs->axiom_len = n > TG_RULE_MAX ? TG_RULE_MAX : n;
-for (int i = 0;
-i < rs->axiom_len;
-i++) rs->axiom[i] = a[i];
+    for (int i = 0; i < rs->axiom_len; i++) rs->axiom[i] = a[i];
 }
 
 void treegen_ruleset_for(treegen_ruleset *rs, treegen_kind kind) {
@@ -101,21 +103,56 @@ void treegen_ruleset_for(treegen_ruleset *rs, treegen_kind kind) {
 static const treegen_rule *pick_rule(const treegen_ruleset *rs, treegen_sym sym,
                                      treegen_rng *r) {
     float total = 0.0f;
-for (int i = 0;
-i < rs->rule_count;
-i++)
+    for (int i = 0; i < rs->rule_count; i++)
         if (rs->rules[i].pred == sym) total += rs->rules[i].weight;
-if (total <= 0.0f) return NULL;
-float roll = treegen_rng_f01(r) * total;
-for (int i = 0;
-i < rs->rule_count;
-treegen_word *src = &a, *dst = &b;
-a.len = 0;
-word_append(&a, rs->axiom, rs->axiom_len);
-for (int it = 0;
-it < iters;
-for (int i = 0;
-i < src->len;
-i++) out->sym[i] = src->sym[i];
-return out->len;
+    if (total <= 0.0f) return NULL;
+
+    float roll = treegen_rng_f01(r) * total;
+    for (int i = 0; i < rs->rule_count; i++) {
+        if (rs->rules[i].pred != sym) continue;
+        roll -= rs->rules[i].weight;
+        if (roll <= 0.0f) return &rs->rules[i];
+    }
+    return NULL;   // float slop; treat as terminal this pass
+}
+
+// append symbols, refusing to overflow. returns 0 if it had to truncate.
+static int word_append(treegen_word *w, const treegen_sym *s, int n) {
+    if (w->len + n > TG_WORD_MAX) {
+        int room = TG_WORD_MAX - w->len;
+        for (int i = 0; i < room; i++) w->sym[w->len++] = s[i];
+        return 0;
+    }
+    for (int i = 0; i < n; i++) w->sym[w->len++] = s[i];
+    return 1;
+}
+
+int treegen_lsystem_rewrite(const treegen_ruleset *rs, int iters,
+                            treegen_rng *r, treegen_word *out) {
+    treegen_word a, b;
+    treegen_word *src = &a, *dst = &b;
+
+    a.len = 0;
+    word_append(&a, rs->axiom, rs->axiom_len);
+
+    for (int it = 0; it < iters; it++) {
+        dst->len = 0;
+        int truncated = 0;
+        for (int i = 0; i < src->len; i++) {
+            treegen_sym s = src->sym[i];
+            const treegen_rule *rule = pick_rule(rs, s, r);
+            if (rule) {
+                if (!word_append(dst, rule->succ, rule->succ_len)) truncated = 1;
+            } else {
+                if (!word_append(dst, &s, 1)) truncated = 1;
+            }
+            if (truncated) break;   // out of room, stop expanding this pass
+        }
+        treegen_word *tmp = src; src = dst; dst = tmp;
+        if (truncated) break;       // and stop iterating; what we have will do
+    }
+
+    out->len = src->len;
+    for (int i = 0; i < src->len; i++) out->sym[i] = src->sym[i];
+    return out->len;
 }
