@@ -49,6 +49,7 @@ ws->tick_accum = 0.0f;
 ws->ticks = 0;
 ws->precip_fraction = 0.0f;
 ws->wind_peak = 0.0f;
+// prime the wind field so the very first query isn't dead calm.
 weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.0f);
 }
 
@@ -134,6 +135,8 @@ weathersim_front_pool_update(&ws->fronts, &ws->params, &ws->field, dt);
 weathersim_front_pool_spawn(&ws->fronts, &ws->params, &ws->field, dt);
 weathersim_front_pool_apply(&ws->fronts, &ws->field, &ws->params);
 weathersim_wind_solve(&ws->field, ws->params.prevailing, 0.7f, 0.85f);
+// carry temp/moisture/cloud downwind before condensing — this is what makes
+// a front's rain band lead its center instead of sitting dead under it.
 weathersim_advect_step(&ws->field, dt);
 ws->precip_fraction = weathersim_precip_step(&ws->field, &ws->fronts,
                                                  &ws->params, dt);
