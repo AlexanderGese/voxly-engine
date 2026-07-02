@@ -1,8 +1,14 @@
 #include "weathersim_front.h"
 #include "weathersim_rand.h"
+
 #include <math.h>
 #include <string.h>
+
+// how far past the window edge a front can wander before we retire it. fronts
+// have a big footprint so they keep influencing the visible grid for a while
+// after their center leaves; a margin of a few radii avoids a hard cutoff.
 #define FRONT_RETIRE_MARGIN 6.0f
+
 void weathersim_front_pool_init(weathersim_front_pool *p) {
     memset(p, 0, sizeof *p);
     for (int i = 0; i < WEATHERSIM_MAX_FRONTS; ++i)
@@ -15,11 +21,11 @@ void weathersim_front_pool_init(weathersim_front_pool *p) {
 const char *weathersim_front_kind_name(weathersim_front_kind k) {
     switch (k) {
         case WEATHERSIM_FRONT_WARM:       return "warm";
-case WEATHERSIM_FRONT_COLD:       return "cold";
-case WEATHERSIM_FRONT_OCCLUDED:   return "occluded";
-case WEATHERSIM_FRONT_STATIONARY: return "stationary";
-default:                          return "?";
-}
+        case WEATHERSIM_FRONT_COLD:       return "cold";
+        case WEATHERSIM_FRONT_OCCLUDED:   return "occluded";
+        case WEATHERSIM_FRONT_STATIONARY: return "stationary";
+        default:                          return "?";
+    }
 }
 
 const char *weathersim_front_life_name(weathersim_life l) {
@@ -36,15 +42,15 @@ const char *weathersim_front_life_name(weathersim_life l) {
 // the transitions don't pop.
 static float life_envelope(float age, float lifespan) {
     if (lifespan <= 0.0f) return 0.0f;
-float t = age / lifespan;
-if (t < 0.0f) t = 0.0f;
-if (t > 1.0f) t = 1.0f;
-float up = t / 0.33f;
-if (up > 1.0f) up = 1.0f;
-float down = (1.0f - t) / 0.33f;
-if (down > 1.0f) down = 1.0f;
-float e = up * down;
-return e * e * (3.0f - 2.0f * e);
+    float t = age / lifespan;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    float up = t / 0.33f;
+    if (up > 1.0f) up = 1.0f;
+    float down = (1.0f - t) / 0.33f;
+    if (down > 1.0f) down = 1.0f;
+    float e = up * down;                 // overlaps in the middle -> ~1
+    return e * e * (3.0f - 2.0f * e);    // smoothstep
 }
 
 // drive the discrete lifecycle off the continuous age. forming -> mature ->
@@ -64,11 +70,10 @@ void weathersim_front_pool_update(weathersim_front_pool *p,
                                   const weathersim_params *params,
                                   const weathersim_field *f, float dt) {
     (void)params;
-p->clock += (double)dt;
-int live = 0;
-for (int i = 0;
-i < WEATHERSIM_MAX_FRONTS;
-++i) {
+    p->clock += (double)dt;
+
+    int live = 0;
+    for (int i = 0; i < WEATHERSIM_MAX_FRONTS; ++i) {
         weathersim_front *fr = &p->fronts[i];
         if (fr->life == WEATHERSIM_LIFE_DEAD) continue;
 
@@ -104,7 +109,7 @@ i < WEATHERSIM_MAX_FRONTS;
         ++live;
     }
     (void)f;
-p->count = live;
+    p->count = live;
 }
 
 // pick a free slot, -1 if the pool's full.
@@ -118,45 +123,58 @@ static int find_dead(weathersim_front_pool *p) {
 static void seed_front(weathersim_front *fr, const weathersim_params *params,
                        const weathersim_field *f, uint32_t seed) {
     weathersim_rng rg;
-weathersim_rng_seed(&rg, seed);
-vec2 dir = params->prevailing;
-float spd = vec2_length(dir);
-if (spd < 1e-3f) dir = (vec2){1.0f, 0.0f}, spd = 1.0f;
-dir = vec2_scale(dir, 1.0f / spd);
-float move = weathersim_rng_frange(&rg, 0.012f, 0.03f);
-fr->vel = vec2_scale(dir, move);
-float cxc = WEATHERSIM_DIM * 0.5f, czc = WEATHERSIM_DIM * 0.5f;
-float reach = WEATHERSIM_DIM * 0.65f;
-vec2 perp = (vec2){ -dir.y, dir.x }
-;
-float off = weathersim_rng_frange(&rg, -reach, reach);
-fr->pos = (vec2){ cxc - dir.x * reach + perp.x * off,
-                      czc - dir.y * reach + perp.y * off }
-;
-fr->radius = weathersim_rng_frange(&rg, params->front_min_radius,
+    weathersim_rng_seed(&rg, seed);
+
+    // base heading: the prevailing wind, in cells/sec. fronts move slower than
+    // the surface wind so scale it down.
+    vec2 dir = params->prevailing;
+    float spd = vec2_length(dir);
+    if (spd < 1e-3f) dir = (vec2){1.0f, 0.0f}, spd = 1.0f;
+    dir = vec2_scale(dir, 1.0f / spd);
+
+    // cells/sec. tune so a front crosses the ~33-cell window in a few minutes.
+    float move = weathersim_rng_frange(&rg, 0.012f, 0.03f);
+    fr->vel = vec2_scale(dir, move);
+
+    // enter from the upwind edge: project the window center back along -dir to
+    // the boundary, then jitter along the perpendicular so they don't all enter
+    // at the same spot.
+    float cxc = WEATHERSIM_DIM * 0.5f, czc = WEATHERSIM_DIM * 0.5f;
+    float reach = WEATHERSIM_DIM * 0.65f;
+    vec2 perp = (vec2){ -dir.y, dir.x };
+    float off = weathersim_rng_frange(&rg, -reach, reach);
+    fr->pos = (vec2){ cxc - dir.x * reach + perp.x * off,
+                      czc - dir.y * reach + perp.y * off };
+
+    fr->radius = weathersim_rng_frange(&rg, params->front_min_radius,
                                        params->front_max_radius);
-fr->lifespan = weathersim_rng_frange(&rg, params->front_min_life,
+    fr->lifespan = weathersim_rng_frange(&rg, params->front_min_life,
                                          params->front_max_life);
-fr->age = 0.0f;
-fr->life = WEATHERSIM_LIFE_FORMING;
-fr->strength = 0.0f;
-fr->seed = seed;
-int roll = weathersim_rng_range(&rg, 0, 99);
-if (roll < 40) {
+    fr->age = 0.0f;
+    fr->life = WEATHERSIM_LIFE_FORMING;
+    fr->strength = 0.0f;
+    fr->seed = seed;
+
+    // pick a kind. warm/cold dominate, occluded/stationary are rarer. cold
+    // fronts are deeper lows; warm ones shallower; highs show up as positive
+    // depth on a "stationary" sometimes for variety.
+    int roll = weathersim_rng_range(&rg, 0, 99);
+    if (roll < 40) {
         fr->kind = WEATHERSIM_FRONT_COLD;
         fr->depth = -weathersim_rng_frange(&rg, 9.0f, 22.0f);
     } else if (roll < 78) {
         fr->kind = WEATHERSIM_FRONT_WARM;
-fr->depth = -weathersim_rng_frange(&rg, 4.0f, 12.0f);
-} else if (roll < 90) {
+        fr->depth = -weathersim_rng_frange(&rg, 4.0f, 12.0f);
+    } else if (roll < 90) {
         fr->kind = WEATHERSIM_FRONT_OCCLUDED;
         fr->depth = -weathersim_rng_frange(&rg, 3.0f, 8.0f);
     } else {
         fr->kind = WEATHERSIM_FRONT_STATIONARY;
-float s = weathersim_rng_chance(&rg, 0.5f) ? 1.0f : -1.0f;
-fr->depth = s * weathersim_rng_frange(&rg, 5.0f, 14.0f);
-fr->vel = vec2_scale(fr->vel, 0.25f);
-}
+        // half of these are blocking highs (positive depth, clear skies).
+        float s = weathersim_rng_chance(&rg, 0.5f) ? 1.0f : -1.0f;
+        fr->depth = s * weathersim_rng_frange(&rg, 5.0f, 14.0f);
+        fr->vel = vec2_scale(fr->vel, 0.25f); // barely budges
+    }
     (void)f;
 }
 
@@ -184,11 +202,11 @@ void weathersim_front_pool_spawn(weathersim_front_pool *p,
 // gaussian footprint of a front at a grid cell, 0..1 before strength scaling.
 static float front_falloff(const weathersim_front *fr, int gx, int gz) {
     float dx = gx - fr->pos.x;
-float dz = gz - fr->pos.y;
-float r2 = dx * dx + dz * dz;
-float s2 = fr->radius * fr->radius;
-if (s2 < 1e-4f) return 0.0f;
-return expf(-r2 / (2.0f * s2));
+    float dz = gz - fr->pos.y;
+    float r2 = dx * dx + dz * dz;
+    float s2 = fr->radius * fr->radius;
+    if (s2 < 1e-4f) return 0.0f;
+    return expf(-r2 / (2.0f * s2));
 }
 
 void weathersim_front_pool_apply(const weathersim_front_pool *p,
@@ -242,8 +260,17 @@ void weathersim_front_pool_apply(const weathersim_front_pool *p,
 float weathersim_front_precip_weight(const weathersim_front_pool *p,
                                      const weathersim_field *f, int gx, int gz) {
     (void)f;
-float w = 0.0f;
-for (int i = 0;
-i < WEATHERSIM_MAX_FRONTS;
-return w;
+    float w = 0.0f;
+    for (int i = 0; i < WEATHERSIM_MAX_FRONTS; ++i) {
+        const weathersim_front *fr = &p->fronts[i];
+        if (fr->life == WEATHERSIM_LIFE_DEAD) continue;
+        // only lows precipitate. highs (positive depth) suppress, skip them.
+        if (fr->depth >= 0.0f) continue;
+        float g = front_falloff(fr, gx, gz) * fr->strength;
+        // cold fronts punch above their footprint, warm fronts drizzle wide.
+        float k = (fr->kind == WEATHERSIM_FRONT_COLD) ? 1.4f : 1.0f;
+        w += g * k;
+    }
+    if (w > 1.0f) w = 1.0f;
+    return w;
 }

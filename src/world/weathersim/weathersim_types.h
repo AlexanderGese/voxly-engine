@@ -1,1 +1,9 @@
 #ifndef WORLD_WEATHERSIM_TYPES_H
+#define WORLD_WEATHERSIM_TYPES_H
+#define WEATHERSIM_CHUNKS_PER_CELL  4
+#define WEATHERSIM_BLOCKS_PER_CELL  (WEATHERSIM_CHUNKS_PER_CELL * CHUNK_SIZE_X)
+#define WEATHERSIM_DIM   33
+#define WEATHERSIM_CELLS (WEATHERSIM_DIM * WEATHERSIM_DIM)
+#define WEATHERSIM_P_REF      1013.0f
+#define WEATHERSIM_DEW_SLOPE  4.6f    // how fast saturation rises with temp
+#define WEATHERSIM_LAPSE      0.0065f // temp drop per meter of altitude
