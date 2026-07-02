@@ -1,9 +1,12 @@
 #include "weathersim_precip.h"
+
 #include <math.h>
+
 // saturation as a relative-humidity threshold. warmer air holds more moisture,
 // so the *relative* threshold for condensation actually drops with temp in this
 // simple model: cold air saturates easily (winter fog), warm air has headroom.
 // it's a soft logistic centred on a mild temperature. not physically rigorous,
+// but monotone and bounded, which is all the precip logic needs.
 float weathersim_precip_saturation(float temp_c, float dew_bias) {
     float t = (temp_c - 8.0f) / WEATHERSIM_DEW_SLOPE;
     float s = 0.55f + 0.30f / (1.0f + expf(-t)); // ~0.55..0.85
@@ -16,11 +19,12 @@ float weathersim_precip_saturation(float temp_c, float dew_bias) {
 weathersim_precip weathersim_precip_classify(float temp_c, float over,
                                              float snow_temp) {
     if (over <= 0.0f) return WEATHERSIM_PRECIP_NONE;
-if (temp_c <= snow_temp) return WEATHERSIM_PRECIP_SNOW;
-if (temp_c <= snow_temp + 2.0f) return WEATHERSIM_PRECIP_SLEET;
-if (over < 0.06f) return WEATHERSIM_PRECIP_DRIZZLE;
-if (over < 0.18f) return WEATHERSIM_PRECIP_RAIN;
-return WEATHERSIM_PRECIP_DOWNPOUR;
+    if (temp_c <= snow_temp) return WEATHERSIM_PRECIP_SNOW;
+    if (temp_c <= snow_temp + 2.0f) return WEATHERSIM_PRECIP_SLEET;
+    // above freezing: scale the rain band by how hard it's coming down.
+    if (over < 0.06f) return WEATHERSIM_PRECIP_DRIZZLE;
+    if (over < 0.18f) return WEATHERSIM_PRECIP_RAIN;
+    return WEATHERSIM_PRECIP_DOWNPOUR;
 }
 
 float weathersim_precip_step(weathersim_field *f,
@@ -85,11 +89,12 @@ weathersim_precip weathersim_precip_at(const weathersim_field *f,
                                        const weathersim_params *params,
                                        int gx, int gz, float *intensity_out) {
     const weathersim_cell *c = weathersim_field_at_const(f, gx, gz);
-float sat = weathersim_precip_saturation(c->temp, params->dew_bias);
-float over = c->humidity - sat - params->precip_threshold;
-weathersim_precip kind = weathersim_precip_classify(c->temp, over,
+    float sat = weathersim_precip_saturation(c->temp, params->dew_bias);
+    float over = c->humidity - sat - params->precip_threshold;
+
+    weathersim_precip kind = weathersim_precip_classify(c->temp, over,
                                                         params->snow_temp);
-if (intensity_out) {
+    if (intensity_out) {
         // map over-saturation onto a 0..1 intensity for the particle budget.
         float it = over * 5.0f;
         if (it < 0.0f) it = 0.0f;

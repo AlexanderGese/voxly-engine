@@ -105,16 +105,33 @@ i < WEATHERSIM_MAX_FRONTS;
     }
     (void)f;
 p->count = live;
+}
+
+// pick a free slot, -1 if the pool's full.
+static int find_dead(weathersim_front_pool *p) {
+    for (int i = 0; i < WEATHERSIM_MAX_FRONTS; ++i)
+        if (p->fronts[i].life == WEATHERSIM_LIFE_DEAD) return i;
+    return -1;
+}
+
+// seed one front entering from the windward edge, heading downwind.
+static void seed_front(weathersim_front *fr, const weathersim_params *params,
+                       const weathersim_field *f, uint32_t seed) {
+    weathersim_rng rg;
 weathersim_rng_seed(&rg, seed);
 vec2 dir = params->prevailing;
 float spd = vec2_length(dir);
+if (spd < 1e-3f) dir = (vec2){1.0f, 0.0f}, spd = 1.0f;
 dir = vec2_scale(dir, 1.0f / spd);
 float move = weathersim_rng_frange(&rg, 0.012f, 0.03f);
 fr->vel = vec2_scale(dir, move);
 float cxc = WEATHERSIM_DIM * 0.5f, czc = WEATHERSIM_DIM * 0.5f;
 float reach = WEATHERSIM_DIM * 0.65f;
+vec2 perp = (vec2){ -dir.y, dir.x }
 ;
 float off = weathersim_rng_frange(&rg, -reach, reach);
+fr->pos = (vec2){ cxc - dir.x * reach + perp.x * off,
+                      czc - dir.y * reach + perp.y * off }
 ;
 fr->radius = weathersim_rng_frange(&rg, params->front_min_radius,
                                        params->front_max_radius);
@@ -125,17 +142,106 @@ fr->life = WEATHERSIM_LIFE_FORMING;
 fr->strength = 0.0f;
 fr->seed = seed;
 int roll = weathersim_rng_range(&rg, 0, 99);
+if (roll < 40) {
+        fr->kind = WEATHERSIM_FRONT_COLD;
+        fr->depth = -weathersim_rng_frange(&rg, 9.0f, 22.0f);
+    } else if (roll < 78) {
+        fr->kind = WEATHERSIM_FRONT_WARM;
 fr->depth = -weathersim_rng_frange(&rg, 4.0f, 12.0f);
+} else if (roll < 90) {
+        fr->kind = WEATHERSIM_FRONT_OCCLUDED;
+        fr->depth = -weathersim_rng_frange(&rg, 3.0f, 8.0f);
+    } else {
+        fr->kind = WEATHERSIM_FRONT_STATIONARY;
 float s = weathersim_rng_chance(&rg, 0.5f) ? 1.0f : -1.0f;
 fr->depth = s * weathersim_rng_frange(&rg, 5.0f, 14.0f);
 fr->vel = vec2_scale(fr->vel, 0.25f);
 }
     (void)f;
+}
+
+void weathersim_front_pool_spawn(weathersim_front_pool *p,
+                                 const weathersim_params *params,
+                                 const weathersim_field *f, float dt) {
+    // expected fronts this tick = rate(per min) * dt / 60.
+    p->spawn_accum += params->front_rate * dt / 60.0f;
+
+    // hash a coarse time bucket so replays line up. bucket every ~8 seconds.
+    int bucket = (int)(p->clock / 8.0);
+
+    while (p->spawn_accum >= 1.0f) {
+        p->spawn_accum -= 1.0f;
+        int slot = find_dead(p);
+        if (slot < 0) break; // pool saturated, drop the spawn
+
+        uint32_t seed = weathersim_seed_mix(params->seed,
+                          weathersim_hash2(bucket, slot, params->seed));
+        seed_front(&p->fronts[slot], params, f, seed);
+        ++bucket; // so two spawns in one tick don't collide
+    }
+}
+
+// gaussian footprint of a front at a grid cell, 0..1 before strength scaling.
+static float front_falloff(const weathersim_front *fr, int gx, int gz) {
+    float dx = gx - fr->pos.x;
 float dz = gz - fr->pos.y;
 float r2 = dx * dx + dz * dz;
 float s2 = fr->radius * fr->radius;
 if (s2 < 1e-4f) return 0.0f;
 return expf(-r2 / (2.0f * s2));
+}
+
+void weathersim_front_pool_apply(const weathersim_front_pool *p,
+                                 weathersim_field *f,
+                                 const weathersim_params *params) {
+    (void)params;
+    for (int i = 0; i < WEATHERSIM_MAX_FRONTS; ++i) {
+        const weathersim_front *fr = &p->fronts[i];
+        if (fr->life == WEATHERSIM_LIFE_DEAD) continue;
+        float amp = fr->strength;
+        if (amp <= 1e-3f) continue;
+
+        for (int gz = 0; gz < WEATHERSIM_DIM; ++gz) {
+            for (int gx = 0; gx < WEATHERSIM_DIM; ++gx) {
+                float g = front_falloff(fr, gx, gz);
+                if (g < 1e-3f) continue;
+                weathersim_cell *c = &f->cells[weathersim_field_idx(gx, gz)];
+                float w = g * amp;
+
+                c->pressure += fr->depth * w;
+
+                // warm fronts nudge temp up and pile on humidity; cold fronts
+                // drop temp sharply and bring a humidity spike at the leading
+                // edge; occluded just adds moisture, stationary mostly clouds.
+                switch (fr->kind) {
+                    case WEATHERSIM_FRONT_WARM:
+                        c->temp     += 3.5f * w;
+                        c->humidity += 0.30f * w;
+                        break;
+                    case WEATHERSIM_FRONT_COLD:
+                        c->temp     -= 5.0f * w;
+                        c->humidity += 0.40f * w;
+                        break;
+                    case WEATHERSIM_FRONT_OCCLUDED:
+                        c->temp     -= 1.0f * w;
+                        c->humidity += 0.22f * w;
+                        break;
+                    case WEATHERSIM_FRONT_STATIONARY:
+                        // a high (positive depth) dries the air out instead.
+                        c->humidity += (fr->depth < 0.0f ? 0.18f : -0.15f) * w;
+                        break;
+                    default: break;
+                }
+                if (c->humidity > 1.0f) c->humidity = 1.0f;
+                if (c->humidity < 0.0f) c->humidity = 0.0f;
+            }
+        }
+    }
+}
+
+float weathersim_front_precip_weight(const weathersim_front_pool *p,
+                                     const weathersim_field *f, int gx, int gz) {
+    (void)f;
 float w = 0.0f;
 for (int i = 0;
 i < WEATHERSIM_MAX_FRONTS;
