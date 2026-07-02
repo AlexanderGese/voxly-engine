@@ -1,12 +1,13 @@
 #include "axes.h"
 #include "../math/mat4.h"
 #include "../util/log.h"
+
 static const float verts[] = {
     0,0,0, 1,0,0, 1,0,0, 1,0,0,
     0,0,0, 0,1,0, 0,1,0, 0,1,0,
     0,0,0, 0,0,1, 0,0,1, 0,0,1,
-}
-;
+};
+
 int axes_init(axes_gizmo *a) {
     a->prog = gl_load_shader("shaders/axes.vert", "shaders/axes.frag");
     if (!a->prog) { LOGE("axes shader failed"); return 0; }
@@ -26,8 +27,8 @@ int axes_init(axes_gizmo *a) {
 
 void axes_destroy(axes_gizmo *a) {
     if (a->vao) glDeleteVertexArrays(1, &a->vao);
-if (a->vbo) glDeleteBuffers(1, &a->vbo);
-gl_delete_shader(a->prog);
+    if (a->vbo) glDeleteBuffers(1, &a->vbo);
+    gl_delete_shader(a->prog);
 }
 
 void axes_draw(axes_gizmo *a, const camera *cam, float scale) {
