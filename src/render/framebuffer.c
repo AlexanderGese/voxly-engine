@@ -1,6 +1,8 @@
 #include "framebuffer.h"
 #include "../util/log.h"
+
 #include <stddef.h>
+
 int framebuffer_create(framebuffer *fb, int w, int h) {
     fb->w = w;
     fb->h = h;
@@ -33,6 +35,22 @@ int framebuffer_create(framebuffer *fb, int w, int h) {
 
 void framebuffer_destroy(framebuffer *fb) {
     if (fb->fbo)   glDeleteFramebuffers(1, &fb->fbo);
-if (fb->color) glDeleteTextures(1, &fb->color);
-if (fb->depth) glDeleteRenderbuffers(1, &fb->depth);
-fb->fbo = fb->color = fb->depth = 0;
+    if (fb->color) glDeleteTextures(1, &fb->color);
+    if (fb->depth) glDeleteRenderbuffers(1, &fb->depth);
+    fb->fbo = fb->color = fb->depth = 0;
+}
+
+void framebuffer_bind(const framebuffer *fb) {
+    glBindFramebuffer(GL_FRAMEBUFFER, fb->fbo);
+    glViewport(0, 0, fb->w, fb->h);
+}
+
+void framebuffer_unbind(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void framebuffer_resize(framebuffer *fb, int w, int h) {
+    if (fb->w == w && fb->h == h) return;
+    framebuffer_destroy(fb);
+    framebuffer_create(fb, w, h);
+}
