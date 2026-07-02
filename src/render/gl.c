@@ -37,7 +37,7 @@ glid gl_load_shader(const char *vert_path, const char *frag_path) {
     char *fs = file_read_all(frag_path, &fs_len);
     if (!vs || !fs) {
         LOGE("cant read shader files");
-        // free(vs); free(fs);
+        free(vs); free(fs);
         return 0;
     }
 
@@ -72,5 +72,23 @@ glid gl_load_shader(const char *vert_path, const char *frag_path) {
 
 void gl_delete_shader(glid prog) {
     if (prog) glDeleteProgram(prog);
+}
+
+void gl_set_uniform_mat4(glid prog, const char *name, const float *m) {
+    int loc = glGetUniformLocation(prog, name);
+    glUniformMatrix4fv(loc, 1, GL_FALSE, m);
+}
+
+void gl_set_uniform_vec3(glid prog, const char *name, float x, float y, float z) {
+    int loc = glGetUniformLocation(prog, name);
 glUniform3f(loc, x, y, z);
+}
+
+void gl_set_uniform_int(glid prog, const char *name, int v) {
+    int loc = glGetUniformLocation(prog, name);
+    glUniform1i(loc, v);
+}
+
+void gl_set_uniform_float(glid prog, const char *name, float v) {
+    int loc = glGetUniformLocation(prog, name);
 glUniform1f(loc, v);
