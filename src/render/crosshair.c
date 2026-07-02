@@ -1,4 +1,5 @@
 #include "crosshair.h"
+
 void crosshair_init(crosshair *ch, float size) {
     ch->size = size;
     ch->thickness = 2.0f;
@@ -19,25 +20,42 @@ void crosshair_init(crosshair *ch, float size) {
 
 void crosshair_draw(crosshair *ch, glid prog, int sw, int sh) {
     glDisable(GL_DEPTH_TEST);
-glDisable(GL_CULL_FACE);
-glEnable(GL_BLEND);
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-glUseProgram(prog);
-gl_set_uniform_float(prog, "u_sw", (float)sw);
-gl_set_uniform_float(prog, "u_sh", (float)sh);
-gl_set_uniform_vec3(prog, "u_color", ch->r, ch->g, ch->b);
-float cx = sw * 0.5f;
-float cy = sh * 0.5f;
-float s = ch->size;
-glBindVertexArray(ch->vao);
-glLineWidth(ch->thickness);
-glBindBuffer(GL_ARRAY_BUFFER, ch->vbo);
-glBufferData(GL_ARRAY_BUFFER, sizeof cross, cross, GL_DYNAMIC_DRAW);
-glDrawArrays(GL_LINES, 0, 4);
-glLineWidth(1.0f);
-}
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(prog);
+    gl_set_uniform_float(prog, "u_sw", (float)sw);
+    gl_set_uniform_float(prog, "u_sh", (float)sh);
+    gl_set_uniform_vec3(prog, "u_color", ch->r, ch->g, ch->b);
+
+    float cx = sw * 0.5f;
+    float cy = sh * 0.5f;
+    float s = ch->size;
+
+    glBindVertexArray(ch->vao);
+
+    if (ch->dot_mode) {
+        // 4x4 pixel dot in center
+        float dot[] = {
+            cx-2, cy-2, cx+2, cy-2, cx+2, cy+2,
+            cx-2, cy-2, cx+2, cy+2, cx-2, cy+2,
+        };
+        glBindBuffer(GL_ARRAY_BUFFER, ch->vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof dot, dot, GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    } else {
+        float cross[] = {
+            cx - s, cy,     cx + s, cy,
+            cx,     cy - s, cx,     cy + s,
+        };
+        glLineWidth(ch->thickness);
+        glBindBuffer(GL_ARRAY_BUFFER, ch->vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof cross, cross, GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_LINES, 0, 4);
+        glLineWidth(1.0f);
+    }
 
     glDisable(GL_BLEND);
-glEnable(GL_CULL_FACE);
-glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
 }
