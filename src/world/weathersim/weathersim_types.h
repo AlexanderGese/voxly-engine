@@ -1,0 +1,1 @@
+#ifndef WORLD_WEATHERSIM_TYPES_H
