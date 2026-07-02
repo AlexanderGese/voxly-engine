@@ -68,6 +68,42 @@ p->clock += (double)dt;
 int live = 0;
 for (int i = 0;
 i < WEATHERSIM_MAX_FRONTS;
+++i) {
+        weathersim_front *fr = &p->fronts[i];
+        if (fr->life == WEATHERSIM_LIFE_DEAD) continue;
+
+        fr->age += dt;
+        advance_life(fr);
+        if (fr->life == WEATHERSIM_LIFE_DEAD) continue;
+
+        // integrate drift. stationary fronts barely move; the rest ride their
+        // spawn velocity with a slow heading wobble so paths aren't dead straight.
+        weathersim_rng rg;
+        weathersim_rng_seed(&rg, weathersim_seed_mix(fr->seed,
+                            (uint32_t)(fr->age * 4.0f)));
+        float wobble = weathersim_rng_gauss(&rg) * 0.04f;
+        float cs = cosf(wobble), sn = sinf(wobble);
+        vec2 v = fr->vel;
+        fr->vel = (vec2){ v.x * cs - v.y * sn, v.x * sn + v.y * cs };
+
+        fr->pos = vec2_add(fr->pos, vec2_scale(fr->vel, dt));
+        fr->strength = life_envelope(fr->age, fr->lifespan);
+
+        // occluded fronts wind down faster: they're remnants, so bleed depth.
+        if (fr->kind == WEATHERSIM_FRONT_OCCLUDED)
+            fr->depth *= (1.0f - 0.05f * dt);
+
+        // retire anything that's wandered well clear of the window.
+        float lo = -FRONT_RETIRE_MARGIN - fr->radius;
+        float hi = (float)WEATHERSIM_DIM + FRONT_RETIRE_MARGIN + fr->radius;
+        if (fr->pos.x < lo || fr->pos.x > hi ||
+            fr->pos.y < lo || fr->pos.y > hi) {
+            fr->life = WEATHERSIM_LIFE_DEAD;
+            continue;
+        }
+        ++live;
+    }
+    (void)f;
 p->count = live;
 weathersim_rng_seed(&rg, seed);
 vec2 dir = params->prevailing;
