@@ -1,5 +1,12 @@
 #include "ambient_occlusion.h"
 #include "../world/block.h"
+
+// AO corner sample positions for each face.
+// for face +Y (top), the 4 corners of the quad need to sample the 8
+// blocks surrounding the vertex in the plane perpendicular to the face normal.
+//
+// reference: https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/
+
 static int is_opaque(world *w, int x, int y, int z) {
     return block_is_opaque(world_get_block(w, x, y, z));
 }
@@ -8,9 +15,9 @@ static int is_opaque(world *w, int x, int y, int z) {
 // AO value = 3 - (side1 + side2 + corner) if both sides occluded,
 // else 3 - (side1 + side2 + corner)
 static float ao_vertex(int side1, int side2, int corner) {
-    if (side1 && side2) return 0.0f;
-float v = 3.0f - (float)(side1 + side2 + corner);
-return v / 3.0f;
+    if (side1 && side2) return 0.0f;  // fully occluded corner
+    float v = 3.0f - (float)(side1 + side2 + corner);
+    return v / 3.0f;
 }
 
 void ao_face(world *w, int wx, int wy, int wz, int face, float out[4]) {
@@ -73,7 +80,7 @@ void ao_face(world *w, int wx, int wy, int wz, int face, float out[4]) {
 float ao_factor(world *w, int wx, int wy, int wz,
                 int face, int vertex_index) {
     float corners[4];
-ao_face(w, wx, wy, wz, face, corners);
-if (vertex_index < 0 || vertex_index > 3) return 1.0f;
-return corners[vertex_index];
+    ao_face(w, wx, wy, wz, face, corners);
+    if (vertex_index < 0 || vertex_index > 3) return 1.0f;
+    return corners[vertex_index];
 }
