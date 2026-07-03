@@ -3,7 +3,9 @@
 #include "skybox.h"
 #include "../util/log.h"
 #include "../math/mat4.h"
+
 #include <stdlib.h>
+
 int renderer_init(renderer *r, const char *atlas_path) {
     r->prog_block  = gl_load_shader("shaders/block.vert", "shaders/block.frag");
     r->prog_skybox = gl_load_shader("shaders/skybox.vert","shaders/skybox.frag");
@@ -28,24 +30,43 @@ int renderer_init(renderer *r, const char *atlas_path) {
 
 void renderer_shutdown(renderer *r) {
     gl_delete_shader(r->prog_block);
-gl_delete_shader(r->prog_skybox);
-gl_delete_shader(r->prog_hud);
-texture_destroy(&r->atlas);
-free(r->chunk_meshes);
+    gl_delete_shader(r->prog_skybox);
+    gl_delete_shader(r->prog_hud);
+    texture_destroy(&r->atlas);
+    // chunk meshes now live on the chunk structs, not here
+    free(r->chunk_meshes);
 }
 
 typedef struct {
     renderer *r;
     world    *w;
 } draw_ctx;
-mat4 view = camera_view(cam);
-mat4 proj = camera_proj(cam);
-skybox_draw(r->prog_skybox, cam);
-glUseProgram(r->prog_block);
-gl_set_uniform_mat4(r->prog_block, "u_view", mat4_data(&view));
-gl_set_uniform_mat4(r->prog_block, "u_proj", mat4_data(&proj));
-gl_set_uniform_int (r->prog_block, "u_atlas", 0);
-texture_bind(&r->atlas, 0);
-;
-world_visit(w, visit_draw, &dc);
+
+static void visit_draw(chunk *c, void *u) {
+    draw_ctx *d = u;
+    if (c->dirty) mesher_build_chunk(d->w, c);
+    if (c->vertex_count > 0 && c->vao) {
+        glBindVertexArray(c->vao);
+        glDrawArrays(GL_TRIANGLES, 0, c->vertex_count);
+    }
+}
+
+void renderer_draw(renderer *r, world *w, const camera *cam) {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    mat4 view = camera_view(cam);
+    mat4 proj = camera_proj(cam);
+
+    // skybox first
+    skybox_draw(r->prog_skybox, cam);
+
+    // blocks
+    glUseProgram(r->prog_block);
+    gl_set_uniform_mat4(r->prog_block, "u_view", mat4_data(&view));
+    gl_set_uniform_mat4(r->prog_block, "u_proj", mat4_data(&proj));
+    gl_set_uniform_int (r->prog_block, "u_atlas", 0);
+    texture_bind(&r->atlas, 0);
+
+    draw_ctx dc = { r, w };
+    world_visit(w, visit_draw, &dc);
 }
