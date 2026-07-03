@@ -1,0 +1,1 @@
+#ifndef RENDER_BLOOM2_PASS_H
