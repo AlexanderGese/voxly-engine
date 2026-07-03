@@ -85,3 +85,28 @@ i--) {
     }
 
     glDisable(GL_BLEND);
+}
+
+void bloom2_pass_composite(const bloom2_programs *prog,
+                           const bloom2_chain *chain,
+                           const bloom2_params *params,
+                           const bloom2_quad *quad,
+                           int dst_w, int dst_h) {
+    // assumes the caller already bound the destination framebuffer (0 for the
+    // backbuffer, or an intermediate ldr target). we just add over it.
+    const bloom2_target *src = &chain->mip[0];
+
+    glViewport(0, 0, dst_w, dst_h);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBlendEquation(GL_FUNC_ADD);
+
+    glUseProgram(prog->composite);
+    bloom2_target_bind_tex(src, 0);
+    gl_set_uniform_int(prog->composite, "u_bloom", 0);
+    gl_set_uniform_float(prog->composite, "u_intensity", params->intensity);
+
+    bloom2_quad_draw(quad);
+
+    glDisable(GL_BLEND);
+}
