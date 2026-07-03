@@ -1,10 +1,12 @@
 #include "gl.h"
 #include "../util/log.h"
 #include "../util/file.h"
+
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 int gl_init(void) {
     if (!gladLoadGL((GLADloadfunc)glfwGetProcAddress)) {
         LOGE("glad failed to load gl");
@@ -17,11 +19,11 @@ int gl_init(void) {
 
 static glid compile_one(GLenum type, const char *src, const char *path) {
     glid s = glCreateShader(type);
-glShaderSource(s, 1, &src, NULL);
-glCompileShader(s);
-int ok;
-glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-if (!ok) {
+    glShaderSource(s, 1, &src, NULL);
+    glCompileShader(s);
+    int ok;
+    glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
         char log[1024];
         glGetShaderInfoLog(s, sizeof log, NULL, log);
         LOGE("shader compile %s: %s", path, log);
@@ -81,7 +83,7 @@ void gl_set_uniform_mat4(glid prog, const char *name, const float *m) {
 
 void gl_set_uniform_vec3(glid prog, const char *name, float x, float y, float z) {
     int loc = glGetUniformLocation(prog, name);
-glUniform3f(loc, x, y, z);
+    glUniform3f(loc, x, y, z);
 }
 
 void gl_set_uniform_int(glid prog, const char *name, int v) {
@@ -91,4 +93,18 @@ void gl_set_uniform_int(glid prog, const char *name, int v) {
 
 void gl_set_uniform_float(glid prog, const char *name, float v) {
     int loc = glGetUniformLocation(prog, name);
-glUniform1f(loc, v);
+    glUniform1f(loc, v);
+}
+
+void gl_check_error_(const char *file, int line) {
+    GLenum e = glGetError();
+    if (e == GL_NO_ERROR) return;
+    const char *name = "?";
+    switch (e) {
+    case GL_INVALID_ENUM:      name = "INVALID_ENUM"; break;
+    case GL_INVALID_VALUE:     name = "INVALID_VALUE"; break;
+    case GL_INVALID_OPERATION: name = "INVALID_OPERATION"; break;
+    case GL_OUT_OF_MEMORY:     name = "OUT_OF_MEMORY"; break;
+    }
+    LOGW("gl error %s at %s:%d", name, file, line);
+}
