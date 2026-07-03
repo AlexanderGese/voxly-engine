@@ -1,5 +1,9 @@
 #include "bloom2_pass.h"
+
 #include <stddef.h>
+
+// helper: set the inverse texel size uniform the down/up shaders use to step
+// to neighbour texels. they sample in normalized uv so they need 1/size.
 static void set_texel_size(glid prog, int w, int h) {
     float tx = (w > 0) ? 1.0f / (float)w : 0.0f;
     float ty = (h > 0) ? 1.0f / (float)h : 0.0f;
@@ -14,21 +18,27 @@ void bloom2_pass_bright(const bloom2_programs *prog,
                         const bloom2_quad *quad,
                         glid scene_tex) {
     const bloom2_target *dst = &chain->mip[0];
-float knee[4];
-bloom2_params_knee_curve(params, knee);
-bloom2_target_bind(dst);
-glDisable(GL_BLEND);
-glUseProgram(prog->bright);
-glActiveTexture(GL_TEXTURE0);
-glBindTexture(GL_TEXTURE_2D, scene_tex);
-gl_set_uniform_int(prog->bright, "u_scene", 0);
-gl_set_uniform_float(prog->bright, "u_knee_x", knee[0]);
-gl_set_uniform_float(prog->bright, "u_knee_y", knee[1]);
-gl_set_uniform_float(prog->bright, "u_knee_z", knee[2]);
-gl_set_uniform_float(prog->bright, "u_knee_w", knee[3]);
-gl_set_uniform_float(prog->bright, "u_clamp", params->clamp_max);
-set_texel_size(prog->bright, dst->w, dst->h);
-bloom2_quad_draw(quad);
+
+    float knee[4];
+    bloom2_params_knee_curve(params, knee);
+
+    bloom2_target_bind(dst);
+    glDisable(GL_BLEND);   // straight write, no accumulation here
+    glUseProgram(prog->bright);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, scene_tex);
+    gl_set_uniform_int(prog->bright, "u_scene", 0);
+
+    // shader does: c = max(luma-knee.y,0); soft = c*c*knee.w; w = max(soft, luma-knee.x)
+    gl_set_uniform_float(prog->bright, "u_knee_x", knee[0]);
+    gl_set_uniform_float(prog->bright, "u_knee_y", knee[1]);
+    gl_set_uniform_float(prog->bright, "u_knee_z", knee[2]);
+    gl_set_uniform_float(prog->bright, "u_knee_w", knee[3]);
+    gl_set_uniform_float(prog->bright, "u_clamp", params->clamp_max);
+    set_texel_size(prog->bright, dst->w, dst->h);
+
+    bloom2_quad_draw(quad);
 }
 
 void bloom2_pass_downsample(const bloom2_programs *prog,
@@ -60,14 +70,14 @@ void bloom2_pass_upsample(const bloom2_programs *prog,
     // additive: each lower mip adds its tent-filtered glow into the next one
     // up. one-source-one-dest blend keeps the energy bounded.
     glEnable(GL_BLEND);
-glBlendFunc(GL_ONE, GL_ONE);
-glBlendEquation(GL_FUNC_ADD);
-glUseProgram(prog->up);
-gl_set_uniform_int(prog->up, "u_src", 0);
-gl_set_uniform_float(prog->up, "u_radius", params->radius);
-for (int i = chain->count - 1;
-i > 0;
-i--) {
+    glBlendFunc(GL_ONE, GL_ONE);
+    glBlendEquation(GL_FUNC_ADD);
+
+    glUseProgram(prog->up);
+    gl_set_uniform_int(prog->up, "u_src", 0);
+    gl_set_uniform_float(prog->up, "u_radius", params->radius);
+
+    for (int i = chain->count - 1; i > 0; i--) {
         const bloom2_target *src = &chain->mip[i];
         const bloom2_target *dst = &chain->mip[i - 1];
 
