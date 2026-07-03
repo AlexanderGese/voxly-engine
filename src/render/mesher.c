@@ -1,8 +1,13 @@
 #include "mesher.h"
 #include "../world/block.h"
 #include "../config.h"
+
 #include <stdlib.h>
 #include <string.h>
+
+// face order: +x, -x, +y, -y, +z, -z
+// each face = 6 vertices (2 triangles)
+
 static const float face_verts[6][6][3] = {
     // +x
     {{1,0,0},{1,1,0},{1,1,1},{1,0,0},{1,1,1},{1,0,1}},
@@ -16,8 +21,8 @@ static const float face_verts[6][6][3] = {
     {{1,0,1},{1,1,1},{0,1,1},{1,0,1},{0,1,1},{0,0,1}},
     // -z
     {{0,0,0},{0,1,0},{1,1,0},{0,0,0},{1,1,0},{1,0,0}}
-}
-;
+};
+
 static const float face_uvs[6][6][2] = {
     {{0,0},{0,1},{1,1},{0,0},{1,1},{1,0}},
     {{0,0},{0,1},{1,1},{0,0},{1,1},{1,0}},
@@ -25,8 +30,8 @@ static const float face_uvs[6][6][2] = {
     {{0,0},{0,1},{1,1},{0,0},{1,1},{1,0}},
     {{0,0},{0,1},{1,1},{0,0},{1,1},{1,0}},
     {{0,0},{0,1},{1,1},{0,0},{1,1},{1,0}},
-}
-;
+};
+
 static void neighbor_offset(int face, int *dx, int *dy, int *dz) {
     static const int d[6][3] = {
         { 1, 0, 0}, {-1, 0, 0},
@@ -40,11 +45,11 @@ static void neighbor_offset(int face, int *dx, int *dy, int *dz) {
 
 static float compute_light(world *w, int wx, int wy, int wz) {
     int s = world_get_sunlight(w, wx, wy, wz);
-int b = world_get_blocklight(w, wx, wy, wz);
-int max = s > b ? s : b;
-if (max > MAX_LIGHT) max = MAX_LIGHT;
-if (max < 3) max = 3;
-return (float)max / (float)MAX_LIGHT;
+    int b = world_get_blocklight(w, wx, wy, wz);
+    int max = s > b ? s : b;
+    if (max > MAX_LIGHT) max = MAX_LIGHT;
+    if (max < 3) max = 3;
+    return (float)max / (float)MAX_LIGHT;
 }
 
 void mesher_build_chunk(world *w, chunk *c) {
