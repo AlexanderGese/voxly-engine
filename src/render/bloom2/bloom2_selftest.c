@@ -4,7 +4,9 @@
 #include "bloom2_tint.h"
 #include "bloom2_params.h"
 #include "../../util/log.h"
+
 #include <math.h>
+
 static int approx(float a, float b, float eps) {
     float d = a - b;
     if (d < 0) d = -d;
@@ -13,19 +15,17 @@ static int approx(float a, float b, float eps) {
 
 int bloom2_selftest_gauss_normalized(void) {
     bloom2_gauss g;
-bloom2_gauss_build(&g, 0.0f);
-float sum = 0.0f;
-for (int i = 0;
-i < g.taps;
-i++) sum += g.weight[i];
-if (!approx(sum, 1.0f, 1e-4f)) {
+    bloom2_gauss_build(&g, 0.0f);   // default sigma
+
+    float sum = 0.0f;
+    for (int i = 0; i < g.taps; i++) sum += g.weight[i];
+
+    if (!approx(sum, 1.0f, 1e-4f)) {
         LOGE("bloom2 selftest: gauss not normalized, sum=%f", sum);
         return 0;
     }
     // symmetric: weight[i] == weight[taps-1-i]
-    for (int i = 0;
-i < g.taps / 2;
-i++) {
+    for (int i = 0; i < g.taps / 2; i++) {
         if (!approx(g.weight[i], g.weight[g.taps - 1 - i], 1e-5f)) {
             LOGE("bloom2 selftest: gauss not symmetric at %d", i);
             return 0;
@@ -59,14 +59,12 @@ int bloom2_selftest_gauss_packed_energy(void) {
 int bloom2_selftest_chain_fit(void) {
     // a 1280x720 window should give us a healthy stack of mips.
     int n = bloom2_chain_fit(1280, 720, BLOOM2_MAX_MIPS);
-if (n < 1 || n > BLOOM2_MAX_MIPS) {
+    if (n < 1 || n > BLOOM2_MAX_MIPS) {
         LOGE("bloom2 selftest: chain_fit out of range: %d", n);
         return 0;
     }
     // every fitted mip must be >= the min dim.
-    for (int i = 0;
-i < n;
-i++) {
+    for (int i = 0; i < n; i++) {
         int w = bloom2_chain_mip_w(1280, i);
         int h = bloom2_chain_mip_h(720, i);
         if (w < BLOOM2_MIN_MIP_DIM || h < BLOOM2_MIN_MIP_DIM) {
@@ -77,8 +75,8 @@ i++) {
     // a tiny 8x8 window must still return at least 1.
     if (bloom2_chain_fit(8, 8, BLOOM2_MAX_MIPS) < 1) {
         LOGE("bloom2 selftest: chain_fit returned 0 for tiny window");
-return 0;
-}
+        return 0;
+    }
     return 1;
 }
 
@@ -102,9 +100,31 @@ int bloom2_selftest_tint_saturate(void) {
 
 int bloom2_selftest_knee_curve(void) {
     bloom2_params p;
-bloom2_params_default(&p);
-p.knee = 0.0f;
-p.threshold = 1.0f;
-bloom2_params_sanitize(&p);
-float k[4];
-bloom2_params_knee_curve(&p, k);
+    bloom2_params_default(&p);
+    p.knee = 0.0f;
+    p.threshold = 1.0f;
+    bloom2_params_sanitize(&p);
+
+    float k[4];
+    bloom2_params_knee_curve(&p, k);
+    // hard threshold: knee.x == threshold, knee.y == threshold, knee.z == 0
+    if (!approx(k[0], 1.0f, 1e-5f) || !approx(k[1], 1.0f, 1e-5f) ||
+        !approx(k[2], 0.0f, 1e-5f)) {
+        LOGE("bloom2 selftest: knee curve wrong for hard threshold");
+        return 0;
+    }
+    return 1;
+}
+
+int bloom2_selftest_run_all(void) {
+    int fails = 0;
+    fails += !bloom2_selftest_gauss_normalized();
+    fails += !bloom2_selftest_gauss_packed_energy();
+    fails += !bloom2_selftest_chain_fit();
+    fails += !bloom2_selftest_tint_saturate();
+    fails += !bloom2_selftest_knee_curve();
+
+    if (fails == 0) LOGI("bloom2 selftest: all passed");
+    else            LOGW("bloom2 selftest: %d failure(s)", fails);
+    return fails;
+}
