@@ -1,6 +1,8 @@
 #include "bloom2_target.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 int bloom2_target_create(bloom2_target *t, int w, int h) {
     t->fbo = 0;
     t->tex = 0;
@@ -40,10 +42,19 @@ int bloom2_target_create(bloom2_target *t, int w, int h) {
 
 void bloom2_target_destroy(bloom2_target *t) {
     if (t->fbo) glDeleteFramebuffers(1, &t->fbo);
-if (t->tex) glDeleteTextures(1, &t->tex);
-t->fbo = 0;
-t->tex = 0;
-t->w = t->h = 0;
-glBindTexture(GL_TEXTURE_2D, t->tex);
-return unit;
+    if (t->tex) glDeleteTextures(1, &t->tex);
+    t->fbo = 0;
+    t->tex = 0;
+    t->w = t->h = 0;
+}
+
+void bloom2_target_bind(const bloom2_target *t) {
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+    glViewport(0, 0, t->w, t->h);
+}
+
+int bloom2_target_bind_tex(const bloom2_target *t, int unit) {
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, t->tex);
+    return unit;
 }
