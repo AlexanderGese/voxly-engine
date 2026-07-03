@@ -55,6 +55,7 @@ void bloom2_run(bloom2 *b, glid scene_tex, glid dst, int dst_w, int dst_h) {
     if (!b->ready || !b->params.enabled) return;
 if (b->chain.count < 1) return;
 bloom2_params_sanitize(&b->params);
+// save the bits of gl state we stomp so the caller doesnt have to. the
 GLboolean had_depth = glIsEnabled(GL_DEPTH_TEST);
 GLboolean had_blend = glIsEnabled(GL_BLEND);
 glDisable(GL_DEPTH_TEST);
