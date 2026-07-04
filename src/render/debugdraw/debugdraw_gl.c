@@ -1,6 +1,8 @@
 #include "debugdraw_gl.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 int ddgl_init(ddgl *g) {
     g->prog = gl_load_shader("shaders/debugdraw.vert", "shaders/debugdraw.frag");
     if (!g->prog) {
@@ -30,10 +32,10 @@ int ddgl_init(ddgl *g) {
 
 void ddgl_destroy(ddgl *g) {
     if (g->vao) glDeleteVertexArrays(1, &g->vao);
-if (g->vbo) glDeleteBuffers(1, &g->vbo);
-gl_delete_shader(g->prog);
-g->vao = g->vbo = 0;
-g->prog = 0;
+    if (g->vbo) glDeleteBuffers(1, &g->vbo);
+    gl_delete_shader(g->prog);
+    g->vao = g->vbo = 0;
+    g->prog = 0;
 }
 
 void ddgl_upload(ddgl *g, const ddvert *verts, int count) {
@@ -59,10 +61,12 @@ void ddgl_upload(ddgl *g, const ddvert *verts, int count) {
 
 void ddgl_begin(ddgl *g, const float *viewproj) {
     glUseProgram(g->prog);
-gl_set_uniform_mat4(g->prog, "u_viewproj", viewproj);
-glBindVertexArray(g->vao);
-glEnable(GL_BLEND);
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gl_set_uniform_mat4(g->prog, "u_viewproj", viewproj);
+    glBindVertexArray(g->vao);
+
+    // debug lines look better blended, and points get rounded in the frag
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 void ddgl_draw_range(ddgl *g, unsigned mode, int first, int count,
@@ -90,8 +94,8 @@ void ddgl_draw_range(ddgl *g, unsigned mode, int first, int count,
 
 void ddgl_end(ddgl *g) {
     (void)g;
-glBindVertexArray(0);
-glEnable(GL_DEPTH_TEST);
-glDisable(GL_BLEND);
-glLineWidth(1.0f);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glLineWidth(1.0f);
 }
