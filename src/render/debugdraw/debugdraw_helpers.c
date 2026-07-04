@@ -3,7 +3,9 @@
 #include "debugdraw_text.h"
 #include "debugdraw_category.h"
 #include "../../config.h"
+
 #include <math.h>
+
 void debugdraw_chunk_bounds(debugdraw *dd, const chunk *ch, ddcolor c) {
     if (!ch) return;
     if (c == 0)
@@ -23,12 +25,11 @@ void debugdraw_chunk_bounds(debugdraw *dd, const chunk *ch, ddcolor c) {
 void debugdraw_block(debugdraw *dd, int bx, int by, int bz, ddcolor c) {
     // slight inset so it doesnt z-fight the block faces
     float e = 0.002f;
-aabb a = {
+    aabb a = {
         vec3_new((float)bx + e,     (float)by + e,     (float)bz + e),
         vec3_new((float)bx + 1 - e, (float)by + 1 - e, (float)bz + 1 - e)
-    }
-;
-debugdraw_box(dd, a, c);
+    };
+    debugdraw_box(dd, a, c);
 }
 
 void debugdraw_entity(debugdraw *dd, const entity *e, ddcolor c) {
@@ -60,13 +61,36 @@ void debugdraw_entity(debugdraw *dd, const entity *e, ddcolor c) {
 void debugdraw_grid(debugdraw *dd, vec3 center, int half, float spacing,
                     ddcolor c) {
     if (half < 1) half = 8;
-if (spacing <= 0.0f) spacing = 1.0f;
-float cx = floorf(center.x / spacing) * spacing;
-float cz = floorf(center.z / spacing) * spacing;
-float y  = center.y;
-float ext = half * spacing;
-for (int i = -half;
-i <= half;
-vec3 tip = vec3_add(pos, vec3_scale(vel, scale));
-debugdraw_arrow(dd, pos, tip, 0.15f, c);
+    if (spacing <= 0.0f) spacing = 1.0f;
+
+    // snap the grid origin to the spacing so it doesnt swim as you move
+    float cx = floorf(center.x / spacing) * spacing;
+    float cz = floorf(center.z / spacing) * spacing;
+    float y  = center.y;
+    float ext = half * spacing;
+
+    for (int i = -half; i <= half; i++) {
+        float off = i * spacing;
+        // axis lines slightly brighter so you can find the origin
+        ddcolor lc = (i == 0) ? ddcolor_lerp(c, DDCOLOR_WHITE, 0.5f) : c;
+
+        // lines parallel to x
+        debugdraw_line(dd, vec3_new(cx - ext, y, cz + off),
+                           vec3_new(cx + ext, y, cz + off), lc);
+        // lines parallel to z
+        debugdraw_line(dd, vec3_new(cx + off, y, cz - ext),
+                           vec3_new(cx + off, y, cz + ext), lc);
+    }
+}
+
+void debugdraw_velocity(debugdraw *dd, vec3 pos, vec3 vel, ddcolor c) {
+    float speed = vec3_length(vel);
+    if (speed < 1e-3f) {
+        debugdraw_point(dd, pos, c);
+        return;
+    }
+    // scale so a ~10 m/s velocity draws ~1.5m. arbitrary but readable.
+    float scale = 0.15f;
+    vec3 tip = vec3_add(pos, vec3_scale(vel, scale));
+    debugdraw_arrow(dd, pos, tip, 0.15f, c);
 }

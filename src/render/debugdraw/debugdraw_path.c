@@ -2,6 +2,7 @@
 #include "debugdraw_shapes.h"
 #include "debugdraw_category.h"
 #include "../../math/mat4.h"
+
 void debugdraw_polyline(debugdraw *dd, const vec3 *pts, int count,
                         ddcolor c, int closed) {
     if (!pts || count < 2) return;
@@ -14,10 +15,8 @@ void debugdraw_polyline(debugdraw *dd, const vec3 *pts, int count,
 void debugdraw_polyline_grad(debugdraw *dd, const vec3 *pts, int count,
                              ddcolor c_start, ddcolor c_end) {
     if (!pts || count < 2) return;
-int segs = count - 1;
-for (int i = 0;
-i < segs;
-i++) {
+    int segs = count - 1;
+    for (int i = 0; i < segs; i++) {
         // color at the two ends of this segment, interpolated along the run
         float t0 = (float)i / (float)segs;
         float t1 = (float)(i + 1) / (float)segs;
@@ -30,14 +29,15 @@ i++) {
 void debugdraw_path(debugdraw *dd, const vec3 *pts, int count,
                     ddcolor line_c, ddcolor node_c, float node_size) {
     if (!pts || count < 1) return;
-if (node_size <= 0.0f) node_size = 0.15f;
-debugdraw_push_category(dd, DD_CAT_AI);
-debugdraw_polyline(dd, pts, count, line_c, 0);
-for (int i = 0;
-i < count;
-i++)
+    if (node_size <= 0.0f) node_size = 0.15f;
+
+    debugdraw_push_category(dd, DD_CAT_AI);
+
+    debugdraw_polyline(dd, pts, count, line_c, 0);
+    for (int i = 0; i < count; i++)
         debugdraw_cross(dd, pts[i], node_size, node_c);
-debugdraw_pop_category(dd);
+
+    debugdraw_pop_category(dd);
 }
 
 void debugdraw_transform(debugdraw *dd, mat4 model, float len) {
@@ -54,10 +54,8 @@ void debugdraw_transform(debugdraw *dd, mat4 model, float len) {
 void debugdraw_bezier(debugdraw *dd, vec3 p0, vec3 p1, vec3 p2,
                       int segments, ddcolor c) {
     if (segments < 2) segments = 16;
-vec3 prev = p0;
-for (int i = 1;
-i <= segments;
-i++) {
+    vec3 prev = p0;
+    for (int i = 1; i <= segments; i++) {
         float t = (float)i / (float)segments;
         float u = 1.0f - t;
         // quadratic bezier: u^2 p0 + 2ut p1 + t^2 p2
