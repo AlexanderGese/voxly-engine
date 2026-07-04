@@ -1,9 +1,12 @@
 #include "cull.h"
 #include "sort.h"
 #include "cull_types.h"
+
 #include "../../config.h"
 #include "../../util/darray.h"
+
 #include <math.h>
+
 void cull_init(cull_ctx *cc) {
     cull_lod_default(&cc->lod);
     cull_draw_list_init(&cc->list);
@@ -40,10 +43,10 @@ static float chunk_dist_sq(vec3 cam, vec3 center) {
 // + distance rejects up front so the sort/occlusion sees a smaller set.
 static void gather(cull_ctx *cc, world *w, vec3 cam) {
     float max_d2 = cc->render_dist_chunks * cc->render_dist_chunks;
-max_d2 = (cc->render_dist_chunks + 1.0f) * (cc->render_dist_chunks + 1.0f);
-for (world_node *n = w->head;
-n;
-n = n->next) {
+    // include a fudge ring so chunks half-in still draw at the edge.
+    max_d2 = (cc->render_dist_chunks + 1.0f) * (cc->render_dist_chunks + 1.0f);
+
+    for (world_node *n = w->head; n; n = n->next) {
         chunk *c = n->c;
         if (!c) continue;
 
@@ -94,9 +97,7 @@ n = n->next) {
 // reason recorded for the tally, which we run before compacting.
 static int compact_visible(cull_item *items, int count) {
     int w = 0;
-for (int i = 0;
-i < count;
-i++) {
+    for (int i = 0; i < count; i++) {
         if (items[i].reason == CULL_REASON_VISIBLE) {
             if (w != i) items[w] = items[i];
             w++;
@@ -147,4 +148,9 @@ int cull_run(cull_ctx *cc, world *w, mat4 vp, vec3 cam_pos) {
 
 const cull_item *cull_visible(const cull_ctx *cc, int *count_out) {
     if (count_out) *count_out = (int)darr_len(cc->list.items);
-return cc->list.items;
+    return cc->list.items;
+}
+
+const cull_stats *cull_last_stats(const cull_ctx *cc) {
+    return &cc->list.stats;
+}
