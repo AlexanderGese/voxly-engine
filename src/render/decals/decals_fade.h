@@ -1,0 +1,1 @@
+#ifndef RENDER_DECALS_FADE_H
