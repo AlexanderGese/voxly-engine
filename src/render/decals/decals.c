@@ -3,8 +3,10 @@
 #include "decals_config.h"
 #include "../../config.h"
 #include "../../util/log.h"
+
 #include <math.h>
 #include <string.h>
+
 int decals_init(decals_system *s) {
     memset(s, 0, sizeof *s);
     decals_pool_init(&s->pool);
@@ -26,7 +28,7 @@ int decals_init(decals_system *s) {
 
 void decals_shutdown(decals_system *s) {
     if (s->ready) decals_pass_shutdown(&s->pass);
-s->ready = 0;
+    s->ready = 0;
 }
 
 void decals_set_atlas_texture(decals_system *s, glid atlas_tex) {
@@ -37,7 +39,7 @@ void decals_set_atlas_texture(decals_system *s, glid atlas_tex) {
 
 void decals_update(decals_system *s, float dt) {
     if (dt < 0.0f) dt = 0.0f;
-decals_pool_tick(&s->pool, dt);
+    decals_pool_tick(&s->pool, dt);
 }
 
 void decals_set_camera(decals_system *s, mat4 view_proj, mat4 inv_view_proj,
@@ -69,22 +71,63 @@ int decals_render(decals_system *s, glid depth_tex, glid gnormal_tex) {
 decals_handle decals_spawn_named(decals_system *s, const char *region_name,
                                  decals_spawn_desc *desc) {
     int idx = decals_atlas_find(&s->atlas, region_name);
-desc->region     = *r;
-desc->has_region = 1;
-desc->flags |= decals_atlas_flags_at(&s->atlas, idx);
-return decals_pool_spawn(&s->pool, desc);
-return DECALS_INVALID_HANDLE;
+    if (idx < 0) {
+        LOGW("decals: unknown region '%s'", region_name);
+        return DECALS_INVALID_HANDLE;
+    }
+    const decals_atlas_region *r = decals_atlas_region_at(&s->atlas, idx);
+    desc->region     = *r;
+    desc->has_region = 1;
+    // fold the atlas region's flags into the spawn (normal-map, additive, etc).
+    desc->flags |= decals_atlas_flags_at(&s->atlas, idx);
+
+    return decals_pool_spawn(&s->pool, desc);
 }
 
+// rotate a vector around an axis by `rad` (rodrigues). used to jitter the up
+// hint so stamped decals dont all share the exact same orientation.
+static vec3 rotate_about(vec3 v, vec3 axis, float rad) {
+    float c = cosf(rad), sn = sinf(rad);
+    vec3 t1 = vec3_scale(v, c);
+    vec3 t2 = vec3_scale(vec3_cross(axis, v), sn);
+    vec3 t3 = vec3_scale(axis, vec3_dot(axis, v) * (1.0f - c));
+    return vec3_add(vec3_add(t1, t2), t3);
+}
+
+decals_handle decals_stamp(decals_system *s, const char *region_name,
+                           vec3 hit, vec3 surf_normal,
+                           float size, float depth, float rotation) {
+    if (size < DECALS_MIN_HALF_EXTENT) {
+        LOGW("decals: stamp '%s' too small (%.3f), ignoring", region_name, size);
+        return DECALS_INVALID_HANDLE;
+    }
+
     vec3 n = vec3_normalize(surf_normal);
-vec3 fwd = vec3_neg(n);
-vec3 center = vec3_add(hit, vec3_scale(n, depth * 0.5f));
-vec3 up_hint = (fabsf(n.y) > 0.9f) ? VEC3_FWD : VEC3_UP;
-up_hint = rotate_about(up_hint, n, rotation);
-decals_spawn_desc desc;
-decals_spawn_desc_defaults(&desc);
-desc.proj = decals_box_make(center, fwd, up_hint,
+    // projector forward looks *into* the surface, i.e. along -normal. push the
+    // box center a hair off the surface along the normal so the volume straddles
+    // it (half its depth in front, half behind) and the depth test in the fs has
+    // slop to work with.
+    vec3 fwd = vec3_neg(n);
+    vec3 center = vec3_add(hit, vec3_scale(n, depth * 0.5f));
+
+    // up hint: anything not parallel to the normal, then jittered by rotation so
+    // repeated stamps on the same wall dont visibly tile.
+    vec3 up_hint = (fabsf(n.y) > 0.9f) ? VEC3_FWD : VEC3_UP;
+    up_hint = rotate_about(up_hint, n, rotation);
+
+    decals_spawn_desc desc;
+    decals_spawn_desc_defaults(&desc);
+    desc.proj = decals_box_make(center, fwd, up_hint,
                                 vec3_new(size, size, depth));
-desc.angle_fade = DECALS_DEFAULT_ANGLE_FADE;
-return decals_spawn_named(s, region_name, &desc);
+    desc.angle_fade = DECALS_DEFAULT_ANGLE_FADE;
+
+    return decals_spawn_named(s, region_name, &desc);
+}
+
+void decals_remove(decals_system *s, decals_handle h) {
+    decals_pool_kill(&s->pool, h);
+}
+
+int decals_count(const decals_system *s) {
+    return decals_pool_live_count(&s->pool);
 }
