@@ -30,6 +30,7 @@ void debugdraw_timed_line(debugdraw *dd, vec3 a, vec3 b, ddcolor c, float ttl);
 void debugdraw_timed_box(debugdraw *dd, vec3 mn, vec3 mx, ddcolor c, float ttl);
 void debugdraw_timed_cross(debugdraw *dd, vec3 center, float size,
                            ddcolor c, float ttl);
+// re-emit all live timed entries into the frame buckets, dropping any that
 int  debugdraw_timed_tick(debugdraw *dd);
 void debugdraw_timed_clear(debugdraw *dd);
 #endif
