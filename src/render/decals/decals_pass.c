@@ -2,7 +2,12 @@
 #include "decals_blend.h"
 #include "decals_config.h"
 #include "../../util/log.h"
+
 #include <string.h>
+
+// build the cube->world matrix straight from the projector basis, no inverse
+// needed: columns are the scaled basis vectors, translation is the center. the
+// cube is [-0.5,0.5] so the scale is 2*half along each axis.
 static mat4 model_from_projector(const decals_projector *p) {
     mat4 m = mat4_identity();
     vec3 cx = vec3_scale(p->right,  2.0f * p->half.x);
@@ -17,8 +22,7 @@ static mat4 model_from_projector(const decals_projector *p) {
 }
 
 // pack one decal into an instance payload. flags ride as a float bitfield the
-// shader can test;
-we only encode the bits the fs actually consults.
+// shader can test; we only encode the bits the fs actually consults.
 static void fill_instance(decals_mesh_inst *out, const decals_decal *d) {
     mat4 model = model_from_projector(&d->proj);
     memcpy(out->model,     mat4_data(&model),               16 * sizeof(float));
@@ -42,15 +46,15 @@ static void fill_instance(decals_mesh_inst *out, const decals_decal *d) {
 
 int decals_pass_init(decals_pass *pass) {
     memset(pass, 0, sizeof *pass);
-pass->view_proj     = mat4_identity();
-pass->inv_view_proj = mat4_identity();
-if (!decals_mesh_create(&pass->mesh)) return 0;
-if (!decals_program_build(&pass->prog)) {
+    pass->view_proj     = mat4_identity();
+    pass->inv_view_proj = mat4_identity();
+    if (!decals_mesh_create(&pass->mesh)) return 0;
+    if (!decals_program_build(&pass->prog)) {
         decals_mesh_destroy(&pass->mesh);
         return 0;
     }
     LOGI("decals: pass initialised");
-return 1;
+    return 1;
 }
 
 void decals_pass_shutdown(decals_pass *pass) {
@@ -60,7 +64,7 @@ void decals_pass_shutdown(decals_pass *pass) {
 
 void decals_pass_set_camera(decals_pass *pass, mat4 view_proj, mat4 inv_view_proj) {
     pass->view_proj     = view_proj;
-pass->inv_view_proj = inv_view_proj;
+    pass->inv_view_proj = inv_view_proj;
 }
 
 void decals_pass_set_screen(decals_pass *pass, int w, int h) {
@@ -69,8 +73,7 @@ void decals_pass_set_screen(decals_pass *pass, int w, int h) {
 }
 
 // set the blend/depth state the stamp needs. we read the g-buffer depth as a
-// texture (not as the bound depth attachment) so depth testing is off;
-the
+// texture (not as the bound depth attachment) so depth testing is off; the
 // fragment discards handle the volume clipping instead.
 static void begin_state(void) {
     glEnable(GL_BLEND);
@@ -84,8 +87,8 @@ static void begin_state(void) {
 
 static void end_state(void) {
     glDisable(GL_BLEND);
-glDepthMask(GL_TRUE);
-glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
 }
 
 int decals_pass_draw(decals_pass *pass, const decals_pool *pool,
