@@ -11,17 +11,25 @@
 // box's local xy and stamp albedo/normal onto whatever surface was there.
 //
 // no extra geometry, no decal meshes baked into chunks. blood splats, scorch
+// marks, footprints, the crack overlay's bigger cousin -- all of it rides this.
+// stable handle handed back to callers. index + generation so a recycled slot
+// doesnt alias an old decal that someone is still holding.
 typedef struct {
     uint32_t index;
     uint32_t gen;
 } decals_handle;
 #define DECALS_INVALID_HANDLE ((decals_handle){ 0xffffffffu, 0u })
+// fade phases. a decal is born in SPAWNING (alpha ramps up), lives in STABLE
+// (full alpha), then DYING (alpha ramps down) before the slot is freed.
+// permanent decals just sit in STABLE forever with life_total < 0.
 typedef enum {
     DECALS_PHASE_SPAWNING = 0,
     DECALS_PHASE_STABLE,
     DECALS_PHASE_DYING,
     DECALS_PHASE_DEAD
 } decals_phase;
+// per-decal flags. packed into a u16 so we can shovel the lot into an instance
+// buffer without bloating the vertex layout.
 enum {
     DECALS_FLAG_NORMAL_MAP   = 1 << 0,  // atlas region has a normal sub-tile
     DECALS_FLAG_PROJECT_BACK = 1 << 1,  // also stamp back-facing surfaces
@@ -30,12 +38,16 @@ enum {
     DECALS_FLAG_WORLD_LOCKED = 1 << 4   // never culled by distance, e.g. signs
 }
 ;
+// the atlas slot a decal draws from. uv0/uv1 are the albedo rect in [0,1].
+// nuv0/nuv1 is the optional normal-map rect, only valid with FLAG_NORMAL_MAP.
 typedef struct {
     float uv0[2];
     float uv1[2];
     float nuv0[2];
     float nuv1[2];
 } decals_atlas_region;
+// the projector itself, in world space. center + an orthonormal basis + half
+// extents gives an oriented box. we cache the world->local matrix because
 typedef struct {
     vec3 center;
     vec3 right;     // local +x, unit
