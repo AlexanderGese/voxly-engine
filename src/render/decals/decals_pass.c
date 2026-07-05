@@ -45,7 +45,106 @@ int decals_pass_init(decals_pass *pass) {
 pass->view_proj     = mat4_identity();
 pass->inv_view_proj = mat4_identity();
 if (!decals_mesh_create(&pass->mesh)) return 0;
+if (!decals_program_build(&pass->prog)) {
+        decals_mesh_destroy(&pass->mesh);
+        return 0;
+    }
+    LOGI("decals: pass initialised");
 return 1;
+}
+
+void decals_pass_shutdown(decals_pass *pass) {
+    decals_program_destroy(&pass->prog);
+    decals_mesh_destroy(&pass->mesh);
+}
+
+void decals_pass_set_camera(decals_pass *pass, mat4 view_proj, mat4 inv_view_proj) {
+    pass->view_proj     = view_proj;
 pass->inv_view_proj = inv_view_proj;
+}
+
+void decals_pass_set_screen(decals_pass *pass, int w, int h) {
+    pass->screen_w = w;
+    pass->screen_h = h;
+}
+
+// set the blend/depth state the stamp needs. we read the g-buffer depth as a
+// texture (not as the bound depth attachment) so depth testing is off;
+the
+// fragment discards handle the volume clipping instead.
+static void begin_state(void) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    // dont cull: the camera can be inside a projector box, in which case the
+    // front faces are behind us and only the back faces cover the screen.
+    glDisable(GL_CULL_FACE);
+}
+
+static void end_state(void) {
+    glDisable(GL_BLEND);
 glDepthMask(GL_TRUE);
 glEnable(GL_DEPTH_TEST);
+}
+
+int decals_pass_draw(decals_pass *pass, const decals_pool *pool,
+                     const decals_cull_result *vis, const decals_atlas *atlas,
+                     glid depth_tex, glid gnormal_tex) {
+    pass->drawn_last = 0;
+    if (vis->count <= 0) return 0;
+    if (!pass->prog.prog) return 0;   // program failed to build, no-op
+
+    decals_program_use(&pass->prog);
+    glUniformMatrix4fv(pass->prog.u_view_proj, 1, GL_FALSE,
+                       mat4_data(&pass->view_proj));
+    glUniformMatrix4fv(pass->prog.u_inv_view_proj, 1, GL_FALSE,
+                       mat4_data(&pass->inv_view_proj));
+    if (pass->prog.u_screen >= 0)
+        glUniform2f(pass->prog.u_screen, (float)pass->screen_w, (float)pass->screen_h);
+    if (pass->prog.u_normal_strength >= 0)
+        glUniform1f(pass->prog.u_normal_strength, DECALS_NORMAL_BLEND_MAX);
+
+    // bind the g-buffer reads + atlas to the units the program expects.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, depth_tex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gnormal_tex);
+    decals_atlas_bind(atlas, 2);
+
+    begin_state();
+
+    // walk the visible list in BATCH_MAX chunks. per-decal tint differs, so we
+    // push the tint uniform per chunk using the first decal's tint — close
+    // enough; tint-heavy decals are rare and the chunks stay coherent because
+    // the cull sort groups by priority. (a cleaner pass would atlas the tint.)
+    static decals_mesh_inst staging[DECALS_BATCH_MAX];
+    int total = 0;
+
+    for (int base = 0; base < vis->count; base += DECALS_BATCH_MAX) {
+        int n = vis->count - base;
+        if (n > DECALS_BATCH_MAX) n = DECALS_BATCH_MAX;
+
+        const decals_decal *first = &pool->slots[vis->items[base].slot];
+        if (pass->prog.u_tint >= 0)
+            glUniform3f(pass->prog.u_tint,
+                        first->tint[0], first->tint[1], first->tint[2]);
+
+        // pick the batch's blend mode (alpha vs additive) from its decals'
+        // flags. glow batches add into the g-buffer instead of compositing.
+        decals_blend_apply(decals_blend_for_batch(pool, vis->items, base, n));
+
+        for (int i = 0; i < n; i++) {
+            const decals_decal *d = &pool->slots[vis->items[base + i].slot];
+            fill_instance(&staging[i], d);
+        }
+
+        decals_mesh_upload(&pass->mesh, staging, n);
+        decals_mesh_draw(&pass->mesh, n);
+        total += n;
+    }
+
+    end_state();
+    pass->drawn_last = total;
+    return total;
+}
