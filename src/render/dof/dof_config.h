@@ -1,0 +1,4 @@
+#ifndef RENDER_DOF_CONFIG_H
+#define RENDER_DOF_CONFIG_H
+#define DOFX_KERNEL_MAX         64
+#define DOFX_KERNEL_DEFAULT     32

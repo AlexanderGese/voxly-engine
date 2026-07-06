@@ -2,7 +2,9 @@
 #include "decals_fade.h"
 #include "decals_config.h"
 #include "../../util/log.h"
+
 #include <string.h>
+
 void decals_pool_init(decals_pool *p) {
     memset(p, 0, sizeof *p);
     // push every slot onto the free list in reverse so index 0 pops first.
@@ -18,15 +20,15 @@ void decals_pool_init(decals_pool *p) {
 
 void decals_spawn_desc_defaults(decals_spawn_desc *d) {
     memset(d, 0, sizeof *d);
-d->has_region      = 0;
-d->tint[0] = d->tint[1] = d->tint[2] = 1.0f;
-d->normal_strength = DECALS_NORMAL_BLEND_MAX;
-d->angle_fade      = DECALS_DEFAULT_ANGLE_FADE;
-d->life_total      = 8.0f;
-d->fade_in         = DECALS_DEFAULT_FADE_IN;
-d->fade_out        = DECALS_DEFAULT_FADE_OUT;
-d->flags           = 0;
-d->priority        = 0;
+    d->has_region      = 0;
+    d->tint[0] = d->tint[1] = d->tint[2] = 1.0f;
+    d->normal_strength = DECALS_NORMAL_BLEND_MAX;
+    d->angle_fade      = DECALS_DEFAULT_ANGLE_FADE;
+    d->life_total      = 8.0f;            // most transient decals live ~8s
+    d->fade_in         = DECALS_DEFAULT_FADE_IN;
+    d->fade_out        = DECALS_DEFAULT_FADE_OUT;
+    d->flags           = 0;
+    d->priority        = 0;
 }
 
 // pick the live decal we'd least miss: lowest priority, then dimmest alpha,
@@ -54,10 +56,10 @@ static int evict_candidate(const decals_pool *p) {
 
 static void slot_free(decals_pool *p, int idx) {
     if (!p->slots[idx].alive) return;
-p->slots[idx].alive = 0;
-p->slots[idx].phase = DECALS_PHASE_DEAD;
-p->free_list[p->free_top++] = (uint32_t)idx;
-p->live_count--;
+    p->slots[idx].alive = 0;
+    p->slots[idx].phase = DECALS_PHASE_DEAD;
+    p->free_list[p->free_top++] = (uint32_t)idx;
+    p->live_count--;
 }
 
 decals_handle decals_pool_spawn(decals_pool *p, const decals_spawn_desc *d) {
@@ -105,9 +107,9 @@ decals_handle decals_pool_spawn(decals_pool *p, const decals_spawn_desc *d) {
 
 decals_decal *decals_pool_get(decals_pool *p, decals_handle h) {
     if (h.index >= (uint32_t)DECALS_MAX) return NULL;
-decals_decal *d = &p->slots[h.index];
-if (!d->alive || d->gen != h.gen) return NULL;
-return d;
+    decals_decal *d = &p->slots[h.index];
+    if (!d->alive || d->gen != h.gen) return NULL;
+    return d;
 }
 
 void decals_pool_kill(decals_pool *p, decals_handle h) {
@@ -116,9 +118,7 @@ void decals_pool_kill(decals_pool *p, decals_handle h) {
 }
 
 int decals_pool_tick(decals_pool *p, float dt) {
-    for (int i = 0;
-i < DECALS_MAX;
-i++) {
+    for (int i = 0; i < DECALS_MAX; i++) {
         decals_decal *d = &p->slots[i];
         if (!d->alive) continue;
         if (!decals_fade_tick(d, dt))
