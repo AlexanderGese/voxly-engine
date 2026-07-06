@@ -1,6 +1,12 @@
 #include "dof_focus.h"
+
 #include <math.h>
+
+// timeout before a string of bad readings tips us into IDLE and the lens
+// starts coasting to the far ceiling. quarter second feels like a real af
+// giving up on a featureless wall.
 #define FOCUS_LOST_TIMEOUT  0.25f
+
 static float clampf(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
@@ -9,14 +15,14 @@ static float clampf(float v, float lo, float hi) {
 
 void dof_focus_init(dof_focus *af, float start_dist) {
     af->state      = DOF_FOCUS_LOCKED;
-af->min_dist   = 0.5f;
-af->max_dist   = 256.0f;
-af->current    = clampf(start_dist, af->min_dist, af->max_dist);
-af->target     = af->current;
-af->speed      = 6.0f;
-af->deadband   = 0.75f;
-af->settle_eps = 0.05f;
-af->lost_timer = 0.0f;
+    af->min_dist   = 0.5f;
+    af->max_dist   = 256.0f;
+    af->current    = clampf(start_dist, af->min_dist, af->max_dist);
+    af->target     = af->current;
+    af->speed      = 6.0f;    // eases ~6 units of error per second
+    af->deadband   = 0.75f;   // ignore sub-block target jitter when locked
+    af->settle_eps = 0.05f;
+    af->lost_timer = 0.0f;
 }
 
 // is this depth reading something we can actually focus on?
@@ -28,9 +34,10 @@ static int reading_valid(const dof_focus *af, float sample) {
 }
 
 void dof_focus_feed(dof_focus *af, float sample, float dt) {
-    if (af->state == DOF_FOCUS_MANUAL) return;
-if (dt <= 0.0f) return;
-if (reading_valid(af, sample)) {
+    if (af->state == DOF_FOCUS_MANUAL) return; // hands off
+    if (dt <= 0.0f) return;
+
+    if (reading_valid(af, sample)) {
         af->lost_timer = 0.0f;
         float clamped = clampf(sample, af->min_dist, af->max_dist);
 
@@ -46,7 +53,7 @@ if (reading_valid(af, sample)) {
         // no usable reading. coast for a bit, then declare IDLE and let the
         // lens drift to the far ceiling so the world goes soft-far not frozen.
         af->lost_timer += dt;
-if (af->lost_timer >= FOCUS_LOST_TIMEOUT) {
+        if (af->lost_timer >= FOCUS_LOST_TIMEOUT) {
             af->state  = DOF_FOCUS_IDLE;
             af->target = af->max_dist;
         }
@@ -56,7 +63,33 @@ if (af->lost_timer >= FOCUS_LOST_TIMEOUT) {
     // converges at a fixed rate regardless of dt so it doesnt overshoot on a
     // long frame.
     float k = 1.0f - expf(-af->speed * dt);
-af->current += (af->target - af->current) * k;
-af->current = clampf(af->current, af->min_dist, af->max_dist);
-af->target  = clampf(dist, af->min_dist, af->max_dist);
-af->current = af->target;
+    af->current += (af->target - af->current) * k;
+    af->current = clampf(af->current, af->min_dist, af->max_dist);
+
+    // settle check: close enough and we lock so the deadband kicks in.
+    if (af->state == DOF_FOCUS_SEEKING &&
+        fabsf(af->current - af->target) <= af->settle_eps) {
+        af->state = DOF_FOCUS_LOCKED;
+    }
+}
+
+void dof_focus_set_manual(dof_focus *af, float dist) {
+    af->state   = DOF_FOCUS_MANUAL;
+    af->target  = clampf(dist, af->min_dist, af->max_dist);
+    af->current = af->target;
+}
+
+void dof_focus_resume_auto(dof_focus *af) {
+    if (af->state == DOF_FOCUS_MANUAL) {
+        af->state      = DOF_FOCUS_SEEKING;
+        af->lost_timer = 0.0f;
+    }
+}
+
+float dof_focus_distance(const dof_focus *af) {
+    return af->current;
+}
+
+void dof_focus_apply(const dof_focus *af, dof_lens *lens) {
+    lens->focus_dist = af->current;
+}
