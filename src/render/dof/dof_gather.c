@@ -1,7 +1,13 @@
 #include "dof_gather.h"
 #include "dof_config.h"
+
 #include <math.h>
 #include <stddef.h>
+
+// ---------------------------------------------------------------------------
+// gpu path
+// ---------------------------------------------------------------------------
+
 void dof_gather_pass(const dof_programs *prog,
                      const dof_quad *quad,
                      const dof_target *color,
@@ -40,9 +46,10 @@ void dof_gather_run(const dof_programs *prog,
     // texel size of the source, used by the shader to convert tap offsets in
     // texels into uv steps. both gather buffers share the source size.
     float tw = (color->w > 0) ? 1.0f / (float)color->w : 0.0f;
-float th = (color->h > 0) ? 1.0f / (float)color->h : 0.0f;
-dof_gather_pass(prog, quad, color, coc, far_dst,  0, tw, th);
-dof_gather_pass(prog, quad, color, coc, near_dst, 1, tw, th);
+    float th = (color->h > 0) ? 1.0f / (float)color->h : 0.0f;
+
+    dof_gather_pass(prog, quad, color, coc, far_dst,  0, tw, th);
+    dof_gather_pass(prog, quad, color, coc, near_dst, 1, tw, th);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,12 +65,9 @@ static int clampi(int v, int lo, int hi) {
 // fetch a clamped-to-edge texel into rgba[4].
 static void fetch(const dof_image *img, int x, int y, float rgba[4]) {
     x = clampi(x, 0, img->w - 1);
-y = clampi(y, 0, img->h - 1);
-const float *p = &img->px[(y * img->w + x) * 4];
-rgba[0] = p[0];
-rgba[1] = p[1];
-rgba[2] = p[2];
-rgba[3] = p[3];
+    y = clampi(y, 0, img->h - 1);
+    const float *p = &img->px[(y * img->w + x) * 4];
+    rgba[0] = p[0]; rgba[1] = p[1]; rgba[2] = p[2]; rgba[3] = p[3];
 }
 
 float dof_gather_texel(const dof_image *src, const dof_kernel *kernel,
@@ -123,8 +127,17 @@ float dof_gather_texel(const dof_image *src, const dof_kernel *kernel,
 int dof_gather_image_flat(const dof_image *src, const dof_kernel *kernel,
                           float coc_texels, dof_image *dst) {
     if (!src->px || !dst->px) return 0;
-if (dst->w != src->w || dst->h != src->h) return 0;
-int written = 0;
-for (int y = 0;
-y < src->h;
+    if (dst->w != src->w || dst->h != src->h) return 0;
+
+    int written = 0;
+    for (int y = 0; y < src->h; y++) {
+        for (int x = 0; x < src->w; x++) {
+            float out4[4];
+            dof_gather_texel(src, kernel, x, y, coc_texels, out4);
+            float *o = &dst->px[(y * dst->w + x) * 4];
+            o[0] = out4[0]; o[1] = out4[1]; o[2] = out4[2]; o[3] = out4[3];
+            written++;
+        }
+    }
+    return written;
 }
