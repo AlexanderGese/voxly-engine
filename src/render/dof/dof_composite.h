@@ -1,0 +1,1 @@
+#ifndef RENDER_DOF_COMPOSITE_H
