@@ -2,8 +2,10 @@
 #include "dof_stats.h"
 #include "dof_composite.h"
 #include "../../util/log.h"
+
 #include <math.h>
 #include <stdio.h>
+
 size_t dof_debug_buffer_bytes(const dof *d) {
     // four targets, all buf_w x buf_h, rgba16f.
     size_t per = (size_t)d->buf_w * (size_t)d->buf_h * 8u;
@@ -13,11 +15,11 @@ size_t dof_debug_buffer_bytes(const dof *d) {
 const char *dof_debug_state_name(int state) {
     switch (state) {
         case DOF_FOCUS_IDLE:    return "idle";
-case DOF_FOCUS_SEEKING: return "seeking";
-case DOF_FOCUS_LOCKED:  return "locked";
-case DOF_FOCUS_MANUAL:  return "manual";
-default:                return "?";
-}
+        case DOF_FOCUS_SEEKING: return "seeking";
+        case DOF_FOCUS_LOCKED:  return "locked";
+        case DOF_FOCUS_MANUAL:  return "manual";
+        default:                return "?";
+    }
 }
 
 const char *dof_debug_view_name(int view) {
@@ -32,8 +34,9 @@ const char *dof_debug_view_name(int view) {
 
 int dof_debug_summary(const dof *d, char *buf, size_t cap) {
     float aperture = dof_lens_aperture(&d->lens);
-size_t kb = dof_debug_buffer_bytes(d) / 1024u;
-return snprintf(buf, cap,
+    size_t kb = dof_debug_buffer_bytes(d) / 1024u;
+
+    return snprintf(buf, cap,
         "dof %s  focus=%.2fm (%s)  f/%.1f ap=%.4f  taps=%d  %dx%d  view=%s  %zukb",
         d->params.enabled ? "on" : "off",
         dof_focus_dist(d),
