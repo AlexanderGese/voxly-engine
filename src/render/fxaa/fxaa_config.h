@@ -1,0 +1,1 @@
+#ifndef RENDER_FXAA_CONFIG_H
