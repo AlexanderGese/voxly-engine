@@ -1,4 +1,8 @@
 #include "fxaa_params.h"
+
+// runtime params: defaults, clamping, derived scalars. nothing here touches
+// gl — it's pure cpu so the debug ui can hammer it every frame for free.
+
 static float clampf(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
@@ -7,11 +11,11 @@ static float clampf(float v, float lo, float hi) {
 
 void fxaa_params_default(fxaa_params *p) {
     p->edge_threshold     = FXAA_DEFAULT_EDGE_THRESHOLD;
-p->edge_threshold_min = FXAA_DEFAULT_EDGE_THRESHOLD_MIN;
-p->subpix             = FXAA_DEFAULT_SUBPIX;
-p->quality            = FXAA_DEFAULT_QUALITY;
-p->enabled            = 1;
-p->show_edges         = 0;
+    p->edge_threshold_min = FXAA_DEFAULT_EDGE_THRESHOLD_MIN;
+    p->subpix             = FXAA_DEFAULT_SUBPIX;
+    p->quality            = FXAA_DEFAULT_QUALITY;
+    p->enabled            = 1;
+    p->show_edges         = 0;
 }
 
 void fxaa_params_sanitize(fxaa_params *p) {
@@ -39,6 +43,21 @@ void fxaa_params_sanitize(fxaa_params *p) {
 void fxaa_params_derive(const fxaa_params *p, float out[4]) {
     // out[0]: raw subpix strength, fed straight to the blend lerp.
     out[0] = p->subpix;
-out[1] = p->subpix * p->subpix * 0.5f;
-out[2] = 1.0f / (p->edge_threshold > 1e-5f ? p->edge_threshold : 1e-5f);
-out[3] = p->edge_threshold_min;
+    // out[1]: quadratic falloff. thin sub-pixel features get blurred by
+    // subpix^2 * 0.5 so the effect ramps in gently and never dominates.
+    out[1] = p->subpix * p->subpix * 0.5f;
+    // out[2]: reciprocal of the trigger threshold. the shader multiplies
+    // instead of dividing in the hot compare.
+    out[2] = 1.0f / (p->edge_threshold > 1e-5f ? p->edge_threshold : 1e-5f);
+    out[3] = p->edge_threshold_min;
+}
+
+int fxaa_params_active(const fxaa_params *p) {
+    if (!p->enabled) return 0;
+    // edges-only debug still wants to run the pass (it draws the mask).
+    if (p->show_edges) return 1;
+    // if both the relative threshold is maxed and subpix is off there's
+    // nothing left to do — early out and save the draw.
+    if (p->edge_threshold >= 0.999f && p->subpix <= 0.0f) return 0;
+    return 1;
+}
