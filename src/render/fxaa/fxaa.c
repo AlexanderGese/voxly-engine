@@ -2,7 +2,9 @@
 #include "fxaa_pass.h"
 #include "fxaa_quality.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 int fxaa_init(fxaa *f, int w, int h) {
     f->w = w;
     f->h = h;
@@ -35,11 +37,11 @@ int fxaa_init(fxaa *f, int w, int h) {
 
 void fxaa_destroy(fxaa *f) {
     fxaa_programs_destroy(&f->prog);
-fxaa_blit_destroy(&f->blit);
-fxaa_target_destroy(&f->target);
-fxaa_quad_destroy(&f->quad);
-f->ready = 0;
-f->w = f->h = 0;
+    fxaa_blit_destroy(&f->blit);
+    fxaa_target_destroy(&f->target);
+    fxaa_quad_destroy(&f->quad);
+    f->ready = 0;
+    f->w = f->h = 0;
 }
 
 void fxaa_resize(fxaa *f, int w, int h) {
@@ -59,20 +61,25 @@ void fxaa_resize(fxaa *f, int w, int h) {
 
 void fxaa_run(fxaa *f, glid scene_tex, glid dst, int dst_w, int dst_h) {
     f->frames++;
-fxaa_params_sanitize(&f->params);
-// fallback paths: shaders gone, target gone, or params say "do nothing".
-// in all of them we still owe the caller the scene in `dst`, so blit.
-if (!f->ready || !f->target.tex || !fxaa_params_active(&f->params)) {
+
+    fxaa_params_sanitize(&f->params);
+
+    // fallback paths: shaders gone, target gone, or params say "do nothing".
+    // in all of them we still owe the caller the scene in `dst`, so blit.
+    if (!f->ready || !f->target.tex || !fxaa_params_active(&f->params)) {
         fxaa_blit_run(&f->blit, &f->quad, scene_tex, dst, dst_w, dst_h);
         return;
     }
 
     float derived[4];
-fxaa_params_derive(&f->params, derived);
-const fxaa_quality *q = fxaa_quality_get(f->params.quality);
-// stage 1: scene -> luma-in-alpha scratch at full res.
-fxaa_pass_prepass(&f->prog, &f->quad, &f->target, scene_tex);
-fxaa_pass_main(&f->prog, &f->quad, &f->target, &f->params, derived,
+    fxaa_params_derive(&f->params, derived);
+    const fxaa_quality *q = fxaa_quality_get(f->params.quality);
+
+    // stage 1: scene -> luma-in-alpha scratch at full res.
+    fxaa_pass_prepass(&f->prog, &f->quad, &f->target, scene_tex);
+
+    // stage 2: edge filter the scratch into the destination.
+    fxaa_pass_main(&f->prog, &f->quad, &f->target, &f->params, derived,
                    q->step_count, dst, dst_w, dst_h);
 }
 
