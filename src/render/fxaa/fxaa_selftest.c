@@ -96,25 +96,126 @@ fxaa_params_sanitize(&p);
 luma_grid g;
 grid_hstep(&g, 0.1f, 0.9f);
 fxaa_edge_info info;
+if (!fxaa_edge_detect(&p, grid_sample, &g, &info)) {
+        LOGE("fxaa selftest: horizontal step not detected");
+        return 0;
+    }
+    if (!info.horizontal) {
+        LOGE("fxaa selftest: horizontal step misclassified as vertical");
 return 0;
 }
     return 1;
+}
+
+int fxaa_selftest_dark_floor(void) {
+    fxaa_params p; fxaa_params_default(&p);
+    // crank the absolute floor up so a tiny near-black delta cant trigger.
+    p.edge_threshold_min = 0.2f;
+    fxaa_params_sanitize(&p);
+
+    // relative contrast is enormous (0 vs 0.05 -> 100% relative) but the
+    // absolute delta is below the floor.
+    luma_grid g; grid_vstep(&g, 0.0f, 0.05f);
+
+    fxaa_edge_info info;
+    int e = fxaa_edge_detect(&p, grid_sample, &g, &info);
+    if (e) {
+        LOGE("fxaa selftest: dark floor failed to suppress edge (c=%f)",
+             info.contrast);
+        return 0;
+    }
+    return 1;
+}
+
+int fxaa_selftest_params_derive(void) {
+    fxaa_params p;
 fxaa_params_default(&p);
 p.edge_threshold = 0.25f;
 p.subpix = 0.8f;
 fxaa_params_sanitize(&p);
 float d[4];
 fxaa_params_derive(&p, d);
+if (!approx(d[0], 0.8f, 1e-5f)) {
+        LOGE("fxaa selftest: subpix passthrough wrong %f", d[0]);
+        return 0;
+    }
+    if (!approx(d[1], 0.8f * 0.8f * 0.5f, 1e-5f)) {
+        LOGE("fxaa selftest: subpix quad wrong %f", d[1]);
 return 0;
+}
+    if (!approx(d[2], 1.0f / 0.25f, 1e-4f)) {
+        LOGE("fxaa selftest: edge reciprocal wrong %f", d[2]);
+        return 0;
+    }
+
+    // sanitize must drag a wild quality index back into the table.
+    fxaa_params q;
 fxaa_params_default(&q);
 q.quality = 99;
 fxaa_params_sanitize(&q);
+if (q.quality < 0 || q.quality >= FXAA_QUALITY_COUNT) {
+        LOGE("fxaa selftest: quality not clamped (%d)", q.quality);
+        return 0;
+    }
+    return 1;
+}
+
+int fxaa_selftest_quality_reach(void) {
+    float prev = -1.0f;
+    for (int i = 0; i < FXAA_QUALITY_COUNT; i++) {
+        const fxaa_quality *q = fxaa_quality_get(i);
+        float r = fxaa_quality_reach(q);
+        if (r < prev - 1e-4f) {
+            LOGE("fxaa selftest: reach not monotonic at preset %d (%f < %f)",
+                 i, r, prev);
+            return 0;
+        }
+        prev = r;
+    }
+    return 1;
+}
+
+int fxaa_selftest_search_bounded(void) {
+    fxaa_params p;
 fxaa_params_default(&p);
 fxaa_params_sanitize(&p);
 const fxaa_quality *q = fxaa_quality_get(p.quality);
 luma_grid g;
 grid_hstep(&g, 0.1f, 0.9f);
 fxaa_edge_info info;
+if (!fxaa_edge_detect(&p, grid_sample, &g, &info)) {
+        LOGE("fxaa selftest: search setup failed to find edge");
+        return 0;
+    }
+    float off = fxaa_edge_search(&p, q, grid_sample, &g, &info);
+if (off < -0.5f - 1e-4f || off > 0.5f + 1e-4f || isnan(off)) {
+        LOGE("fxaa selftest: search offset out of range %f", off);
+        return 0;
+    }
+    return 1;
+}
+
+int fxaa_selftest_settings_roundtrip(void) {
+    fxaa_params p;
+    fxaa_settings_apply(&p, FXAA_SET_OFF);
+    if (p.enabled) {
+        LOGE("fxaa selftest: OFF preset left fxaa enabled");
+        return 0;
+    }
+
+    // apply a known preset, then classify should hand the same one back.
+    fxaa_settings_apply(&p, FXAA_SET_QUALITY);
+    fxaa_setting got = fxaa_settings_classify(&p);
+    if (got != FXAA_SET_QUALITY) {
+        LOGE("fxaa selftest: classify round-trip got %s, want quality",
+             fxaa_settings_name(got));
+        return 0;
+    }
+    return 1;
+}
+
+int fxaa_selftest_history_avg(void) {
+    fxaa_history h;
 fxaa_history_reset(&h);
 float brute_sum = 0.0f;
 int kept = 0;
