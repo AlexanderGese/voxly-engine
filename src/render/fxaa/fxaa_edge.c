@@ -1,6 +1,8 @@
 #include "fxaa_edge.h"
 #include "fxaa_luma.h"
+
 #include <math.h>
+
 static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
@@ -8,43 +10,63 @@ static float clampf(float v, float lo, float hi) {
 int fxaa_edge_detect(const fxaa_params *p, fxaa_luma_at sample, void *user,
                      fxaa_edge_info *info) {
     info->is_edge = 0;
-info->horizontal = 1;
-info->contrast = 0.0f;
-info->blend_subpix = 0.0f;
-float c = sample(0, 0, user);
-float n = sample(0, -1, user);
-float s = sample(0,  1, user);
-float w = sample(-1, 0, user);
-float e = sample( 1, 0, user);
-float contrast = fxaa_luma_contrast(c, n, s, w, e);
-float hi = c;
-if (n > hi) hi = n;
-if (s > hi) hi = s;
-if (w > hi) hi = w;
-if (e > hi) hi = e;
-float trigger = p->edge_threshold * hi;
-if (trigger < p->edge_threshold_min) trigger = p->edge_threshold_min;
-info->contrast = contrast;
-if (contrast < trigger)
-        return 0;
-float nw = sample(-1, -1, user);
-float ne = sample( 1, -1, user);
-float sw = sample(-1,  1, user);
-float se = sample( 1,  1, user);
-float grad_x = fabsf((nw + ne) - 2.0f * n)
+    info->horizontal = 1;
+    info->contrast = 0.0f;
+    info->blend_subpix = 0.0f;
+
+    float c = sample(0, 0, user);
+    float n = sample(0, -1, user);
+    float s = sample(0,  1, user);
+    float w = sample(-1, 0, user);
+    float e = sample( 1, 0, user);
+
+    // plus-neighbourhood contrast vs. the trigger. require both the relative
+    // and the absolute floor so dark gradients dont light up the whole frame.
+    float contrast = fxaa_luma_contrast(c, n, s, w, e);
+    float hi = c;
+    if (n > hi) hi = n;
+    if (s > hi) hi = s;
+    if (w > hi) hi = w;
+    if (e > hi) hi = e;
+    float trigger = p->edge_threshold * hi;
+    if (trigger < p->edge_threshold_min) trigger = p->edge_threshold_min;
+
+    info->contrast = contrast;
+    if (contrast < trigger)
+        return 0;   // flat enough — leave it alone
+
+    // orientation: compare the luma variation seen by sampling along x vs
+    // along y. fxaa folds the diagonals in here so a near-45-degree edge still
+    // picks a sane axis. grad_x is large when the edge's gradient runs left-
+    // right, which means the edge *line* itself runs vertically (and vice
+    // versa) — so the boolean below is "the edge runs horizontally".
+    float nw = sample(-1, -1, user);
+    float ne = sample( 1, -1, user);
+    float sw = sample(-1,  1, user);
+    float se = sample( 1,  1, user);
+
+    float grad_x = fabsf((nw + ne) - 2.0f * n)
                  + fabsf((w  + e ) - 2.0f * c) * 2.0f
                  + fabsf((sw + se) - 2.0f * s);
-float grad_y = fabsf((nw + sw) - 2.0f * w)
+    float grad_y = fabsf((nw + sw) - 2.0f * w)
                  + fabsf((n  + s ) - 2.0f * c) * 2.0f
                  + fabsf((ne + se) - 2.0f * e);
-info->horizontal = (grad_y >= grad_x);
-float avg = fxaa_luma_average8(c, n, s, w, e, nw, ne, sw, se);
-float subpix1 = fabsf(avg - c) / (contrast + 1e-5f);
-subpix1 = clampf(subpix1, 0.0f, 1.0f);
-float subpix2 = subpix1 * subpix1 * (3.0f - 2.0f * subpix1);
-info->blend_subpix = subpix2 * p->subpix;
-info->is_edge = 1;
-return 1;
+
+    // dominant gradient along y -> edge line runs horizontally.
+    info->horizontal = (grad_y >= grad_x);
+
+    // sub-pixel feature estimate: how far the center sits from the local
+    // average, normalised by contrast, then shaped by subpix^2. this is the
+    // amount we blur thin one-texel lines / dots toward their surroundings.
+    float avg = fxaa_luma_average8(c, n, s, w, e, nw, ne, sw, se);
+    float subpix1 = fabsf(avg - c) / (contrast + 1e-5f);
+    subpix1 = clampf(subpix1, 0.0f, 1.0f);
+    // smoothstep-ish: square it so faint sub-pixel detail ramps in gently.
+    float subpix2 = subpix1 * subpix1 * (3.0f - 2.0f * subpix1);
+    info->blend_subpix = subpix2 * p->subpix;
+
+    info->is_edge = 1;
+    return 1;
 }
 
 float fxaa_edge_search(const fxaa_params *p, const fxaa_quality *q,
