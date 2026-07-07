@@ -1,8 +1,10 @@
 #include "fxaa_debug.h"
 #include "fxaa_luma.h"
 #include "fxaa_quality.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+
 void fxaa_debug_stats_cpu(const float *luma, int w, int h,
                           float edge_threshold, fxaa_stats *out) {
     out->pixels = 0;
@@ -47,28 +49,32 @@ void fxaa_debug_stats_cpu(const float *luma, int w, int h,
 
 int fxaa_debug_stats(const fxaa *f, fxaa_stats *out) {
     if (!fxaa_is_active(f) || !f->target.tex) return 0;
-int w = f->target.w, h = f->target.h;
-if (w <= 0 || h <= 0) return 0;
-unsigned char *px = (unsigned char*)malloc((size_t)w * h * 4);
-if (!px) return 0;
-glid fbo;
-glGenFramebuffers(1, &fbo);
-glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+    int w = f->target.w, h = f->target.h;
+    if (w <= 0 || h <= 0) return 0;
+
+    // readback rgba8; we only care about alpha (the packed luma).
+    unsigned char *px = (unsigned char*)malloc((size_t)w * h * 4);
+    if (!px) return 0;
+
+    glid fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, f->target.tex, 0);
-glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
-glBindFramebuffer(GL_FRAMEBUFFER, 0);
-glDeleteFramebuffers(1, &fbo);
-float *luma = (float*)malloc(sizeof(float) * (size_t)w * h);
-if (!luma) { free(px); return 0; }
-    for (int i = 0;
-i < w * h;
-i++)
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &fbo);
+
+    float *luma = (float*)malloc(sizeof(float) * (size_t)w * h);
+    if (!luma) { free(px); return 0; }
+    for (int i = 0; i < w * h; i++)
         luma[i] = (float)px[i * 4 + 3] / 255.0f;
-fxaa_debug_stats_cpu(luma, w, h, f->params.edge_threshold, out);
-free(luma);
-free(px);
-return 1;
+
+    fxaa_debug_stats_cpu(luma, w, h, f->params.edge_threshold, out);
+
+    free(luma);
+    free(px);
+    return 1;
 }
 
 void fxaa_debug_format(const fxaa *f, const fxaa_stats *st,
