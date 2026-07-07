@@ -13,6 +13,12 @@
 // ... per frame, after tonemap has written the ldr scene to scene_tex ...
 // fxaa_run(&f, scene_tex, /*dst fbo*/ 0, win_w, win_h);
 // ... on resize ...
+// fxaa_resize(&f, new_w, new_h);
+// fxaa_destroy(&f);
+//
+// run does prepass -> main and writes the antialiased frame into the bound
+// destination. if fxaa is disabled or the shaders are missing it does a plain
+// blit of scene_tex so the renderer can call it unconditionally and trust the
 typedef struct {
     fxaa_programs prog;
     fxaa_params   params;
