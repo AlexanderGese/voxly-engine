@@ -21,6 +21,12 @@ void instancing_indirect_init(instancing_indirect *ind) {
     memset(ind, 0, sizeof *ind);
 for (int i = 0;
 i < INSTANCING_MAX_MESHES;
+++i) {
+        ind->mesh_first[i] = -1;
+        ind->mesh_count[i] = 0;
+    }
+
+    glGenVertexArrays(1, &ind->vao);
 glGenBuffers(1, &ind->base_vbo);
 glGenBuffers(1, &ind->inst_vbo);
 glGenBuffers(1, &ind->cmd_vbo);
@@ -43,6 +49,19 @@ glBufferData(GL_DRAW_INDIRECT_BUFFER, 16 * sizeof(instancing_draw_cmd),
 glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 ind->cmd_capacity = 16;
 ind->initialised = 1;
+}
+
+void instancing_indirect_destroy(instancing_indirect *ind) {
+    if (ind->vao) glDeleteVertexArrays(1, &ind->vao);
+    if (ind->base_vbo) glDeleteBuffers(1, &ind->base_vbo);
+    if (ind->inst_vbo) glDeleteBuffers(1, &ind->inst_vbo);
+    if (ind->cmd_vbo) glDeleteBuffers(1, &ind->cmd_vbo);
+    memset(ind, 0, sizeof *ind);
+}
+
+void instancing_indirect_pack_bases(instancing_indirect *ind,
+                                    instancing_registry *reg) {
+    if (!ind->initialised) return;
 instancing_base_vertex *merged = NULL;
 for (int id = 0;
 id < INSTANCING_MAX_MESHES;
