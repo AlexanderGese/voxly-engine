@@ -1,6 +1,8 @@
 #include "gbuffer_target.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 // internal format per color attachment. index matches GBUFFER_MRT_COUNT.
 static const struct {
     GLint  internal;
@@ -11,6 +13,7 @@ static const struct {
     { GL_RGB10_A2,     GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV }, // normal
     { GL_RGBA8,        GL_RGBA, GL_UNSIGNED_BYTE },        // material
 };
+
 static void make_color_tex(glid *out, int i, int w, int h) {
     glGenTextures(1, out);
     glBindTexture(GL_TEXTURE_2D, *out);
@@ -27,37 +30,38 @@ static void make_color_tex(glid *out, int i, int w, int h) {
 
 int gbuffer_target_create(gbuffer_target *t, int w, int h) {
     t->w = w;
-t->h = h;
-glGenFramebuffers(1, &t->fbo);
-glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
-for (int i = 0;
-i < GBUFFER_MRT_COUNT;
-i++)
+    t->h = h;
+
+    glGenFramebuffers(1, &t->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+
+    for (int i = 0; i < GBUFFER_MRT_COUNT; i++)
         make_color_tex(&t->tex[i], i, w, h);
-// sampled depth, we reconstruct view position from this in the accum pass
-glGenTextures(1, &t->depth_tex);
-glBindTexture(GL_TEXTURE_2D, t->depth_tex);
-glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0,
+
+    // sampled depth, we reconstruct view position from this in the accum pass
+    glGenTextures(1, &t->depth_tex);
+    glBindTexture(GL_TEXTURE_2D, t->depth_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0,
                  GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                            GL_TEXTURE_2D, t->depth_tex, 0);
-GLenum bufs[GBUFFER_MRT_COUNT];
-for (int i = 0;
-i < GBUFFER_MRT_COUNT;
-i++)
+
+    GLenum bufs[GBUFFER_MRT_COUNT];
+    for (int i = 0; i < GBUFFER_MRT_COUNT; i++)
         bufs[i] = GL_COLOR_ATTACHMENT0 + i;
-glDrawBuffers(GBUFFER_MRT_COUNT, bufs);
-if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    glDrawBuffers(GBUFFER_MRT_COUNT, bufs);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         LOGE("gbuffer: mrt framebuffer incomplete (%dx%d)", w, h);
         gbuffer_target_destroy(t);
         return 0;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-return 1;
+    return 1;
 }
 
 void gbuffer_target_destroy(gbuffer_target *t) {
@@ -71,14 +75,12 @@ void gbuffer_target_destroy(gbuffer_target *t) {
 
 void gbuffer_target_bind(const gbuffer_target *t) {
     glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
-glViewport(0, 0, t->w, t->h);
-// we still set draw buffers here in case some other pass clobbered them
-GLenum bufs[GBUFFER_MRT_COUNT];
-for (int i = 0;
-i < GBUFFER_MRT_COUNT;
-i++)
+    glViewport(0, 0, t->w, t->h);
+    // we still set draw buffers here in case some other pass clobbered them
+    GLenum bufs[GBUFFER_MRT_COUNT];
+    for (int i = 0; i < GBUFFER_MRT_COUNT; i++)
         bufs[i] = GL_COLOR_ATTACHMENT0 + i;
-glDrawBuffers(GBUFFER_MRT_COUNT, bufs);
+    glDrawBuffers(GBUFFER_MRT_COUNT, bufs);
 }
 
 void gbuffer_target_bind_textures(const gbuffer_target *t, int base) {
@@ -92,6 +94,6 @@ void gbuffer_target_bind_textures(const gbuffer_target *t, int base) {
 
 void gbuffer_target_resize(gbuffer_target *t, int w, int h) {
     if (t->w == w && t->h == h) return;
-gbuffer_target_destroy(t);
-gbuffer_target_create(t, w, h);
+    gbuffer_target_destroy(t);
+    gbuffer_target_create(t, w, h);
 }
