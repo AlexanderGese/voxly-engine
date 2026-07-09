@@ -49,6 +49,14 @@ int i = (int)lrintf(t);
 if (i < 0)    i = 0;
 if (i > 1023) i = 1023;
 return (uint32_t)i;
+}
+
+static float dec10(uint32_t v) {
+    return ((float)(v & 0x3ff) / 1023.0f) * 2.0f - 1.0f;
+}
+
+uint32_t gbuffer_normal_pack(vec3 n, int face) {
+    gbuffer_oct o = gbuffer_normal_encode(n);
 uint32_t u = enc10(o.u);
 uint32_t v = enc10(o.v);
 uint32_t a = (uint32_t)(face & 0x3);
