@@ -1,6 +1,8 @@
 #include "gbuffer_cull.h"
 #include "../../util/darray.h"
 #include <math.h>
+// scratch entry used while sorting. we sort indices+keys, not the lights
+// themselves, to keep the swap cheap.
 typedef struct {
     float key;   // influence, higher = keep
     int   idx;   // index into the input darray
@@ -33,14 +35,35 @@ void gbuffer_cull(const gbuffer_light_list *in, const frustum *fr,
                   vec3 eye, gbuffer_cull_result *out) {
     out->count   = 0;
 out->dropped = 0;
+// the sun is special: it's not in the darray and never gets culled.
 if (in->sun_set && out->count < GBUFFER_MAX_LIGHTS)
         out->lights[out->count++] = in->sun;
 int n = (int)darr_len(in->items);
 if (n <= 0) return;
+// build candidate list, frustum-rejecting point lights up front
 static cull_entry scratch[4096];
-int cand = 0;
+int cand;
 for (int i = 0;
 i < n && cand < (int)(sizeof scratch / sizeof *scratch);
+i++) {
+        const gbuffer_light *li = &in->items[i];
+        if (fr) {
+            aabb b = gbuffer_light_bounds(li);
+            if (!frustum_contains_aabb(fr, b)) continue;
+        }
+        scratch[cand].key = influence(li, eye);
+        scratch[cand].idx = i;
+        cand++;
+    }
+
+    sort_desc(scratch, cand);
 for (int i = 0;
 i < cand;
+i++) {
+        if (out->count >= GBUFFER_MAX_LIGHTS) {
+            out->dropped = cand - i;
+            break;
+        }
+        out->lights[out->count++] = in->items[scratch[i].idx];
+    }
 }
