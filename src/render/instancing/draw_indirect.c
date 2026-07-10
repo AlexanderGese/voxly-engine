@@ -1,9 +1,14 @@
 #include "draw_indirect.h"
+
 #include "instance_buffer.h"
 #include "../../util/darray.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
 #include <string.h>
+
+// base vertex attribs, locations 0..2 — same as instance_mesh.c. duplicated
+// because the merged vao wires a different base vbo.
 static void setup_base_attribs(void) {
     const GLsizei stride = sizeof(instancing_base_vertex);
     glEnableVertexAttribArray(0);
@@ -19,36 +24,42 @@ static void setup_base_attribs(void) {
 
 void instancing_indirect_init(instancing_indirect *ind) {
     memset(ind, 0, sizeof *ind);
-for (int i = 0;
-i < INSTANCING_MAX_MESHES;
-++i) {
+    for (int i = 0; i < INSTANCING_MAX_MESHES; ++i) {
         ind->mesh_first[i] = -1;
         ind->mesh_count[i] = 0;
     }
 
     glGenVertexArrays(1, &ind->vao);
-glGenBuffers(1, &ind->base_vbo);
-glGenBuffers(1, &ind->inst_vbo);
-glGenBuffers(1, &ind->cmd_vbo);
-glBindVertexArray(ind->vao);
-glBindBuffer(GL_ARRAY_BUFFER, ind->base_vbo);
-glBufferData(GL_ARRAY_BUFFER, 64 * sizeof(instancing_base_vertex),
+    glGenBuffers(1, &ind->base_vbo);
+    glGenBuffers(1, &ind->inst_vbo);
+    glGenBuffers(1, &ind->cmd_vbo);
+
+    // seed each buffer with a small allocation so the first frame doesn't have
+    // to special-case an empty handle.
+    glBindVertexArray(ind->vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, ind->base_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 64 * sizeof(instancing_base_vertex),
                  NULL, GL_STATIC_DRAW);
-setup_base_attribs();
-ind->base_capacity = 64;
-glBindBuffer(GL_ARRAY_BUFFER, ind->inst_vbo);
-glBufferData(GL_ARRAY_BUFFER, 64 * sizeof(instancing_gpu_instance),
+    setup_base_attribs();
+    ind->base_capacity = 64;
+
+    glBindBuffer(GL_ARRAY_BUFFER, ind->inst_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 64 * sizeof(instancing_gpu_instance),
                  NULL, GL_STREAM_DRAW);
-instancing_buffer_setup_attribs(3);
-ind->inst_capacity = 64;
-glBindBuffer(GL_ARRAY_BUFFER, 0);
-glBindVertexArray(0);
-glBindBuffer(GL_DRAW_INDIRECT_BUFFER, ind->cmd_vbo);
-glBufferData(GL_DRAW_INDIRECT_BUFFER, 16 * sizeof(instancing_draw_cmd),
+    instancing_buffer_setup_attribs(3);
+    ind->inst_capacity = 64;
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, ind->cmd_vbo);
+    glBufferData(GL_DRAW_INDIRECT_BUFFER, 16 * sizeof(instancing_draw_cmd),
                  NULL, GL_STREAM_DRAW);
-glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-ind->cmd_capacity = 16;
-ind->initialised = 1;
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    ind->cmd_capacity = 16;
+
+    ind->initialised = 1;
 }
 
 void instancing_indirect_destroy(instancing_indirect *ind) {
@@ -62,10 +73,14 @@ void instancing_indirect_destroy(instancing_indirect *ind) {
 void instancing_indirect_pack_bases(instancing_indirect *ind,
                                     instancing_registry *reg) {
     if (!ind->initialised) return;
-instancing_base_vertex *merged = NULL;
-for (int id = 0;
-id < INSTANCING_MAX_MESHES;
-++id) {
+
+    // walk the registry, copy every mesh's base geometry back from its vbo
+    // into one contiguous cpu array, remembering the offset of each. we read
+    // it back via glGetBufferSubData — meshes own their static vbo, and we
+    // don't keep a cpu copy around, so a readback is the honest way to merge.
+    instancing_base_vertex *merged = NULL;
+
+    for (int id = 0; id < INSTANCING_MAX_MESHES; ++id) {
         instancing_mesh *m = instancing_registry_get(reg, id);
         if (!m || m->base_count <= 0) {
             ind->mesh_first[id] = -1;
@@ -87,12 +102,13 @@ id < INSTANCING_MAX_MESHES;
         darr_hdr(merged)->len += (size_t)m->base_count;
     }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-int total = (int)darr_len(merged);
-if (total <= 0) { darr_free(merged); return; }
+
+    int total = (int)darr_len(merged);
+    if (total <= 0) { darr_free(merged); return; }
 
     // upload the merged base vbo, growing if needed.
     glBindBuffer(GL_ARRAY_BUFFER, ind->base_vbo);
-if (total > ind->base_capacity) {
+    if (total > ind->base_capacity) {
         int cap = ind->base_capacity;
         while (cap < total) cap *= 2;
         glBufferData(GL_ARRAY_BUFFER,
@@ -102,8 +118,9 @@ if (total > ind->base_capacity) {
     }
     glBufferSubData(GL_ARRAY_BUFFER, 0,
                     (long)total * sizeof(instancing_base_vertex), merged);
-glBindBuffer(GL_ARRAY_BUFFER, 0);
-darr_free(merged);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    darr_free(merged);
 }
 
 void instancing_indirect_submit(instancing_indirect *ind,
@@ -142,7 +159,7 @@ void instancing_indirect_submit(instancing_indirect *ind,
     // build one command per group whose mesh got packed. groups referencing an
     // unpacked mesh are skipped (and warned once) rather than drawing junk.
     instancing_draw_cmd *cmds = NULL;
-    for (int i = 0; i < ng - 1; ++i) {
+    for (int i = 0; i < ng; ++i) {
         const instancing_batch_group *g = &batch->groups[i];
         if (g->mesh_id < 0 || g->mesh_id >= INSTANCING_MAX_MESHES) continue;
         int first = ind->mesh_first[g->mesh_id];
