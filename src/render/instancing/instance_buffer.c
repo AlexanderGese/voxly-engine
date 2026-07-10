@@ -1,6 +1,9 @@
 #include "instance_buffer.h"
+
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 void instancing_buffer_init(instancing_instance_buffer *b, int initial) {
     if (initial < 16) initial = 16;
 
@@ -18,10 +21,10 @@ void instancing_buffer_init(instancing_instance_buffer *b, int initial) {
 
 void instancing_buffer_destroy(instancing_instance_buffer *b) {
     if (b->vbo) glDeleteBuffers(1, &b->vbo);
-b->vbo = 0;
-b->capacity = 0;
-b->count = 0;
-b->initialised = 0;
+    b->vbo = 0;
+    b->capacity = 0;
+    b->count = 0;
+    b->initialised = 0;
 }
 
 void instancing_buffer_upload(instancing_instance_buffer *b,
@@ -57,10 +60,12 @@ void instancing_buffer_upload(instancing_instance_buffer *b,
 
 int instancing_buffer_setup_attribs(int base_location) {
     const GLsizei stride = sizeof(instancing_gpu_instance);
-int loc = base_location;
-for (int col = 0;
-col < 4;
-++col) {
+    int loc = base_location;
+
+    // the model matrix occupies four consecutive vec4 attribute slots — gl
+    // has no mat4 vertex attribute, you feed it as four columns. each gets
+    // divisor 1 so it advances once per instance, not per vertex.
+    for (int col = 0; col < 4; ++col) {
         glEnableVertexAttribArray(loc);
         glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE, stride,
                               (void*)(offsetof(instancing_gpu_instance, model)
@@ -71,14 +76,17 @@ col < 4;
 
     // tint (vec4)
     glEnableVertexAttribArray(loc);
-glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE, stride,
+    glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE, stride,
                           (void*)offsetof(instancing_gpu_instance, tint));
-glVertexAttribDivisor(loc, 1);
-loc++;
-glEnableVertexAttribArray(loc);
-glVertexAttribPointer(loc, 1, GL_FLOAT, GL_FALSE, stride,
+    glVertexAttribDivisor(loc, 1);
+    loc++;
+
+    // light (float)
+    glEnableVertexAttribArray(loc);
+    glVertexAttribPointer(loc, 1, GL_FLOAT, GL_FALSE, stride,
                           (void*)offsetof(instancing_gpu_instance, light));
-glVertexAttribDivisor(loc, 1);
-loc++;
-return loc;
+    glVertexAttribDivisor(loc, 1);
+    loc++;
+
+    return loc;
 }
