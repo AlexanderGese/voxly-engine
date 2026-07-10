@@ -1,4 +1,5 @@
 #include "lt_seam.h"
+
 // face -> neighbour slot. only the four horizontal faces map; top/bottom never
 // border another chunk (the world is one chunk tall) so they return -1.
 int lt_seam_dir(int face) {
@@ -15,6 +16,7 @@ int lt_seam_dir(int face) {
 static const lt_seam_mask SLOT_BIT[4] = {
     LT_SEAM_PX, LT_SEAM_NX, LT_SEAM_PZ, LT_SEAM_NZ
 };
+
 lt_seam_mask lt_seam_compute(int my_level, const lt_neighbor_levels *nb) {
     lt_seam_mask mask = 0;
     for (int s = 0; s < 4; s++) {
@@ -27,6 +29,6 @@ lt_seam_mask lt_seam_compute(int my_level, const lt_neighbor_levels *nb) {
 
 int lt_seam_has(lt_seam_mask mask, int face) {
     int slot = lt_seam_dir(face);
-if (slot < 0) return 0;
-return (mask & SLOT_BIT[slot]) != 0;
+    if (slot < 0) return 0;
+    return (mask & SLOT_BIT[slot]) != 0;
 }
