@@ -1,6 +1,8 @@
 #include "lt_gpu.h"
+
 #include "../../util/darray.h"
 #include <stddef.h>
+
 void lt_gpu_init(lt_gpu_mesh *gm) {
     gm->vao = gm->vbo = gm->ebo = 0;
     gm->index_count = 0;
@@ -9,24 +11,27 @@ void lt_gpu_init(lt_gpu_mesh *gm) {
 
 static void ensure_objects(lt_gpu_mesh *gm) {
     if (gm->vao) return;
-glGenVertexArrays(1, &gm->vao);
-glGenBuffers(1, &gm->vbo);
-glGenBuffers(1, &gm->ebo);
-glBindVertexArray(gm->vao);
-glBindBuffer(GL_ARRAY_BUFFER, gm->vbo);
-glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gm->ebo);
-// layout matches lt_vertex == render/mesh.h vertex: pos(3) uv(2) light(1).
-GLsizei stride = (GLsizei)sizeof(lt_vertex);
-glEnableVertexAttribArray(0);
-glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride,
+    glGenVertexArrays(1, &gm->vao);
+    glGenBuffers(1, &gm->vbo);
+    glGenBuffers(1, &gm->ebo);
+
+    glBindVertexArray(gm->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, gm->vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gm->ebo);
+
+    // layout matches lt_vertex == render/mesh.h vertex: pos(3) uv(2) light(1).
+    GLsizei stride = (GLsizei)sizeof(lt_vertex);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride,
                           (void*)offsetof(lt_vertex, x));
-glEnableVertexAttribArray(1);
-glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride,
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride,
                           (void*)offsetof(lt_vertex, u));
-glEnableVertexAttribArray(2);
-glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride,
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, stride,
                           (void*)offsetof(lt_vertex, light));
-glBindVertexArray(0);
+
+    glBindVertexArray(0);
 }
 
 void lt_gpu_upload(lt_gpu_mesh *gm, const lt_mesh *m) {
@@ -63,9 +68,9 @@ void lt_gpu_upload(lt_gpu_mesh *gm, const lt_mesh *m) {
 
 void lt_gpu_draw(const lt_gpu_mesh *gm) {
     if (!gm->uploaded || gm->index_count == 0 || gm->vao == 0) return;
-glBindVertexArray(gm->vao);
-glDrawElements(GL_TRIANGLES, gm->index_count, GL_UNSIGNED_INT, 0);
-glBindVertexArray(0);
+    glBindVertexArray(gm->vao);
+    glDrawElements(GL_TRIANGLES, gm->index_count, GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
 }
 
 void lt_gpu_free(lt_gpu_mesh *gm) {
