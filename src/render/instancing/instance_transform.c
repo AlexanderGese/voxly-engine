@@ -1,6 +1,10 @@
 #include "instance_transform.h"
+
 #include <math.h>
+
+// column-major index helper: column c, row r lives at c*4 + r.
 #define M(c, r)  ((c) * 4 + (r))
+
 void instancing_transform_bake(const instance_desc *d, instance_gpu *out) {
     // rotation about +y by yaw. standard right-handed:
     // [ cos  0  sin ]
@@ -47,7 +51,18 @@ void instancing_transform_bake(const instance_desc *d, instance_gpu *out) {
 
 vec3 instancing_transform_center(const instance_desc *d) {
     return d->pos;
-mat4 r = mat4_rotate_y(d->yaw);
-mat4 sc = mat4_scale(d->scale);
-return mat4_mul(t, mat4_mul(r, sc));
+}
+
+aabb instancing_transform_bounds(const instance_desc *d) {
+    float r = instancing_world_radius(d);
+    vec3 half = { r, r, r };
+    return aabb_from_center(d->pos, half);
+}
+
+mat4 instancing_transform_matrix(const instance_desc *d) {
+    // the readable version. composes the same translate*rot*scale as _bake.
+    mat4 t = mat4_translate(d->pos);
+    mat4 r = mat4_rotate_y(d->yaw);
+    mat4 sc = mat4_scale(d->scale);
+    return mat4_mul(t, mat4_mul(r, sc));
 }

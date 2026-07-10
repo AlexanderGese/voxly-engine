@@ -1,6 +1,11 @@
 #include "instance_sort.h"
+
 #include <stdlib.h>
+
+// small-slice cutoff: below this we insertion sort (fewer branches, cache
+// friendly), above it we recurse with quicksort. classic introsort-lite.
 #define SORT_SMALL  24
+
 vec3 instancing_sort_record_pos(const instancing_gpu_instance *rec) {
     // column-major 4x4: the translation is the 4th column, floats 12..14.
     return (vec3){ rec->model[12], rec->model[13], rec->model[14] };
@@ -10,8 +15,8 @@ vec3 instancing_sort_record_pos(const instancing_gpu_instance *rec) {
 // compare, never need the actual length.
 static float dist_sq(const instancing_gpu_instance *rec, vec3 cam) {
     vec3 p = instancing_sort_record_pos(rec);
-float dx = p.x - cam.x, dy = p.y - cam.y, dz = p.z - cam.z;
-return dx * dx + dy * dy + dz * dz;
+    float dx = p.x - cam.x, dy = p.y - cam.y, dz = p.z - cam.z;
+    return dx * dx + dy * dy + dz * dz;
 }
 
 static void swap_rec(instancing_gpu_instance *a, instancing_gpu_instance *b) {
@@ -48,23 +53,22 @@ static void quicksort(instancing_gpu_instance *recs, float *keys, int lo,
     while (hi - lo > SORT_SMALL) {
         // median-of-three pivot to dodge the already-sorted worst case.
         int mid = lo + (hi - lo) / 2;
-if (before(keys[mid], keys[lo], far_first)) {
+        if (before(keys[mid], keys[lo], far_first)) {
             swap_rec(&recs[lo], &recs[mid]);
             float t = keys[lo]; keys[lo] = keys[mid]; keys[mid] = t;
         }
         if (before(keys[hi], keys[lo], far_first)) {
             swap_rec(&recs[lo], &recs[hi]);
-float t = keys[lo];
-keys[lo] = keys[hi];
-keys[hi] = t;
-}
+            float t = keys[lo]; keys[lo] = keys[hi]; keys[hi] = t;
+        }
         if (before(keys[hi], keys[mid], far_first)) {
             swap_rec(&recs[mid], &recs[hi]);
             float t = keys[mid]; keys[mid] = keys[hi]; keys[hi] = t;
         }
         float pivot = keys[mid];
-int i = lo, j = hi;
-while (i <= j) {
+
+        int i = lo, j = hi;
+        while (i <= j) {
             while (before(keys[i], pivot, far_first)) i++;
             while (before(pivot, keys[j], far_first)) j--;
             if (i <= j) {
@@ -77,8 +81,8 @@ while (i <= j) {
         // recurse into the smaller side, loop on the larger — bounds stack.
         if (j - lo < hi - i) {
             quicksort(recs, keys, lo, j, far_first);
-lo = i;
-} else {
+            lo = i;
+        } else {
             quicksort(recs, keys, i, hi, far_first);
             hi = j;
         }
@@ -106,3 +110,9 @@ static void sort_impl(instancing_gpu_instance *recs, int count, vec3 cam,
 void instancing_sort_back_to_front(instancing_gpu_instance *recs, int count,
                                    vec3 cam) {
     sort_impl(recs, count, cam, 1);
+}
+
+void instancing_sort_front_to_back(instancing_gpu_instance *recs, int count,
+                                   vec3 cam) {
+    sort_impl(recs, count, cam, 0);
+}
