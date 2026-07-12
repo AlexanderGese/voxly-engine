@@ -3,14 +3,18 @@
 #include "vertex_pack.h"
 #include "../../util/darray.h"
 #include "../../world/block.h"
+
+// the two diagonal planes of a unit cell, as four corners each (CCW). we inset
+// slightly off the cell walls so the billboard doesnt z-fight the floor it
+// stands on. these are in cell-local 0..1 space.
 #define INS 0.0f
 static const float CROSS_PLANE[2][4][3] = {
     // plane A: from (0,0) to (1,1) on the xz diagonal
     { {0+INS,0,0+INS}, {1-INS,0,1-INS}, {1-INS,1,1-INS}, {0+INS,1,0+INS} },
     // plane B: from (1,0) to (0,1) on the other diagonal
     { {1-INS,0,0+INS}, {0+INS,0,1-INS}, {0+INS,1,1-INS}, {1-INS,1,0+INS} },
-}
-;
+};
+
 static void emit_plane(mb_result *r, int wx, int y, int wz,
                        const float corners[4][3], int tile, int light,
                        int flip) {
@@ -48,15 +52,17 @@ static void emit_plane(mb_result *r, int wx, int y, int wz,
 void mb_cross_emit(const mb_ctx *c, int x, int y, int z, block_id id,
                    mb_result *r) {
     if (!mb_shape_is_cross(id)) return;
-int wx = c->base_x + x;
-int wz = c->base_z + z;
-int light = c->light(c->ctx, wx, y, wz);
-if (light < MB_MIN_FACE_LIGHT) light = MB_MIN_FACE_LIGHT;
-if (light > MAX_LIGHT) light = MAX_LIGHT;
-int tile = block_face_tile(id, 0);
-for (int p = 0;
-p < 2;
-p++) {
+
+    int wx = c->base_x + x;
+    int wz = c->base_z + z;
+
+    int light = c->light(c->ctx, wx, y, wz);
+    if (light < MB_MIN_FACE_LIGHT) light = MB_MIN_FACE_LIGHT;
+    if (light > MAX_LIGHT) light = MAX_LIGHT;
+
+    int tile = block_face_tile(id, 0);   // side tile; crosses use one tile
+
+    for (int p = 0; p < 2; p++) {
         // front and back facing of each plane.
         emit_plane(r, wx, y, wz, CROSS_PLANE[p], tile, light, 0);
         emit_plane(r, wx, y, wz, CROSS_PLANE[p], tile, light, 1);
@@ -65,9 +71,7 @@ p++) {
 
 int mb_cross_scan(const mb_ctx *c, mb_result *r) {
     int n = 0;
-for (int y = 0;
-y < CHUNK_SIZE_Y;
-y++) {
+    for (int y = 0; y < CHUNK_SIZE_Y; y++) {
         for (int z = 0; z < CHUNK_SIZE_Z; z++) {
             for (int x = 0; x < CHUNK_SIZE_X; x++) {
                 block_id id = c->sample(c->ctx, c->base_x + x, y,
