@@ -1,7 +1,9 @@
 #include "mb_debug.h"
 #include "../../util/darray.h"
 #include "../../util/log.h"
+
 #include <math.h>
+
 static int bad_float(float f) {
     return isnan(f) || isinf(f);
 }
@@ -25,11 +27,48 @@ static double tri_area2(const mb_vertex *a, const mb_vertex *b,
 
 mb_check meshbuild_check(const mb_result *r) {
     mb_check chk = {0};
-chk.ok = 1;
-size_t nverts = darr_len(r->verts);
-size_t nidx   = darr_len(r->indices);
-if (nidx % 3 != 0) chk.ok = 0;
-for (size_t i = 0;
-i < nverts;
-i + 2 < nidx;
-return chk;
+    chk.ok = 1;
+
+    size_t nverts = darr_len(r->verts);
+    size_t nidx   = darr_len(r->indices);
+
+    // index count must be a whole number of triangles.
+    if (nidx % 3 != 0) chk.ok = 0;
+
+    for (size_t i = 0; i < nverts; i++) {
+        const mb_vertex *v = &r->verts[i];
+        if (vert_nan(v)) chk.nan_verts++;
+        if (v->light < 0.0f || v->light > 1.0f) chk.bad_light++;
+    }
+
+    for (size_t i = 0; i + 2 < nidx; i += 3) {
+        uint32_t ia = r->indices[i];
+        uint32_t ib = r->indices[i + 1];
+        uint32_t ic = r->indices[i + 2];
+
+        if (ia >= nverts || ib >= nverts || ic >= nverts) {
+            chk.oob_indices++;
+            continue;   // cant area-check a tri that points out of bounds
+        }
+        if (tri_area2(&r->verts[ia], &r->verts[ib], &r->verts[ic]) < 1e-9)
+            chk.degenerate_tris++;
+    }
+
+    if (chk.degenerate_tris || chk.oob_indices ||
+        chk.nan_verts || chk.bad_light)
+        chk.ok = 0;
+
+    return chk;
+}
+
+int meshbuild_check_log(const mb_result *r) {
+    mb_check c = meshbuild_check(r);
+    if (c.ok) {
+        LOGD("meshbuild ok: %d quads, %zu verts",
+             r->quad_count, darr_len(r->verts));
+    } else {
+        LOGW("meshbuild issues: degenerate=%d oob=%d nan=%d badlight=%d",
+             c.degenerate_tris, c.oob_indices, c.nan_verts, c.bad_light);
+    }
+    return c.ok;
+}
