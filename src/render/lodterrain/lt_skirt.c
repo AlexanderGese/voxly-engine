@@ -1,37 +1,45 @@
 #include "lt_skirt.h"
+
 #include "../../world/block.h"
 #include "../../config.h"
-static const int H_FACE[4]      = { LT_FACE_PX, LT_FACE_NX, LT_FACE_PZ, LT_FACE_NZ }
-;
-static const int H_OFF[4][3]    = { {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1} }
-;
+
+// the four horizontal faces we ever skirt, paired with their cell offset so we
+// can test whether the cell actually sits on that border.
+static const int H_FACE[4]      = { LT_FACE_PX, LT_FACE_NX, LT_FACE_PZ, LT_FACE_NZ };
+static const int H_OFF[4][3]    = { {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1} };
+
+// a skirt is just a downward face, so reuse the same shade the surface uses for
+// side faces — keeps it from glowing against the lit top cells.
 static float side_shade(void) { return 0.72f; }
 
 void lt_skirt_edge(lt_mesh *m, int face,
                    float bx, float by, float bz, float cell, float depth,
                    int tile, int light) {
     float l = (float)light / (float)MAX_LIGHT;
-if (l > 1.0f) l = 1.0f;
-l *= side_shade();
-float tu = (float)(tile % ATLAS_TILES_X) / (float)ATLAS_TILES_X;
-float tv = (float)(tile / ATLAS_TILES_X) / (float)ATLAS_TILES_Y;
-float ts_u = 1.0f / (float)ATLAS_TILES_X;
-float ts_v = 1.0f / (float)ATLAS_TILES_Y;
-float x0 = bx, x1 = bx + cell;
-float z0 = bz, z1 = bz + cell;
-float yt = by;
-float yb = by - depth;
-lt_vertex a, b, c, d;
-a.u = tu;
-a.v = tv;
-b.u = tu + ts_u;
-b.v = tv;
-c.u = tu + ts_u;
-c.v = tv + ts_v;
-d.u = tu;
-d.v = tv + ts_v;
-a.light = b.light = c.light = d.light = l;
-switch (face) {
+    if (l > 1.0f) l = 1.0f;
+    l *= side_shade();
+
+    float tu = (float)(tile % ATLAS_TILES_X) / (float)ATLAS_TILES_X;
+    float tv = (float)(tile / ATLAS_TILES_X) / (float)ATLAS_TILES_Y;
+    float ts_u = 1.0f / (float)ATLAS_TILES_X;
+    float ts_v = 1.0f / (float)ATLAS_TILES_Y;
+
+    float x0 = bx, x1 = bx + cell;
+    float z0 = bz, z1 = bz + cell;
+    float yt = by;            // top of the skirt = bottom edge of the cell's top
+    float yb = by - depth;    // hangs straight down
+
+    lt_vertex a, b, c, d;
+    a.u = tu;        a.v = tv;
+    b.u = tu + ts_u; b.v = tv;
+    c.u = tu + ts_u; c.v = tv + ts_v;
+    d.u = tu;        d.v = tv + ts_v;
+    a.light = b.light = c.light = d.light = l;
+
+    // wind each curtain so its front faces outward, away from the chunk centre,
+    // matching the surface face it shadows. otherwise it'd be backface-culled
+    // and we'd be right back to seeing through the crack.
+    switch (face) {
     case LT_FACE_PX:
         a.x=x1; a.y=yb; a.z=z0;  b.x=x1; b.y=yb; b.z=z1;
         c.x=x1; c.y=yt; c.z=z1;  d.x=x1; d.y=yt; d.z=z0;
@@ -59,7 +67,7 @@ int lt_skirt_build(lt_mesh *m, const lt_grid *g, const lt_source *src,
 
     float cell  = (float)g->step;
     float depth = LT_SKIRT_DEPTH;
-    int added;
+    int   added = 0;
 
     for (int s = 0; s < 4; s++) {
         int face = H_FACE[s];
