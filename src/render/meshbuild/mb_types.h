@@ -1,5 +1,7 @@
 #ifndef RENDER_MESHBUILD_MB_TYPES_H
 #define RENDER_MESHBUILD_MB_TYPES_H
+// shared types for the mesh builder. nothing in here touches GL — the builder
+// produces plain cpu-side arrays and the renderer uploads them. keeps this
 #include "mb_config.h"
 #include "../../world/block.h"
 #include <stdint.h>
@@ -22,6 +24,8 @@ typedef struct {
     int        quad_count;
     int        merged_away;   // how many faces greedy merging removed
 } mb_result;
+typedef block_id (*mb_sample_fn)(void *ctx, int x, int y, int z);
+typedef int (*mb_light_fn)(void *ctx, int x, int y, int z);
 typedef struct {
     int          base_x, base_z;   // chunk origin in world block coords
     mb_sample_fn sample;
