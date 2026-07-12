@@ -4,6 +4,10 @@
 #include "ao_sampler.h"
 #include "light_sample.h"
 #include "../../world/block.h"
+
+// fill the mask for one slice of one face direction. `slice` is the coord along
+// the sweep axis, `face` the outward face. we look from the cell at `slice`
+// across the face toward its neighbour and record a face when its visible.
 static void fill_mask(const mb_ctx *c, int axis, int face, int slice,
                       mb_mask *m) {
     int ua, va;
@@ -48,29 +52,33 @@ static void emit_rect(const mb_ctx *c, int axis, int face, int slice,
                       int u, int v, int qw, int qh, const mb_cell *cell,
                       mb_emit_fn emit, void *user) {
     int x, y, z;
-mb_scatter(axis, slice, u, v, &x, &y, &z);
-int nx, ny, nz;
-mb_face_normal(face, &nx, &ny, &nz);
-if (nx > 0) x += 1;
-if (ny > 0) y += 1;
-if (nz > 0) z += 1;
-mb_quad q;
-q.face  = (uint8_t)face;
-q.tile  = cell->tile;
-q.light = cell->light[0];
-q.x = (float)x;
-q.y = (float)y;
-q.z = (float)z;
-int ua, va;
-mb_axis_plane(axis, &ua, &va);
-(void)ua;
-(void)va;
-q.du = (float)qw;
-q.dv = (float)qh;
-for (int i = 0;
-i < 4;
-i++) q.ao[i] = cell->ao[i];
-emit(user, &q, cell->block, c->base_x, c->base_z);
+    mb_scatter(axis, slice, u, v, &x, &y, &z);
+
+    // positive faces sit on the far side of the cell along the normal; the
+    // greedy origin is the cell min corner, so push positive faces out by one.
+    int nx, ny, nz;
+    mb_face_normal(face, &nx, &ny, &nz);
+    if (nx > 0) x += 1;
+    if (ny > 0) y += 1;
+    if (nz > 0) z += 1;
+
+    mb_quad q;
+    q.face  = (uint8_t)face;
+    q.tile  = cell->tile;
+    q.light = cell->light[0];     // representative; per-corner ao still applied
+    q.x = (float)x; q.y = (float)y; q.z = (float)z;
+
+    int ua, va;
+    mb_axis_plane(axis, &ua, &va);
+    (void)ua; (void)va;
+    q.du = (float)qw;
+    q.dv = (float)qh;
+
+    // the rect shares one shading profile (we only merged equal cells), so the
+    // corner ao of the origin cell is valid for the whole quad.
+    for (int i = 0; i < 4; i++) q.ao[i] = cell->ao[i];
+
+    emit(user, &q, cell->block, c->base_x, c->base_z);
 }
 
 // merge the filled mask into rectangles. greedy: grow width along u while cells
@@ -123,8 +131,14 @@ static void merge_mask(const mb_ctx *c, int axis, int face, int slice,
 void mb_greedy_axis(const mb_ctx *c, int axis, mb_mask *m,
                     mb_emit_fn emit, void *user) {
     int dim = mb_axis_dim(axis);
-int pos = mb_axis_pos_face(axis);
-int neg = mb_axis_neg_face(axis);
-for (int slice = 0;
-slice < dim;
+    int pos = mb_axis_pos_face(axis);
+    int neg = mb_axis_neg_face(axis);
+
+    for (int slice = 0; slice < dim; slice++) {
+        fill_mask(c, axis, pos, slice, m);
+        merge_mask(c, axis, pos, slice, m, emit, user);
+
+        fill_mask(c, axis, neg, slice, m);
+        merge_mask(c, axis, neg, slice, m, emit, user);
+    }
 }
