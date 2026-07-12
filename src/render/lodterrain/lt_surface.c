@@ -1,6 +1,10 @@
 #include "lt_surface.h"
+
 #include "../../world/block.h"
 #include "../../config.h"
+
+// face normals as integer cell offsets, indexed by LT_FACE_*. used both to find
+// the neighbour cell (for exposure) and to know which way the quad points.
 static const int FACE_OFF[LT_FACE_COUNT][3] = {
     {  1,  0,  0 },  // +x
     { -1,  0,  0 },  // -x
@@ -8,8 +12,10 @@ static const int FACE_OFF[LT_FACE_COUNT][3] = {
     {  0, -1,  0 },  // -y
     {  0,  0,  1 },  // +z
     {  0,  0, -1 },  // -z
-}
-;
+};
+
+// per-face light dimming so the silhouette still reads with shape even when the
+// chunk is too far to get real per-vertex ao. classic minecraft-ish ratios.
 static float face_shade(int face) {
     switch (face) {
     case LT_FACE_PY: return 1.00f;   // top brightest
@@ -22,8 +28,7 @@ static float face_shade(int face) {
 
 // build the four corners of a unit-ish face (scaled by `cell`) at block origin
 // (bx,by,bz). corners come out ccw seen from outside. light is the combined
-// 0..15 sky/block level;
-we fold the face shade in and normalise to 0..1.
+// 0..15 sky/block level; we fold the face shade in and normalise to 0..1.
 void lt_surface_face(lt_mesh *m, int face,
                      float bx, float by, float bz, float cell,
                      int tile, int light, int is_skirt) {
@@ -80,9 +85,8 @@ void lt_surface_face(lt_mesh *m, int face,
 
 void lt_surface_build(lt_mesh *m, const lt_grid *g, const lt_source *src) {
     float cell = (float)g->step;
-for (int y = 0;
-y < g->ny;
-y++) {
+
+    for (int y = 0; y < g->ny; y++) {
         for (int z = 0; z < g->nz; z++) {
             for (int x = 0; x < g->nx; x++) {
                 if (!lt_grid_cell_solid(g, x, y, z)) continue;
