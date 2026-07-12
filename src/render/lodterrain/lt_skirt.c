@@ -51,3 +51,57 @@ switch (face) {
     }
 
     lt_mesh_quad(m, a, b, c, d, 1);
+}
+
+int lt_skirt_build(lt_mesh *m, const lt_grid *g, const lt_source *src,
+                   lt_seam_mask mask) {
+    if (mask == 0) return 0;
+
+    float cell  = (float)g->step;
+    float depth = LT_SKIRT_DEPTH;
+    int added;
+
+    for (int s = 0; s < 4; s++) {
+        int face = H_FACE[s];
+        if (!lt_seam_has(mask, face)) continue;
+
+        int ax = H_OFF[s][0];
+        int az = H_OFF[s][2];
+
+        for (int y = 0; y < g->ny; y++) {
+            for (int z = 0; z < g->nz; z++) {
+                for (int x = 0; x < g->nx; x++) {
+                    if (!lt_grid_cell_solid(g, x, y, z)) continue;
+
+                    // only border cells on this face — the ones whose outward
+                    // neighbour would be in the next chunk.
+                    int on_border =
+                        (ax > 0 && x == g->nx - 1) ||
+                        (ax < 0 && x == 0) ||
+                        (az > 0 && z == g->nz - 1) ||
+                        (az < 0 && z == 0);
+                    if (!on_border) continue;
+
+                    // and only if that face is actually exposed (top of a slope)
+                    // — skirting buried border cells is wasted geometry.
+                    if (lt_grid_cell_solid(g, x + ax, y, z + az)) continue;
+
+                    block_id id = lt_grid_get(g, x, y, z);
+                    int tile = block_face_tile(id, face);
+
+                    float bx = (float)(src->base_x) + (float)x * cell;
+                    float by = (float)y * cell;
+                    float bz = (float)(src->base_z) + (float)z * cell;
+
+                    int light = src->light
+                        ? src->light(src->ctx, (int)bx, (int)by, (int)bz)
+                        : MAX_LIGHT;
+
+                    lt_skirt_edge(m, face, bx, by, bz, cell, depth, tile, light);
+                    added++;
+                }
+            }
+        }
+    }
+    return added;
+}
