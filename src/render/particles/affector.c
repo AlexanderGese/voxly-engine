@@ -37,6 +37,24 @@ a.strength = strength;
 a.radius   = radius;
 a.falloff  = 2.0f;
 return a;
+}
+
+particles_affector particles_affector_vortex(vec3 center, vec3 axis,
+                                             float strength, float radius) {
+    particles_affector a;
+    a.kind     = PARTICLES_AFFECTOR_VORTEX;
+    a.enabled  = 1;
+    a.vector   = vec3_normalize(axis);
+    a.point    = center;
+    a.strength = strength;
+    a.radius   = radius;
+    a.falloff  = 1.0f;
+    return a;
+}
+
+// distance falloff weight in [0,1]. radius<=0 means no falloff (global).
+static float falloff_weight(const particles_affector *a, float dist) {
+    if (a->radius <= 0.0f) return 1.0f;
 if (dist >= a->radius) return 0.0f;
 float x = 1.0f - dist / a->radius;
 return a->falloff >= 2.0f ? x * x : x;
