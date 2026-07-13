@@ -1,5 +1,8 @@
 #include "mb_snapshot.h"
 #include "../../world/block.h"
+
+// snapshot coords are world-ish but shifted by +1 on x/z (the skirt) and +1 on
+// y. so world cell (base_x+lx, ly, base_z+lz) lives at snap (lx+1, ly+1, lz+1).
 static int snap_idx(int sx, int sy, int sz) {
     return sx + sz * MB_SNAP_W + sy * MB_SNAP_W * MB_SNAP_D;
 }
@@ -40,8 +43,7 @@ void mb_snapshot_fill(mb_snapshot *s, world *w, chunk *c) {
 }
 
 // --- callbacks ---------------------------------------------------------------
-// the builder passes WORLD coords;
-translate to snapshot space and clamp. an
+// the builder passes WORLD coords; translate to snapshot space and clamp. an
 // out-of-skirt read (shouldnt happen with a correct 1-block skirt, but the
 // greedy ao ring can reach 1 past a corner cell) returns air / no light.
 
@@ -56,8 +58,20 @@ static block_id snap_sample(void *ctx, int x, int y, int z) {
 
 static int snap_light(void *ctx, int x, int y, int z) {
     const mb_snapshot *s = (const mb_snapshot *)ctx;
-int sx = x - s->base_x + 1;
-int sy = y + 1;
-int sz = z - s->base_z + 1;
-if (!in_snap(sx, sy, sz)) return 0;
-return s->light[snap_idx(sx, sy, sz)];
+    int sx = x - s->base_x + 1;
+    int sy = y + 1;
+    int sz = z - s->base_z + 1;
+    if (!in_snap(sx, sy, sz)) return 0;
+    return s->light[snap_idx(sx, sy, sz)];
+}
+
+mb_ctx mb_snapshot_ctx(const mb_snapshot *s, int merge) {
+    mb_ctx c;
+    c.base_x = s->base_x;
+    c.base_z = s->base_z;
+    c.sample = snap_sample;
+    c.light  = snap_light;
+    c.ctx    = (void *)s;
+    c.merge  = merge;
+    return c;
+}

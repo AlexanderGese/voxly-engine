@@ -8,7 +8,12 @@
 #include "../../util/darray.h"
 #include "../../util/timer.h"
 #include "../../world/block.h"
+
 #include <stdlib.h>
+
+// --- emit sinks --------------------------------------------------------------
+// single-buffer sink: everything into one result. used by meshbuild_run.
+
 static void sink_single(void *user, const mb_quad *q, block_id block,
                         int base_x, int base_z) {
     (void)block;
@@ -26,9 +31,9 @@ static void sink_single(void *user, const mb_quad *q, block_id block,
 static void sink_split(void *user, const mb_quad *q, block_id block,
                        int base_x, int base_z) {
     mb_chunk_mesh *m = (mb_chunk_mesh *)user;
-mb_result *r = &m->pass[mb_pass_of(block)];
-mb_pack_quad(r, q, base_x, base_z);
-r->merged_away += (int)(q->du * q->dv) - 1;
+    mb_result *r = &m->pass[mb_pass_of(block)];
+    mb_pack_quad(r, q, base_x, base_z);
+    r->merged_away += (int)(q->du * q->dv) - 1;
 }
 
 // --- world-backed sampler ----------------------------------------------------
@@ -41,9 +46,9 @@ static block_id world_sample(void *ctx, int x, int y, int z) {
 
 static int world_light(void *ctx, int x, int y, int z) {
     world *w = (world *)ctx;
-int s = world_get_sunlight(w, x, y, z);
-int b = world_get_blocklight(w, x, y, z);
-return s > b ? s : b;
+    int s = world_get_sunlight(w, x, y, z);
+    int b = world_get_blocklight(w, x, y, z);
+    return s > b ? s : b;
 }
 
 // --- result lifecycle --------------------------------------------------------
@@ -57,11 +62,11 @@ void meshbuild_result_init(mb_result *r) {
 
 void meshbuild_result_free(mb_result *r) {
     if (r->verts)   darr_free(r->verts);
-if (r->indices) darr_free(r->indices);
-r->verts = NULL;
-r->indices = NULL;
-r->quad_count = 0;
-r->merged_away = 0;
+    if (r->indices) darr_free(r->indices);
+    r->verts = NULL;
+    r->indices = NULL;
+    r->quad_count = 0;
+    r->merged_away = 0;
 }
 
 // --- core --------------------------------------------------------------------
@@ -92,18 +97,67 @@ void meshbuild_run(const mb_ctx *ctx, mb_result *out) {
 
 void meshbuild_run_split(const mb_ctx *ctx, mb_chunk_mesh *out) {
     mb_chunk_mesh_init(out);
-mb_mask *mask = malloc(sizeof *mask);
-if (!mask) return;
-for (int axis = 0;
-axis < MB_NUM_AXES;
-axis++)
+
+    mb_mask *mask = malloc(sizeof *mask);
+    if (!mask) return;
+
+    for (int axis = 0; axis < MB_NUM_AXES; axis++)
         mb_greedy_axis(ctx, axis, mask, sink_split, out);
-mb_cross_scan(ctx, &out->pass[MB_PASS_TRANSLUCENT]);
-free(mask);
-ctx.base_x = c->cx * CHUNK_SIZE_X;
-ctx.base_z = c->cz * CHUNK_SIZE_Z;
-ctx.sample = world_sample;
-ctx.light  = world_light;
-ctx.ctx    = w;
-ctx.merge  = MB_MERGE_DEFAULT;
-return ctx;
+
+    // crosses are alpha-cutout, so they go in the translucent pass with the
+    // glass and water. (cutout could arguably be opaque-pass, but keeping it
+    // here means one less depth-sorted draw to special-case.)
+    mb_cross_scan(ctx, &out->pass[MB_PASS_TRANSLUCENT]);
+
+    free(mask);
+}
+
+void meshbuild_chunk(world *w, chunk *c, mb_result *out) {
+    mb_ctx ctx;
+    ctx.base_x = c->cx * CHUNK_SIZE_X;
+    ctx.base_z = c->cz * CHUNK_SIZE_Z;
+    ctx.sample = world_sample;
+    ctx.light  = world_light;
+    ctx.ctx    = w;
+    ctx.merge  = MB_MERGE_DEFAULT;
+
+    uint64_t t0 = timer_now_us();
+
+    meshbuild_run(&ctx, out);
+
+    double ms = timer_delta_s(t0) * 1000.0;
+    mb_stats_record(out->quad_count, out->merged_away,
+                    (int)darr_len(out->verts), ms);
+
+    // clearing dirty is the renderer's job once it has uploaded, but most
+    // callers immediately upload so flip it here too for the simple path.
+    c->dirty = 0;
+}
+
+static mb_ctx chunk_ctx(world *w, chunk *c) {
+    mb_ctx ctx;
+    ctx.base_x = c->cx * CHUNK_SIZE_X;
+    ctx.base_z = c->cz * CHUNK_SIZE_Z;
+    ctx.sample = world_sample;
+    ctx.light  = world_light;
+    ctx.ctx    = w;
+    ctx.merge  = MB_MERGE_DEFAULT;
+    return ctx;
+}
+
+void meshbuild_chunk_split(world *w, chunk *c, mb_chunk_mesh *out) {
+    mb_ctx ctx = chunk_ctx(w, c);
+
+    uint64_t t0 = timer_now_us();
+    meshbuild_run_split(&ctx, out);
+    double ms = timer_delta_s(t0) * 1000.0;
+
+    int quads = 0, merged = 0;
+    for (int p = 0; p < MB_PASS_COUNT; p++) {
+        quads  += out->pass[p].quad_count;
+        merged += out->pass[p].merged_away;
+    }
+    mb_stats_record(quads, merged, mb_chunk_mesh_verts(out), ms);
+
+    c->dirty = 0;
+}
