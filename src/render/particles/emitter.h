@@ -1,21 +1,25 @@
 #ifndef RENDER_PARTICLES_EMITTER_H
 #define RENDER_PARTICLES_EMITTER_H
+
 // an emitter is a description of how to spawn particles plus a little bit of
 // running state (accumulator, burst timers). it does not own a pool — the
 // system hands it one. this keeps emitters cheap to copy around and lets a
 // single pool be shared by many emitters (fire + smoke off the same torch).
+
 #include "../../math/vec3.h"
 #include "../../math/vec4.h"
 #include "particle_types.h"
 #include "particle_rng.h"
 #include "curves.h"
 #include "particle_pool.h"
+
 typedef enum {
     PARTICLES_SHAPE_POINT = 0,   // all from one spot
     PARTICLES_SHAPE_SPHERE,      // inside a sphere of `radius`
     PARTICLES_SHAPE_BOX,         // inside a box of half-extents `extents`
     PARTICLES_SHAPE_CONE         // directional, around `dir`, `cone_angle`
 } particles_emit_shape;
+
 typedef struct {
     // where / what shape
     vec3  origin;
@@ -64,10 +68,20 @@ typedef struct {
     uint16_t id;           // stamped into spawned particles
     particles_rng rng;
 } particles_emitter;
+
+// fill an emitter with sane defaults (a small white puff). caller then tweaks.
 void particles_emitter_default(particles_emitter *e, uint16_t id, uint64_t seed);
+
+// some ready-made presets so callers don't hand-build the common stuff.
 void particles_emitter_preset_fire(particles_emitter *e, vec3 origin);
 void particles_emitter_preset_smoke(particles_emitter *e, vec3 origin);
 void particles_emitter_preset_block_break(particles_emitter *e, vec3 origin, vec4 tint);
+
+// continuous emission: advances the accumulator and spawns `rate*dt` (plus
+// carried fraction) particles into the pool. returns how many spawned.
 int particles_emitter_emit(particles_emitter *e, particles_pool *pool, float dt);
+
+// fire off `count` particles right now (explosions, footstep poofs).
 int particles_emitter_burst(particles_emitter *e, particles_pool *pool, int count);
+
 #endif

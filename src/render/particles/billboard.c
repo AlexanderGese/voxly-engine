@@ -1,7 +1,10 @@
 #include "billboard.h"
+
 #include "../../config.h"
+
 #include <math.h>
 #include <stddef.h>
+
 void particles_billboard_cam_make(particles_billboard_cam *bc,
                                   vec3 cam_right, vec3 cam_up,
                                   vec3 cam_fwd, vec3 eye) {
@@ -14,14 +17,14 @@ void particles_billboard_cam_make(particles_billboard_cam *bc,
 // uv rect for an atlas tile. matches the engine's ATLAS_TILES_X/Y grid.
 static void tile_uv(int tile, float *u0, float *v0, float *u1, float *v1) {
     if (tile < 0) tile = 0;
-int tx = tile % ATLAS_TILES_X;
-int ty = tile / ATLAS_TILES_X;
-float inv_x = 1.0f / (float)ATLAS_TILES_X;
-float inv_y = 1.0f / (float)ATLAS_TILES_Y;
-*u0 = tx * inv_x;
-*v0 = ty * inv_y;
-*u1 = *u0 + inv_x;
-*v1 = *v0 + inv_y;
+    int tx = tile % ATLAS_TILES_X;
+    int ty = tile / ATLAS_TILES_X;
+    float inv_x = 1.0f / (float)ATLAS_TILES_X;
+    float inv_y = 1.0f / (float)ATLAS_TILES_Y;
+    *u0 = tx * inv_x;
+    *v0 = ty * inv_y;
+    *u1 = *u0 + inv_x;
+    *v1 = *v0 + inv_y;
 }
 
 // rotate the (right, up) basis around the view forward by the particle roll.
@@ -40,7 +43,8 @@ static void basis_for(const particles_particle *p,
                       vec3 *right, vec3 *up) {
     particles_billboard_kind kind =
         e ? e->billboard : PARTICLES_BILLBOARD_SPHERICAL;
-switch (kind) {
+
+    switch (kind) {
     case PARTICLES_BILLBOARD_CYLINDRICAL: {
         // up locked to world up, right is perpendicular to up and view dir.
         vec3 u = VEC3_UP;
@@ -77,16 +81,10 @@ switch (kind) {
 
 static particles_vertex make_vert(vec3 p, float u, float v, vec4 c) {
     particles_vertex out;
-out.x = p.x;
-out.y = p.y;
-out.z = p.z;
-out.u = u;
-out.v = v;
-out.r = c.x;
-out.g = c.y;
-out.b = c.z;
-out.a = c.w;
-return out;
+    out.x = p.x; out.y = p.y; out.z = p.z;
+    out.u = u;   out.v = v;
+    out.r = c.x; out.g = c.y; out.b = c.z; out.a = c.w;
+    return out;
 }
 
 int particles_billboard_build(particles_vertex *out, int out_cap,
