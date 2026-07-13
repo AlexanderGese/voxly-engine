@@ -2,6 +2,7 @@
 #include "ao_sampler.h"
 #include "face_dir.h"
 #include "../../util/darray.h"
+
 float mb_shade(int ao, int light) {
     if (ao < 0) ao = 0;
     if (ao > MB_AO_MAX) ao = MB_AO_MAX;
@@ -16,6 +17,7 @@ float mb_shade(int ao, int light) {
 
 // the 4 corners of a quad in (u,v) parameter space, winding ccw from origin.
 static const int CORNER_UV[4][2] = { {0,0}, {1,0}, {1,1}, {0,1} };
+
 // build the world-space position of corner `k` of quad `q`. the quad lives on a
 // plane; we place it by stepping du along the u-axis and dv along the v-axis
 // from the origin corner. the two in-plane axes come from the face.
@@ -39,19 +41,22 @@ static void corner_pos(const mb_quad *q, int k, int base_x, int base_z,
 
 static mb_vertex make_vert(const mb_quad *q, int k, int base_x, int base_z) {
     mb_vertex v;
-corner_pos(q, k, base_x, base_z, &v.x, &v.y, &v.z);
-// uv: tile origin in the atlas plus the corner's fractional position scaled
-// to one tile. greedy quads tile the texture by multiplying uv by the span,
-// which gives repetition across merged faces (looks right for stone/dirt).
-float ts = 1.0f / (float)ATLAS_TILES_X;
-float tx = (float)(q->tile % ATLAS_TILES_X) / (float)ATLAS_TILES_X;
-float ty = (float)(q->tile / ATLAS_TILES_X) / (float)ATLAS_TILES_Y;
-float fu = CORNER_UV[k][0] ? q->du : 0.0f;
-float fv = CORNER_UV[k][1] ? q->dv : 0.0f;
-v.u = tx + fu * ts;
-v.v = ty + fv * ts;
-v.light = mb_shade(q->ao[k], q->light);
-return v;
+    corner_pos(q, k, base_x, base_z, &v.x, &v.y, &v.z);
+
+    // uv: tile origin in the atlas plus the corner's fractional position scaled
+    // to one tile. greedy quads tile the texture by multiplying uv by the span,
+    // which gives repetition across merged faces (looks right for stone/dirt).
+    float ts = 1.0f / (float)ATLAS_TILES_X;
+    float tx = (float)(q->tile % ATLAS_TILES_X) / (float)ATLAS_TILES_X;
+    float ty = (float)(q->tile / ATLAS_TILES_X) / (float)ATLAS_TILES_Y;
+
+    float fu = CORNER_UV[k][0] ? q->du : 0.0f;
+    float fv = CORNER_UV[k][1] ? q->dv : 0.0f;
+    v.u = tx + fu * ts;
+    v.v = ty + fv * ts;
+
+    v.light = mb_shade(q->ao[k], q->light);
+    return v;
 }
 
 void mb_pack_quad(mb_result *r, const mb_quad *q, int base_x, int base_z) {
