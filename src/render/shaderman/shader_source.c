@@ -1,10 +1,12 @@
 #include "shader_source.h"
 #include "../../util/file.h"
 #include "../../util/log.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
 uint32_t shader_str_hash(const char *s) {
     uint32_t h = 2166136261u;
     while (*s) {
@@ -16,8 +18,8 @@ uint32_t shader_str_hash(const char *s) {
 
 int64_t shader_file_mtime(const char *path) {
     struct stat st;
-if (stat(path, &st) != 0) return 0;
-return (int64_t)st.st_mtime;
+    if (stat(path, &st) != 0) return 0;
+    return (int64_t)st.st_mtime;
 }
 
 // strbuf-ish growable text accumulator. local, nothing fancy.
@@ -26,6 +28,7 @@ typedef struct {
     size_t len;
     size_t cap;
 } srcbuf;
+
 static void srcbuf_ensure(srcbuf *b, size_t extra) {
     if (b->len + extra + 1 <= b->cap) return;
     size_t nc = b->cap ? b->cap * 2 : 1024;
@@ -38,10 +41,10 @@ static void srcbuf_ensure(srcbuf *b, size_t extra) {
 
 static void srcbuf_append(srcbuf *b, const char *p, size_t n) {
     srcbuf_ensure(b, n);
-if (!b->data) return;
-memcpy(b->data + b->len, p, n);
-b->len += n;
-b->data[b->len] = 0;
+    if (!b->data) return;
+    memcpy(b->data + b->len, p, n);
+    b->len += n;
+    b->data[b->len] = 0;
 }
 
 // pull the directory part of a path (everything up to and including the last
@@ -59,16 +62,16 @@ static void dir_of(const char *path, char *out) {
 // returns 1 if the line is an include directive, 0 otherwise.
 static int parse_include(const char *line, char *out) {
     const char *p = line;
-while (*p == ' ' || *p == '\t') p++;
-if (strncmp(p, "#include", 8) != 0) return 0;
-p += 8;
-while (*p == ' ' || *p == '\t') p++;
-if (*p != '"') return 0;
-p++;
-int i = 0;
-while (*p && *p != '"' && i < SHADERMAN_PATH_LEN - 1) out[i++] = *p++;
-out[i] = 0;
-return (*p == '"');
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "#include", 8) != 0) return 0;
+    p += 8;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != '"') return 0;
+    p++;
+    int i = 0;
+    while (*p && *p != '"' && i < SHADERMAN_PATH_LEN - 1) out[i++] = *p++;
+    out[i] = 0;
+    return (*p == '"');
 }
 
 // record a dependency path if we havent already. cheap linear scan, the list
@@ -87,25 +90,26 @@ static int add_dep(shader_source *s, const char *path) {
 static int splice(shader_source *s, srcbuf *out, const char *path, int depth) {
     if (depth > SHADERMAN_MAX_INCLUDES) {
         LOGE("shader_source: include too deep at %s (cycle?)", path);
-return 0;
-}
+        return 0;
+    }
     if (!add_dep(s, path)) {
         LOGW("shader_source: too many includes, dropping %s", path);
         // still try to compile what we have, just stop tracking deps
     }
 
     size_t flen;
-char *text = file_read_all(path, &flen);
-if (!text) {
+    char *text = file_read_all(path, &flen);
+    if (!text) {
         LOGE("shader_source: cant read %s", path);
         return 0;
     }
 
     char incdir[SHADERMAN_PATH_LEN];
-dir_of(path, incdir);
-// walk line by line. cheap split on '\n'; we keep the newline.
-char *line = text;
-while (line && *line) {
+    dir_of(path, incdir);
+
+    // walk line by line. cheap split on '\n'; we keep the newline.
+    char *line = text;
+    while (line && *line) {
         char *nl = strchr(line, '\n');
         size_t llen = nl ? (size_t)(nl - line) + 1 : strlen(line);
 
@@ -135,7 +139,7 @@ while (line && *line) {
     }
 
     free(text);
-return 1;
+    return 1;
 }
 
 shader_source shader_source_load(const char *path) {
@@ -160,9 +164,9 @@ shader_source shader_source_load(const char *path) {
 
 void shader_source_free(shader_source *s) {
     if (!s) return;
-free(s->text);
-s->text = NULL;
-s->len = 0;
-s->dep_count = 0;
-s->ok = false;
+    free(s->text);
+    s->text = NULL;
+    s->len = 0;
+    s->dep_count = 0;
+    s->ok = false;
 }
