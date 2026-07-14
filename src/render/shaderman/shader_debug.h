@@ -23,6 +23,11 @@ int  shaderman_collect_info(shaderman *sm, shader_info *out, int cap);
 void shaderman_dump(shaderman *sm);
 // total live gl programs the manager owns. for the overlay line.
 int  shaderman_live_count(shaderman *sm);
+// query the gl driver for how many uniforms a program *actually* exposes, vs
+// how many we've cached. a big gap means callers arent touching some uniforms,
+// which is usually fine but occasionally a bug. returns active uniform count.
 int  shaderman_gl_active_uniforms(shaderman *sm, shader_handle h);
+// one-line status string for the hud (e.g. "shaders: 6 ok, 1 broken, 3 reloads").
+// writes into buf, returns buf.
 const char *shaderman_status_line(shaderman *sm, char *buf, int cap);
 #endif
