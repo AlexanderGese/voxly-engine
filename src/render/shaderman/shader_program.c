@@ -3,8 +3,10 @@
 #include "shader_compile.h"
 #include "shader_uniform.h"
 #include "../../util/log.h"
+
 #include <stdio.h>
 #include <string.h>
+
 void shader_program_config(shader_program *p, const char *name,
                            const char *vert_path, const char *frag_path,
                            const char *geom_path) {
@@ -32,10 +34,9 @@ void shader_program_config(shader_program *p, const char *name,
 // whatever it compiled) if any stage fails — we never link a half-built program.
 static bool compile_all(shader_program *p, glid *ids, int *out_n) {
     int n = 0;
-bool ok = true;
-for (int k = 0;
-k < SHADERMAN_MAX_STAGES;
-k++) {
+    bool ok = true;
+
+    for (int k = 0; k < SHADERMAN_MAX_STAGES; k++) {
         shader_stage *st = &p->stages[k];
         if (!st->present) continue;
 
@@ -56,12 +57,60 @@ k++) {
 
     if (!ok) {
         // toss any stages that did compile before the failure
-        for (int i = 0;
-i < n;
-i++) glDeleteShader(ids[i]);
-n = 0;
-}
+        for (int i = 0; i < n; i++) glDeleteShader(ids[i]);
+        n = 0;
+    }
     *out_n = n;
-return ok;
-for (int k = 0;
-k < SHADERMAN_MAX_STAGES;
+    return ok;
+}
+
+bool shader_program_build(shader_program *p) {
+    glid ids[SHADERMAN_MAX_STAGES];
+    int n = 0;
+
+    if (!compile_all(p, ids, &n)) {
+        // keep old program if we had one, otherwise mark broken
+        if (p->prog) LOGW("shader '%s': rebuild failed, keeping previous", p->name);
+        p->ok = (p->prog != 0);
+        return false;
+    }
+
+    char linklog[1024];
+    glid newprog = shader_link_program(ids, n, linklog, sizeof linklog);
+    if (!newprog) {
+        if (p->prog) LOGW("shader '%s': relink failed, keeping previous", p->name);
+        p->ok = (p->prog != 0);
+        return false;
+    }
+
+    // success — swap. delete the old one now that nothing references it.
+    if (p->prog) glDeleteProgram(p->prog);
+    p->prog = newprog;
+    p->ok = true;
+    p->reload_gen++;
+    shader_uniform_reset(p);
+
+    LOGI("shader '%s' built (gen %u, id %u)", p->name, p->reload_gen, p->prog);
+    return true;
+}
+
+int shader_program_restamp(shader_program *p) {
+    int n = 0;
+    for (int k = 0; k < SHADERMAN_MAX_STAGES; k++) {
+        shader_stage *st = &p->stages[k];
+        if (!st->present) continue;
+        st->mtime = shader_file_mtime(st->path);
+        if (st->mtime) n++;
+    }
+    return n;
+}
+
+void shader_program_destroy(shader_program *p) {
+    if (p->prog) {
+        glDeleteProgram(p->prog);
+        p->prog = 0;
+    }
+    p->ok = false;
+    p->in_use = false;
+    p->uniform_count = 0;
+}
