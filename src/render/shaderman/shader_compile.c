@@ -1,7 +1,9 @@
 #include "shader_compile.h"
 #include "../../util/log.h"
+
 #include <stdio.h>
 #include <string.h>
+
 unsigned int shader_stage_gl_enum(shader_stage_kind k) {
     switch (k) {
     case SHADER_STAGE_VERT: return GL_VERTEX_SHADER;
@@ -19,9 +21,9 @@ unsigned int shader_stage_gl_enum(shader_stage_kind k) {
 static const char *stage_name(shader_stage_kind k) {
     switch (k) {
     case SHADER_STAGE_VERT: return "vert";
-case SHADER_STAGE_FRAG: return "frag";
-case SHADER_STAGE_GEOM: return "geom";
-}
+    case SHADER_STAGE_FRAG: return "frag";
+    case SHADER_STAGE_GEOM: return "geom";
+    }
     return "?";
 }
 
@@ -67,23 +69,38 @@ shader_compile_result shader_compile_stage(shader_stage_kind kind,
 glid shader_link_program(const glid *stage_ids, int n_stages,
                          char *out_log, size_t log_cap) {
     glid prog = glCreateProgram();
-i < n_stages;
-i++)
+    if (!prog) {
+        if (out_log && log_cap) snprintf(out_log, log_cap, "glCreateProgram failed");
+        return 0;
+    }
+
+    for (int i = 0; i < n_stages; i++)
         if (stage_ids[i]) glAttachShader(prog, stage_ids[i]);
-glLinkProgram(prog);
-int ok = 0;
-glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-for (int i = 0;
-i < n_stages;
-int len = 0;
-glGetProgramInfoLog(prog, sizeof log - 1, &len, log);
-log[len < (int)sizeof log ? len : (int)sizeof log - 1] = 0;
-LOGE("shader link failed:\n%s", log);
-if (out_log && log_cap) snprintf(out_log, log_cap, "%s", log);
-glDeleteProgram(prog);
-return 0;
-}
+
+    glLinkProgram(prog);
+
+    int ok = 0;
+    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+
+    // detach + delete stages either way; the program keeps its own copy once
+    // linked, and we dont want to leak them on the failure path either.
+    for (int i = 0; i < n_stages; i++) {
+        if (!stage_ids[i]) continue;
+        glDetachShader(prog, stage_ids[i]);
+        glDeleteShader(stage_ids[i]);
+    }
+
+    if (!ok) {
+        char log[1024];
+        int len = 0;
+        glGetProgramInfoLog(prog, sizeof log - 1, &len, log);
+        log[len < (int)sizeof log ? len : (int)sizeof log - 1] = 0;
+        LOGE("shader link failed:\n%s", log);
+        if (out_log && log_cap) snprintf(out_log, log_cap, "%s", log);
+        glDeleteProgram(prog);
+        return 0;
+    }
 
     if (out_log && log_cap) out_log[0] = 0;
-return prog;
+    return prog;
 }
