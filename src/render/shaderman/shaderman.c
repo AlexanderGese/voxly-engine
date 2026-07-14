@@ -87,21 +87,117 @@ i++) {
         // find a free slot
         for (int i = 0;
 i < SHADERMAN_MAX_PROGRAMS;
+i++) {
+            if (!sm->programs[i].in_use) { idx = i; break; }
+        }
+        if (idx < 0) {
+            LOGE("shaderman: program table full, cant load '%s'", name);
 return SHADER_HANDLE_NONE;
 }
         if (idx >= sm->program_count) sm->program_count = idx + 1;
+} else {
+        // re-loading an existing name — tear down the old gl program first
+        shader_program_destroy(&sm->programs[idx]);
+    }
+
+    shader_program *p = &sm->programs[idx];
 shader_program_config(p, name, vert, frag, geom);
 bool ok = shader_program_build(p);
 shader_program_restamp(p);
 retrack(sm, idx);
+if (!ok) {
+        sm->build_failures++;
+        LOGW("shaderman: '%s' failed initial build (will retry on edit)", name);
+        // keep the slot so hot-reload can rescue it; handle is still valid.
+    }
+    return idx_to_handle(idx);
+}
+
+shader_program *shaderman_get(shaderman *sm, shader_handle h) {
+    int idx = handle_to_idx(h);
+    if (idx < 0 || idx >= sm->program_count) return NULL;
+    if (!sm->programs[idx].in_use) return NULL;
+    return &sm->programs[idx];
+}
+
+glid shaderman_gl_id(shaderman *sm, shader_handle h) {
+    shader_program *p = shaderman_get(sm, h);
 return p ? p->prog : 0;
+}
+
+bool shaderman_use(shaderman *sm, shader_handle h) {
+    shader_program *p = shaderman_get(sm, h);
+    if (!p || !p->prog) return false;
+    glUseProgram(p->prog);
+    sm->current = h;
+    return true;
+}
+
+// shared guard for the setters: resolve handle, and only act if it matches the
+// program currently bound (you have to shaderman_use it first).
+static shader_program *setter_target(shaderman *sm, shader_handle h) {
+    shader_program *p = shaderman_get(sm, h);
 if (!p || !p->prog) return NULL;
+if (sm->current != h) {
+        // tolerate it — bind on demand. cheaper to be forgiving than to crash
+        // a draw loop over a missing use() call.
+        glUseProgram(p->prog);
+        sm->current = h;
+    }
+    return p;
+}
+
+void shaderman_set_int(shaderman *sm, shader_handle h, const char *n, int v) {
+    shader_program *p = setter_target(sm, h);
+    if (p) shader_uniform_set_int(p, n, v);
+}
+void shaderman_set_float(shaderman *sm, shader_handle h, const char *n, float v) {
+    shader_program *p = setter_target(sm, h);
 if (p) shader_uniform_set_float(p, n, v);
+}
+void shaderman_set_vec3(shaderman *sm, shader_handle h, const char *n, vec3 v) {
+    shader_program *p = setter_target(sm, h);
+    if (p) shader_uniform_set_vec3(p, n, v);
+}
+void shaderman_set_vec4(shaderman *sm, shader_handle h, const char *n, vec4 v) {
+    shader_program *p = setter_target(sm, h);
 if (p) shader_uniform_set_vec4(p, n, v);
+}
+void shaderman_set_mat4(shaderman *sm, shader_handle h, const char *n, const mat4 *m) {
+    shader_program *p = setter_target(sm, h);
+    if (p) shader_uniform_set_mat4(p, n, m);
+}
+
+static void rebuild_idx(shaderman *sm, int idx) {
+    shader_program *p = &sm->programs[idx];
 if (!p->in_use) return;
 bool ok = shader_program_build(p);
 shader_program_restamp(p);
 retrack(sm, idx);
+if (ok) {
+        // the new gl program starts with empty uniform state — the cache was
+        // reset on build. mark dirty so the next frame re-pushes everything.
+        shader_uniform_mark_all_dirty(p);
+        // whatever was current is now stale (gl id changed). force a rebind.
+        if (sm->current == idx_to_handle(idx)) sm->current = SHADER_HANDLE_NONE;
+    } else {
+        sm->build_failures++;
+}
+}
+
+void shaderman_tick(shaderman *sm, double dt) {
+    if (!sm->hot_reload) return;
+
+    int dirty[SHADERMAN_MAX_PROGRAMS];
+    int n = shader_watcher_poll(&sm->watcher, dt, dirty);
+    for (int i = 0; i < n; i++) {
+        LOGI("shaderman: hot-reloading '%s'", sm->programs[dirty[i]].name);
+        rebuild_idx(sm, dirty[i]);
+    }
+}
+
+bool shaderman_force_reload(shaderman *sm, shader_handle h) {
+    int idx = handle_to_idx(h);
 if (idx < 0 || idx >= sm->program_count) return false;
 if (!sm->programs[idx].in_use) return false;
 rebuild_idx(sm, idx);
