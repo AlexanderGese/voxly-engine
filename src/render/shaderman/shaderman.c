@@ -3,8 +3,11 @@
 #include "shader_source.h"
 #include "shader_uniform.h"
 #include "../../util/log.h"
+
 #include <stdio.h>
 #include <string.h>
+
+// handles are 1-based indices into programs[]. index = handle - 1.
 static int handle_to_idx(shader_handle h) {
     return (int)h - 1;
 }
@@ -20,19 +23,16 @@ void shaderman_init(shaderman *sm) {
 }
 
 void shaderman_shutdown(shaderman *sm) {
-    for (int i = 0;
-i < sm->program_count;
-i++) {
+    for (int i = 0; i < sm->program_count; i++) {
         if (sm->programs[i].in_use)
             shader_program_destroy(&sm->programs[i]);
     }
     sm->program_count = 0;
-sm->current = SHADER_HANDLE_NONE;
+    sm->current = SHADER_HANDLE_NONE;
 }
 
 // gather the watch file set for a program: stage paths + the include deps each
-// stage pulls in. we re-load the source just to enumerate deps;
-cheap, only
+// stage pulls in. we re-load the source just to enumerate deps; cheap, only
 // happens at register / rebuild time, not per frame.
 static int collect_watch_files(shader_program *p,
                                char buf[][SHADERMAN_PATH_LEN], int cap) {
@@ -57,12 +57,13 @@ static int collect_watch_files(shader_program *p,
 
 static void retrack(shaderman *sm, int idx) {
     char files[SHADER_WATCH_MAX_FILES][SHADERMAN_PATH_LEN];
-int n = collect_watch_files(&sm->programs[idx], files, SHADER_WATCH_MAX_FILES);
-const char *ptrs[SHADER_WATCH_MAX_FILES];
-for (int i = 0;
-i < n;
-i++) ptrs[i] = files[i];
-shader_watcher_track(&sm->watcher, idx, ptrs, n);
+    int n = collect_watch_files(&sm->programs[idx], files, SHADER_WATCH_MAX_FILES);
+
+    // shader_watcher_track wants an array of const char* — build the pointer
+    // view over our stack buffer.
+    const char *ptrs[SHADER_WATCH_MAX_FILES];
+    for (int i = 0; i < n; i++) ptrs[i] = files[i];
+    shader_watcher_track(&sm->watcher, idx, ptrs, n);
 }
 
 shader_handle shaderman_load(shaderman *sm, const char *name,
@@ -75,9 +76,7 @@ shader_handle shaderman_load_ex(shaderman *sm, const char *name,
                                 const char *geom) {
     // reuse a slot if a program with this name already exists (idempotent load)
     int idx = -1;
-for (int i = 0;
-i < sm->program_count;
-i++) {
+    for (int i = 0; i < sm->program_count; i++) {
         if (sm->programs[i].in_use && strcmp(sm->programs[i].name, name) == 0) {
             idx = i;
             break;
@@ -85,27 +84,27 @@ i++) {
     }
     if (idx < 0) {
         // find a free slot
-        for (int i = 0;
-i < SHADERMAN_MAX_PROGRAMS;
-i++) {
+        for (int i = 0; i < SHADERMAN_MAX_PROGRAMS; i++) {
             if (!sm->programs[i].in_use) { idx = i; break; }
         }
         if (idx < 0) {
             LOGE("shaderman: program table full, cant load '%s'", name);
-return SHADER_HANDLE_NONE;
-}
+            return SHADER_HANDLE_NONE;
+        }
         if (idx >= sm->program_count) sm->program_count = idx + 1;
-} else {
+    } else {
         // re-loading an existing name — tear down the old gl program first
         shader_program_destroy(&sm->programs[idx]);
     }
 
     shader_program *p = &sm->programs[idx];
-shader_program_config(p, name, vert, frag, geom);
-bool ok = shader_program_build(p);
-shader_program_restamp(p);
-retrack(sm, idx);
-if (!ok) {
+    shader_program_config(p, name, vert, frag, geom);
+
+    bool ok = shader_program_build(p);
+    shader_program_restamp(p);
+    retrack(sm, idx);
+
+    if (!ok) {
         sm->build_failures++;
         LOGW("shaderman: '%s' failed initial build (will retry on edit)", name);
         // keep the slot so hot-reload can rescue it; handle is still valid.
@@ -122,7 +121,7 @@ shader_program *shaderman_get(shaderman *sm, shader_handle h) {
 
 glid shaderman_gl_id(shaderman *sm, shader_handle h) {
     shader_program *p = shaderman_get(sm, h);
-return p ? p->prog : 0;
+    return p ? p->prog : 0;
 }
 
 bool shaderman_use(shaderman *sm, shader_handle h) {
@@ -137,8 +136,8 @@ bool shaderman_use(shaderman *sm, shader_handle h) {
 // program currently bound (you have to shaderman_use it first).
 static shader_program *setter_target(shaderman *sm, shader_handle h) {
     shader_program *p = shaderman_get(sm, h);
-if (!p || !p->prog) return NULL;
-if (sm->current != h) {
+    if (!p || !p->prog) return NULL;
+    if (sm->current != h) {
         // tolerate it — bind on demand. cheaper to be forgiving than to crash
         // a draw loop over a missing use() call.
         glUseProgram(p->prog);
@@ -153,7 +152,7 @@ void shaderman_set_int(shaderman *sm, shader_handle h, const char *n, int v) {
 }
 void shaderman_set_float(shaderman *sm, shader_handle h, const char *n, float v) {
     shader_program *p = setter_target(sm, h);
-if (p) shader_uniform_set_float(p, n, v);
+    if (p) shader_uniform_set_float(p, n, v);
 }
 void shaderman_set_vec3(shaderman *sm, shader_handle h, const char *n, vec3 v) {
     shader_program *p = setter_target(sm, h);
@@ -161,7 +160,7 @@ void shaderman_set_vec3(shaderman *sm, shader_handle h, const char *n, vec3 v) {
 }
 void shaderman_set_vec4(shaderman *sm, shader_handle h, const char *n, vec4 v) {
     shader_program *p = setter_target(sm, h);
-if (p) shader_uniform_set_vec4(p, n, v);
+    if (p) shader_uniform_set_vec4(p, n, v);
 }
 void shaderman_set_mat4(shaderman *sm, shader_handle h, const char *n, const mat4 *m) {
     shader_program *p = setter_target(sm, h);
@@ -170,11 +169,13 @@ void shaderman_set_mat4(shaderman *sm, shader_handle h, const char *n, const mat
 
 static void rebuild_idx(shaderman *sm, int idx) {
     shader_program *p = &sm->programs[idx];
-if (!p->in_use) return;
-bool ok = shader_program_build(p);
-shader_program_restamp(p);
-retrack(sm, idx);
-if (ok) {
+    if (!p->in_use) return;
+
+    bool ok = shader_program_build(p);
+    shader_program_restamp(p);
+    retrack(sm, idx);              // include set may have changed on edit
+
+    if (ok) {
         // the new gl program starts with empty uniform state — the cache was
         // reset on build. mark dirty so the next frame re-pushes everything.
         shader_uniform_mark_all_dirty(p);
@@ -182,7 +183,7 @@ if (ok) {
         if (sm->current == idx_to_handle(idx)) sm->current = SHADER_HANDLE_NONE;
     } else {
         sm->build_failures++;
-}
+    }
 }
 
 void shaderman_tick(shaderman *sm, double dt) {
@@ -198,7 +199,13 @@ void shaderman_tick(shaderman *sm, double dt) {
 
 bool shaderman_force_reload(shaderman *sm, shader_handle h) {
     int idx = handle_to_idx(h);
-if (idx < 0 || idx >= sm->program_count) return false;
-if (!sm->programs[idx].in_use) return false;
-rebuild_idx(sm, idx);
-return sm->programs[idx].ok;
+    if (idx < 0 || idx >= sm->program_count) return false;
+    if (!sm->programs[idx].in_use) return false;
+    rebuild_idx(sm, idx);
+    return sm->programs[idx].ok;
+}
+
+void shaderman_set_hot_reload(shaderman *sm, bool on) {
+    sm->hot_reload = on;
+    shader_watcher_set_enabled(&sm->watcher, on);
+}
