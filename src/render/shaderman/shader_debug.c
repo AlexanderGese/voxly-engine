@@ -1,7 +1,9 @@
 #include "shader_debug.h"
 #include "../../util/log.h"
+
 #include <string.h>
 #include <stdio.h>
+
 static int count_stages(const shader_program *p) {
     int n = 0;
     for (int k = 0; k < SHADERMAN_MAX_STAGES; k++)
@@ -11,11 +13,9 @@ static int count_stages(const shader_program *p) {
 
 static int count_active(const shader_program *p) {
     int n = 0;
-for (int i = 0;
-i < p->uniform_count;
-i++)
+    for (int i = 0; i < p->uniform_count; i++)
         if (p->uniforms[i].location >= 0) n++;
-return n;
+    return n;
 }
 
 int shaderman_collect_info(shaderman *sm, shader_info *out, int cap) {
@@ -39,12 +39,12 @@ int shaderman_collect_info(shaderman *sm, shader_info *out, int cap) {
 static const char *kind_name(shader_uniform_kind k) {
     switch (k) {
     case SHADER_U_NONE:  return "none";
-case SHADER_U_INT:   return "int";
-case SHADER_U_FLOAT: return "float";
-case SHADER_U_VEC3:  return "vec3";
-case SHADER_U_VEC4:  return "vec4";
-case SHADER_U_MAT4:  return "mat4";
-}
+    case SHADER_U_INT:   return "int";
+    case SHADER_U_FLOAT: return "float";
+    case SHADER_U_VEC3:  return "vec3";
+    case SHADER_U_VEC4:  return "vec4";
+    case SHADER_U_MAT4:  return "mat4";
+    }
     return "?";
 }
 
@@ -79,12 +79,27 @@ void shaderman_dump(shaderman *sm) {
 
 int shaderman_live_count(shaderman *sm) {
     int n = 0;
-for (int i = 0;
-i < sm->program_count;
-i++)
+    for (int i = 0; i < sm->program_count; i++)
         if (sm->programs[i].in_use && sm->programs[i].prog) n++;
-return n;
-for (int i = 0;
-i < sm->program_count;
-return buf;
+    return n;
+}
+
+int shaderman_gl_active_uniforms(shaderman *sm, shader_handle h) {
+    shader_program *p = shaderman_get(sm, h);
+    if (!p || !p->prog) return 0;
+    int count = 0;
+    glGetProgramiv(p->prog, GL_ACTIVE_UNIFORMS, &count);
+    return count;
+}
+
+const char *shaderman_status_line(shaderman *sm, char *buf, int cap) {
+    int ok = 0, broken = 0;
+    for (int i = 0; i < sm->program_count; i++) {
+        if (!sm->programs[i].in_use) continue;
+        if (sm->programs[i].ok) ok++;
+        else broken++;
+    }
+    snprintf(buf, cap, "shaders: %d ok, %d broken, %u reloads",
+             ok, broken, sm->watcher.reload_count);
+    return buf;
 }
