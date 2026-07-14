@@ -1,8 +1,11 @@
 #include "simulate.h"
+
 #include "../../config.h"
+
 #include <math.h>
 #include <float.h>
 #include <stddef.h>
+
 void particles_sim_env_default(particles_sim_env *env) {
     env->use_ground       = 0;
     env->ground_y         = 0.0f;
@@ -13,8 +16,7 @@ void particles_sim_env_default(particles_sim_env *env) {
     env->affectors        = NULL;
 }
 
-// fold an integer floor;
-particles live in continuous space but the voxel
+// fold an integer floor; particles live in continuous space but the voxel
 // query wants block coords.
 static int ifloor(float v) {
     int i = (int)v;
@@ -26,21 +28,24 @@ static int ifloor(float v) {
 static void resolve_appearance(particles_particle *p,
                                const particles_emitter *e) {
     float t = p->life > 0.0f ? p->age / p->life : 1.0f;
-if (t > 1.0f) t = 1.0f;
-vec4 grad = particles_gradient_eval(&e->color, t);
-float a   = particles_curve_eval(&e->alpha_curve, t);
-p->color.x = grad.x;
-p->color.y = grad.y;
-p->color.z = grad.z;
-p->color.w = grad.w * a;
-// size = birth size (already baked into p->size at spawn) * curve. we
-// stash the birth size in seed-independent p->size, so apply the curve as
-// a multiplier relative to the current frame... actually simpler: keep a
-// birth size constant by re-deriving from the curve at t. but we never
-// stored birth size separately, so use the curve directly as a scale of
-// the spawn size which we *do* still hold. (curve at t=0 should be ~1.)
-float scale = particles_curve_eval(&e->size_curve, t);
-p->render_size = p->size * scale;
+    if (t > 1.0f) t = 1.0f;
+
+    vec4 grad = particles_gradient_eval(&e->color, t);
+    float a   = particles_curve_eval(&e->alpha_curve, t);
+
+    p->color.x = grad.x;
+    p->color.y = grad.y;
+    p->color.z = grad.z;
+    p->color.w = grad.w * a;
+
+    // size = birth size (already baked into p->size at spawn) * curve. we
+    // stash the birth size in seed-independent p->size, so apply the curve as
+    // a multiplier relative to the current frame... actually simpler: keep a
+    // birth size constant by re-deriving from the curve at t. but we never
+    // stored birth size separately, so use the curve directly as a scale of
+    // the spawn size which we *do* still hold. (curve at t=0 should be ~1.)
+    float scale = particles_curve_eval(&e->size_curve, t);
+    p->render_size = p->size * scale;
 }
 
 // reflect velocity about an axis-aligned normal and damp it.
@@ -54,13 +59,13 @@ void particles_simulate(particles_pool *pool,
                         const particles_emitter *emitters, int emitter_count,
                         const particles_sim_env *env, float dt) {
     if (dt <= 0.0f) return;
-const float g = GRAVITY;
-// shared world gravity from config.h
-// advance the affector clock once for the whole batch (turbulence phase).
-if (env && env->affectors) env->affectors->time += dt;
-for (int i = 0;
-i < pool->capacity;
-i++) {
+
+    const float g = GRAVITY;   // shared world gravity from config.h
+
+    // advance the affector clock once for the whole batch (turbulence phase).
+    if (env && env->affectors) env->affectors->time += dt;
+
+    for (int i = 0; i < pool->capacity; i++) {
         particles_particle *p = &pool->slots[i];
         if (!particles_is_alive(p)) continue;
 
@@ -139,11 +144,10 @@ i++) {
 
 int particles_compute_bounds(const particles_pool *pool, aabb *out) {
     vec3 lo = vec3_new( FLT_MAX,  FLT_MAX,  FLT_MAX);
-vec3 hi = vec3_new(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-int any = 0;
-for (int i = 0;
-i < pool->capacity;
-i++) {
+    vec3 hi = vec3_new(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    int any = 0;
+
+    for (int i = 0; i < pool->capacity; i++) {
         const particles_particle *p = &pool->slots[i];
         if (!particles_is_alive(p)) continue;
         any = 1;
@@ -151,9 +155,10 @@ i++) {
         hi = vec3_max(hi, p->pos);
     }
     if (!any) return 0;
-// pad by a typical particle radius so billboards don't get culled at the
-// edge of the box.
-vec3 pad = vec3_new(0.5f, 0.5f, 0.5f);
-*out = aabb_make(vec3_sub(lo, pad), vec3_add(hi, pad));
-return 1;
+
+    // pad by a typical particle radius so billboards don't get culled at the
+    // edge of the box.
+    vec3 pad = vec3_new(0.5f, 0.5f, 0.5f);
+    *out = aabb_make(vec3_sub(lo, pad), vec3_add(hi, pad));
+    return 1;
 }

@@ -1,7 +1,11 @@
 #ifndef RENDER_POST_BLOOM_H
 #define RENDER_POST_BLOOM_H
+
 #include "../gl.h"
+
 // simple two-pass bloom: extract bright pixels, blur, composite.
+// not currently used in main.c — it's here for when i get around to it.
+
 typedef struct {
     glid fbo_bright;
     glid tex_bright;
@@ -14,8 +18,10 @@ typedef struct {
     glid vbo;
     int  w, h;
 } bloom_pass;
+
 int  bloom_init(bloom_pass *b, int w, int h);
 void bloom_destroy(bloom_pass *b);
 void bloom_resize(bloom_pass *b, int w, int h);
 void bloom_apply(bloom_pass *b, glid scene_tex, float threshold, float intensity);
+
 #endif
