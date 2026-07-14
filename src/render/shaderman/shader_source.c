@@ -103,6 +103,7 @@ if (!text) {
 
     char incdir[SHADERMAN_PATH_LEN];
 dir_of(path, incdir);
+// walk line by line. cheap split on '\n'; we keep the newline.
 char *line = text;
 while (line && *line) {
         char *nl = strchr(line, '\n');
@@ -135,6 +136,30 @@ while (line && *line) {
 
     free(text);
 return 1;
+}
+
+shader_source shader_source_load(const char *path) {
+    shader_source s;
+    memset(&s, 0, sizeof s);
+
+    srcbuf out = {0};
+    if (!splice(&s, &out, path, 0)) {
+        free(out.data);
+        s.ok = false;
+        s.text = NULL;
+        s.len = 0;
+        return s;
+    }
+
+    s.text = out.data;
+    s.len = out.len;
+    s.ok = (out.data != NULL);
+    if (!s.ok) free(out.data);
+    return s;
+}
+
+void shader_source_free(shader_source *s) {
+    if (!s) return;
 free(s->text);
 s->text = NULL;
 s->len = 0;
