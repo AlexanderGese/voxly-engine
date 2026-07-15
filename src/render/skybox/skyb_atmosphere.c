@@ -1,8 +1,13 @@
 #include "skyb_atmosphere.h"
+
 #include <math.h>
+
+// dome tessellation. enough rings/sectors that the gradient banding isn't
+// visible but cheap enough to reshade every frame.
 #define SKYB_DOME_RINGS    18
 #define SKYB_DOME_SECTORS  32
 #define SKYB_STAR_COUNT    700
+
 void skyb_atmosphere_init(skyb_atmosphere *a, unsigned seed, float view_dist) {
     skyb_palette_default(&a->palette);
     skyb_starfield_bake(&a->stars, SKYB_STAR_COUNT, seed);
@@ -21,7 +26,8 @@ void skyb_atmosphere_init(skyb_atmosphere *a, unsigned seed, float view_dist) {
 
 void skyb_atmosphere_tick(skyb_atmosphere *a, float dt) {
     a->time_s += dt;
-if (a->time_s > 100000.0f) a->time_s -= 100000.0f;
+    // keep it bounded so the sine phases don't lose precision after hours
+    if (a->time_s > 100000.0f) a->time_s -= 100000.0f;
 }
 
 // pick an exposure that lifts the night a little so it's not pure black, and
@@ -34,15 +40,14 @@ static float exposure_for(float sun_alt01) {
 // night. used by the scene's non-sky shading.
 static skyb_rgb ambient_for(const skyb_frame *fr) {
     float sun_l  = skyb_body_light(&fr->sun);
-float moon_l = skyb_body_light(&fr->moon);
-skyb_rgb day   = skyb_rgb_scale(fr->grad.zenith, 1.3f);
-skyb_rgb night = { 0.05f, 0.06f, 0.12f }
-;
-skyb_rgb amb = skyb_mix(night, day, sun_l);
-skyb_rgb moonlit = { 0.10f, 0.12f, 0.20f }
-;
-amb = skyb_mix(amb, moonlit, moon_l * (1.0f - sun_l) * 0.5f);
-return amb;
+    float moon_l = skyb_body_light(&fr->moon);
+    skyb_rgb day   = skyb_rgb_scale(fr->grad.zenith, 1.3f);
+    skyb_rgb night = { 0.05f, 0.06f, 0.12f };
+    skyb_rgb amb = skyb_mix(night, day, sun_l);
+    // moon nudges the night ambient up a touch toward pale blue
+    skyb_rgb moonlit = { 0.10f, 0.12f, 0.20f };
+    amb = skyb_mix(amb, moonlit, moon_l * (1.0f - sun_l) * 0.5f);
+    return amb;
 }
 
 void skyb_atmosphere_bake(skyb_atmosphere *a, float hour, float moon_phase,
@@ -81,4 +86,16 @@ void skyb_atmosphere_bake(skyb_atmosphere *a, float hour, float moon_phase,
 
 const skyb_frame *skyb_atmosphere_frame(const skyb_atmosphere *a) {
     return &a->frame;
+}
+
+skyb_rgb skyb_atmosphere_clear_color(const skyb_atmosphere *a) {
+    // sample the dome a bit above the horizon and tonemap it so the gl clear
+    // color matches the lower dome where the skirt fades out.
+    vec3 low = vec3_new(1.0f, 0.08f, 0.0f);
+    skyb_rgb c = skyb_gradient_eval(&a->frame.grad, low);
+    return skyb_tonemap(c, a->frame.exposure);
+}
+
+void skyb_atmosphere_free(skyb_atmosphere *a) {
+    skyb_dome_free(&a->dome);
 }
