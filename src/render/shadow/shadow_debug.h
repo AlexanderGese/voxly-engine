@@ -1,0 +1,3 @@
+#ifndef RENDER_SHADOW_DEBUG_H
+#define RENDER_SHADOW_DEBUG_H
+#endif
