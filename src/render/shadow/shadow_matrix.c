@@ -1,7 +1,9 @@
 #include "shadow_matrix.h"
 #include "shadow_frustum.h"
 #include "shadow_bounds.h"
+
 #include <math.h>
+
 mat4 shadow_matrix_bias(void) {
     // remap ndc [-1,1] -> [0,1] on all three axes. column major.
     mat4 b = mat4_identity();
@@ -13,8 +15,8 @@ mat4 shadow_matrix_bias(void) {
 // pick an up vector that isnt parallel to the light. straight-down sun is the
 // only degenerate case and it bites every shadow implementation eventually.
 static vec3 stable_up(vec3 dir) {
-    if (fabsf(dir.y) > 0.99f) return VEC3_FWD;
-return VEC3_UP;
+    if (fabsf(dir.y) > 0.99f) return VEC3_FWD;   // light nearly vertical
+    return VEC3_UP;
 }
 
 void shadow_matrix_update(shadow_csm *csm,
@@ -51,8 +53,8 @@ void shadow_matrix_update(shadow_csm *csm,
 
 mat4 shadow_matrix_sample(const shadow_csm *csm, int cascade) {
     if (cascade < 0) cascade = 0;
-if (cascade >= csm->count) cascade = csm->count - 1;
-return mat4_mul(shadow_matrix_bias(), csm->cascade[cascade].view_proj);
+    if (cascade >= csm->count) cascade = csm->count - 1;
+    return mat4_mul(shadow_matrix_bias(), csm->cascade[cascade].view_proj);
 }
 
 // project the 8 corners of the scene aabb into a cascade's light space and
@@ -79,9 +81,7 @@ static void scene_z_range(mat4 light_view, aabb scene, float *zmin, float *zmax)
 }
 
 void shadow_matrix_clamp_scene(shadow_csm *csm, aabb scene_world) {
-    for (int i = 0;
-i < csm->count;
-i++) {
+    for (int i = 0; i < csm->count; i++) {
         shadow_cascade *cc = &csm->cascade[i];
 
         float szmin, szmax;
