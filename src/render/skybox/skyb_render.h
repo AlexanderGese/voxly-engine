@@ -2,6 +2,7 @@
 #define RENDER_SKYBOX_RENDER_H
 // the gl glue. owns the vaos/vbos for the dome, the sun/moon discs and the
 // star points, and draws them in the right order with depth writes off so the
+// world draws on top. expects the matching shaders to be loaded by the caller
 #include "../gl.h"
 #include "../camera.h"
 #include "skyb_atmosphere.h"
