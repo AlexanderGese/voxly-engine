@@ -1,7 +1,9 @@
 #include "shadow_pcf.h"
 #include "shadow_matrix.h"
+
 #include <math.h>
 #include <stdio.h>
+
 void shadow_pcf_build(shadow_pcf_kernel *k, int map_size) {
     int r = SHADOW_PCF_RADIUS;
     // sigma chosen so the kernel just barely tapers to ~0 at the edge tap.
@@ -30,12 +32,18 @@ void shadow_pcf_build(shadow_pcf_kernel *k, int map_size) {
 
 void shadow_pcf_build_poisson(shadow_pcf_kernel *k, int map_size) {
     int r = SHADOW_PCF_RADIUS;
-int want = (2 * r + 1) * (2 * r + 1);
-k->count    = 0;
-k->inv_size = 1.0f / (float)map_size;
-unsigned seed = 0x9e3779b9u;
-float maxr = (float)r + 0.5f;
-while (k->count < want) {
+    int want = (2 * r + 1) * (2 * r + 1);
+
+    k->count    = 0;
+    k->inv_size = 1.0f / (float)map_size;
+
+    // cheap deterministic poisson disk via best-candidate sampling. for the
+    // tiny tap counts we use this is plenty and stays the same every run, so
+    // the noise pattern is stable frame-to-frame (good — no temporal sparkle).
+    unsigned seed = 0x9e3779b9u;
+    float maxr = (float)r + 0.5f;
+
+    while (k->count < want) {
         // pick the best of a handful of random candidates: the one farthest
         // from every tap placed so far. classic mitchell best-candidate.
         float bx = 0.0f, by = 0.0f, bestd = -1.0f;
@@ -65,9 +73,7 @@ while (k->count < want) {
         t->weight = 1.0f;   // uniform weight, the disk spacing does the work
     }
     // normalize weights
-    for (int i = 0;
-i < k->count;
-i++) k->taps[i].weight /= (float)k->count;
+    for (int i = 0; i < k->count; i++) k->taps[i].weight /= (float)k->count;
 }
 
 void shadow_pcf_rotate(shadow_pcf_kernel *k, float angle) {
@@ -83,11 +89,11 @@ void shadow_pcf_rotate(shadow_pcf_kernel *k, float angle) {
 float shadow_pcf_penumbra(const shadow_pcf_kernel *k, const shadow_csm *csm,
                           int cascade) {
     if (cascade < 0) cascade = 0;
-if (cascade >= csm->count) cascade = csm->count - 1;
-float maxr = 0.0f;
-for (int i = 0;
-i < k->count;
-i++) {
+    if (cascade >= csm->count) cascade = csm->count - 1;
+
+    // widest tap offset in texels -> world units via the cascade texel size.
+    float maxr = 0.0f;
+    for (int i = 0; i < k->count; i++) {
         float d = k->taps[i].dx * k->taps[i].dx + k->taps[i].dy * k->taps[i].dy;
         if (d > maxr) maxr = d;
     }
@@ -115,9 +121,9 @@ float shadow_pcf_bias(const shadow_csm *csm, int cascade, vec3 normal) {
 void shadow_pcf_upload(glid prog, const shadow_pcf_kernel *k,
                        const shadow_csm *csm) {
     glUseProgram(prog);
-for (int i = 0;
-i < csm->count;
-i++) {
+
+    // sample matrices (world -> shadow uv) per cascade
+    for (int i = 0; i < csm->count; i++) {
         char name[64];
         snprintf(name, sizeof name, "u_shadow_mat[%d]", i);
         mat4 m = shadow_matrix_sample(csm, i);
@@ -129,9 +135,30 @@ i++) {
     // we skip splits[0] (the near plane) and upload the far edge of each.
     {
         float far_planes[SHADOW_CASCADE_COUNT];
-for (int i = 0;
-i < csm->count;
-i++) far_planes[i] = csm->splits[i + 1];
-GLint loc = glGetUniformLocation(prog, "u_shadow_splits");
-if (loc >= 0) glUniform1fv(loc, csm->count, far_planes);
+        for (int i = 0; i < csm->count; i++) far_planes[i] = csm->splits[i + 1];
+        GLint loc = glGetUniformLocation(prog, "u_shadow_splits");
+        if (loc >= 0) glUniform1fv(loc, csm->count, far_planes);
+    }
+
+    // pcf kernel: offsets packed as vec2, weights as float, plus the texel step
+    {
+        GLint loc_n = glGetUniformLocation(prog, "u_pcf_count");
+        if (loc_n >= 0) glUniform1i(loc_n, k->count);
+
+        GLint loc_step = glGetUniformLocation(prog, "u_pcf_texel");
+        if (loc_step >= 0) glUniform1f(loc_step, k->inv_size);
+
+        for (int i = 0; i < k->count; i++) {
+            char on[48], wn[48];
+            snprintf(on, sizeof on, "u_pcf_off[%d]", i);
+            snprintf(wn, sizeof wn, "u_pcf_w[%d]", i);
+            GLint lo = glGetUniformLocation(prog, on);
+            GLint lw = glGetUniformLocation(prog, wn);
+            if (lo >= 0) glUniform2f(lo, k->taps[i].dx, k->taps[i].dy);
+            if (lw >= 0) glUniform1f(lw, k->taps[i].weight);
+        }
+    }
+
+    glUniform3f(glGetUniformLocation(prog, "u_light_dir"),
+                csm->light_dir.x, csm->light_dir.y, csm->light_dir.z);
 }
