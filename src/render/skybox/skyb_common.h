@@ -25,9 +25,15 @@ float skyb_smooth(float e0, float e1, float x);
 float skyb_remap(float x, float a, float b, float c, float d);
 // component lerp of colors.
 skyb_rgb skyb_mix(skyb_rgb a, skyb_rgb b, float t);
+// scale a color, clamped back into [0,1] per channel.
 skyb_rgb skyb_rgb_scale(skyb_rgb c, float s);
+// cheap srgb-ish gamma. we keep the sky in linear-ish space and only bend it
+// at the very end so the horizon doesn't blow out. exponent 1/2.2 hardcoded.
 skyb_rgb skyb_tonemap(skyb_rgb c, float exposure);
+// wrap hour into [0,24).
 float skyb_wrap24(float h);
+// fract part in [0,1).
 float skyb_fract(float x);
+// build a unit dir from altitude (radians above horizon) and azimuth.
 vec3 skyb_dir_from_angles(float altitude, float azimuth);
 #endif
