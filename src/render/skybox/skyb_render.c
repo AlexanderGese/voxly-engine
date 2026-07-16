@@ -1,10 +1,19 @@
 #include "skyb_render.h"
+
 #include "../../util/log.h"
 #include "../../math/mat4.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+
 // vertex layouts:
+// dome: vec3 pos, vec3 color           (loc 0, 1)
+// disc: vec3 pos, vec2 uv_sign         (loc 0, 1)  -- packed as vec3, z unused
+// star: vec3 pos, vec3 color, float sz (loc 0, 1, 2)
+
+// strip translation from the view so the sky rides with the camera. we keep
+// the rotation (upper-left 3x3) and zero the position column.
 static mat4 view_no_translate(const camera *cam) {
     mat4 v = camera_view(cam);
     v.m[3][0] = 0.0f;
@@ -15,46 +24,53 @@ static mat4 view_no_translate(const camera *cam) {
 
 void skyb_renderer_init(skyb_renderer *r, int star_cap) {
     memset(r, 0, sizeof *r);
-if (star_cap < 0) star_cap = 0;
-r->star_cap = star_cap;
-r->star_scratch = star_cap
+    if (star_cap < 0) star_cap = 0;
+    r->star_cap = star_cap;
+    r->star_scratch = star_cap
         ? malloc((size_t)star_cap * sizeof(skyb_star_vertex))
         : NULL;
-glGenVertexArrays(1, &r->dome_vao);
-glGenBuffers(1, &r->dome_vbo);
-glBindVertexArray(r->dome_vao);
-glBindBuffer(GL_ARRAY_BUFFER, r->dome_vbo);
-glEnableVertexAttribArray(0);
-glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_dome_vertex),
+
+    // dome buffers
+    glGenVertexArrays(1, &r->dome_vao);
+    glGenBuffers(1, &r->dome_vbo);
+    glBindVertexArray(r->dome_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, r->dome_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_dome_vertex),
                           (void*)offsetof(skyb_dome_vertex, x));
-glEnableVertexAttribArray(1);
-glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_dome_vertex),
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_dome_vertex),
                           (void*)offsetof(skyb_dome_vertex, r));
-glGenVertexArrays(1, &r->disc_vao);
-glGenBuffers(1, &r->disc_vbo);
-glBindVertexArray(r->disc_vao);
-glBindBuffer(GL_ARRAY_BUFFER, r->disc_vbo);
-glEnableVertexAttribArray(0);
-glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-glEnableVertexAttribArray(1);
-glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+
+    // disc buffers (sun/moon). 4 verts re-uploaded each draw, drawn as a fan.
+    glGenVertexArrays(1, &r->disc_vao);
+    glGenBuffers(1, &r->disc_vbo);
+    glBindVertexArray(r->disc_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, r->disc_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
                           (void*)(3 * sizeof(float)));
-glGenVertexArrays(1, &r->star_vao);
-glGenBuffers(1, &r->star_vbo);
-glBindVertexArray(r->star_vao);
-glBindBuffer(GL_ARRAY_BUFFER, r->star_vbo);
-glEnableVertexAttribArray(0);
-glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
+
+    // star points
+    glGenVertexArrays(1, &r->star_vao);
+    glGenBuffers(1, &r->star_vbo);
+    glBindVertexArray(r->star_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, r->star_vbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
                           (void*)offsetof(skyb_star_vertex, x));
-glEnableVertexAttribArray(1);
-glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
                           (void*)offsetof(skyb_star_vertex, r));
-glEnableVertexAttribArray(2);
-glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(skyb_star_vertex),
                           (void*)offsetof(skyb_star_vertex, size));
-glBindBuffer(GL_ARRAY_BUFFER, 0);
-glBindVertexArray(0);
-r->ready = 1;
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    r->ready = 1;
 }
 
 void skyb_renderer_upload_dome(skyb_renderer *r, const skyb_dome *d) {
@@ -71,11 +87,12 @@ void skyb_renderer_upload_dome(skyb_renderer *r, const skyb_dome *d) {
 static void draw_body(skyb_renderer *r, const skyb_body *b, float radius,
                       glid prog) {
     if (b->visible01 <= 0.0f) return;
-skyb_billboard bb = skyb_body_billboard(b, radius);
-float buf[4 * 6];
-for (int i = 0;
-i < 4;
-i++) {
+
+    skyb_billboard bb = skyb_body_billboard(b, radius);
+
+    // interleave pos + uv_sign for the 4 corners
+    float buf[4 * 6];
+    for (int i = 0; i < 4; i++) {
         buf[i*6 + 0] = bb.corner[i].x;
         buf[i*6 + 1] = bb.corner[i].y;
         buf[i*6 + 2] = bb.corner[i].z;
@@ -85,12 +102,14 @@ i++) {
     }
 
     glBindVertexArray(r->disc_vao);
-glBindBuffer(GL_ARRAY_BUFFER, r->disc_vbo);
-glBufferData(GL_ARRAY_BUFFER, sizeof buf, buf, GL_STREAM_DRAW);
-gl_set_uniform_vec3(prog, "u_tint",
+    glBindBuffer(GL_ARRAY_BUFFER, r->disc_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof buf, buf, GL_STREAM_DRAW);
+
+    gl_set_uniform_vec3(prog, "u_tint",
                         b->tint.x, b->tint.y, b->tint.z);
-gl_set_uniform_float(prog, "u_alpha", b->visible01);
-glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    gl_set_uniform_float(prog, "u_alpha", b->visible01);
+    // bl, br, tr, tl -> fan covers the quad
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 }
 
 void skyb_renderer_draw(skyb_renderer *r, const skyb_atmosphere *a,
@@ -158,11 +177,11 @@ void skyb_renderer_draw(skyb_renderer *r, const skyb_atmosphere *a,
 
 void skyb_renderer_destroy(skyb_renderer *r) {
     if (r->dome_vao) glDeleteVertexArrays(1, &r->dome_vao);
-if (r->disc_vao) glDeleteVertexArrays(1, &r->disc_vao);
-if (r->star_vao) glDeleteVertexArrays(1, &r->star_vao);
-if (r->dome_vbo) glDeleteBuffers(1, &r->dome_vbo);
-if (r->disc_vbo) glDeleteBuffers(1, &r->disc_vbo);
-if (r->star_vbo) glDeleteBuffers(1, &r->star_vbo);
-free(r->star_scratch);
-memset(r, 0, sizeof *r);
+    if (r->disc_vao) glDeleteVertexArrays(1, &r->disc_vao);
+    if (r->star_vao) glDeleteVertexArrays(1, &r->star_vao);
+    if (r->dome_vbo) glDeleteBuffers(1, &r->dome_vbo);
+    if (r->disc_vbo) glDeleteBuffers(1, &r->disc_vbo);
+    if (r->star_vbo) glDeleteBuffers(1, &r->star_vbo);
+    free(r->star_scratch);
+    memset(r, 0, sizeof *r);
 }
