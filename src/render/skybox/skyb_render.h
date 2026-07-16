@@ -1,5 +1,7 @@
 #ifndef RENDER_SKYBOX_RENDER_H
 #define RENDER_SKYBOX_RENDER_H
+// the gl glue. owns the vaos/vbos for the dome, the sun/moon discs and the
+// star points, and draws them in the right order with depth writes off so the
 #include "../gl.h"
 #include "../camera.h"
 #include "skyb_atmosphere.h"
@@ -19,4 +21,5 @@ void skyb_renderer_upload_dome(skyb_renderer *r, const skyb_dome *d);
 void skyb_renderer_draw(skyb_renderer *r, const skyb_atmosphere *a,
                         const camera *cam,
                         glid prog_dome, glid prog_disc, glid prog_star);
+void skyb_renderer_destroy(skyb_renderer *r);
 #endif
