@@ -1,7 +1,13 @@
 #include "skyb_celestial.h"
+
 #include <math.h>
+
+// sun angular radius ~0.0047 rad in reality; we fudge it bigger so the disc
+// actually reads on screen. moon a touch smaller, like the eye expects.
 #define SKYB_SUN_SIZE   0.045f
 #define SKYB_MOON_SIZE  0.038f
+
+// the orbital arc: phase 0 at 6h (rising east), pi at 18h (setting west).
 static vec3 orbit_dir(float hour, float tilt) {
     float theta = (hour - 6.0f) * (SKYB_PI / 12.0f);
     // base arc in the x/y plane, then tilt it out of plane on z a bit so the
@@ -36,18 +42,19 @@ skyb_body skyb_sun(float hour, float tilt, skyb_rgb tint) {
 
 skyb_body skyb_moon(float hour, float tilt, float phase) {
     skyb_body b;
-b.kind = SKYB_BODY_MOON;
-b.dir = orbit_dir(skyb_wrap24(hour + 12.0f), tilt);
-b.altitude = b.dir.y;
-b.visible01 = visibility(b.altitude);
-b.angular_sz = SKYB_MOON_SIZE;
-float lit = 1.0f - fabsf(phase - 0.5f) * 2.0f;
-lit = skyb_clampf(lit, 0.05f, 1.0f);
-float g = 0.85f * lit + 0.15f;
-skyb_rgb pale = { 0.78f * g, 0.80f * g, 0.92f * g }
-;
-b.tint = pale;
-return b;
+    b.kind = SKYB_BODY_MOON;
+    // opposite point on the orbit: shift by 12 hours
+    b.dir = orbit_dir(skyb_wrap24(hour + 12.0f), tilt);
+    b.altitude = b.dir.y;
+    b.visible01 = visibility(b.altitude);
+    b.angular_sz = SKYB_MOON_SIZE;
+    // phase 0/1 = new (dark), 0.5 = full (bright). triangle curve.
+    float lit = 1.0f - fabsf(phase - 0.5f) * 2.0f;
+    lit = skyb_clampf(lit, 0.05f, 1.0f);
+    float g = 0.85f * lit + 0.15f;
+    skyb_rgb pale = { 0.78f * g, 0.80f * g, 0.92f * g };
+    b.tint = pale;
+    return b;
 }
 
 skyb_billboard skyb_body_billboard(const skyb_body *b, float radius) {
@@ -84,8 +91,9 @@ skyb_billboard skyb_body_billboard(const skyb_body *b, float radius) {
 
 float skyb_body_light(const skyb_body *b) {
     if (b->visible01 <= 0.0f) return 0.0f;
-float alt = skyb_sat(b->altitude);
-float am  = 0.25f + 0.75f * alt;
-float base = (b->kind == SKYB_BODY_SUN) ? 1.0f : 0.30f;
-return skyb_sat(base * am * b->visible01);
+    // light scales with altitude (air mass-ish) and visibility.
+    float alt = skyb_sat(b->altitude);
+    float am  = 0.25f + 0.75f * alt; // never fully zero while up
+    float base = (b->kind == SKYB_BODY_SUN) ? 1.0f : 0.30f;
+    return skyb_sat(base * am * b->visible01);
 }
