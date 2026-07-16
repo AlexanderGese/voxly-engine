@@ -1,7 +1,9 @@
 #include "ssao_blur.h"
 #include "ssao_config.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 static glid make_r8_tex(int w, int h) {
     glid t;
     glGenTextures(1, &t);
@@ -17,21 +19,22 @@ static glid make_r8_tex(int w, int h) {
 
 int ssaox_blur_init(ssaox_blur *b, int w, int h, glid prog) {
     b->w = w;
-b->h = h;
-b->radius = SSAOX_BLUR_RADIUS;
-b->prog = prog;
-b->tex = make_r8_tex(w, h);
-glGenFramebuffers(1, &b->fbo);
-glBindFramebuffer(GL_FRAMEBUFFER, b->fbo);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+    b->h = h;
+    b->radius = SSAOX_BLUR_RADIUS;
+    b->prog = prog;
+
+    b->tex = make_r8_tex(w, h);
+    glGenFramebuffers(1, &b->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, b->fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, b->tex, 0);
-if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         LOGW("ssaox blur fbo incomplete");
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return 0;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-return 1;
+    return 1;
 }
 
 void ssaox_blur_destroy(ssaox_blur *b) {
@@ -44,9 +47,9 @@ void ssaox_blur_destroy(ssaox_blur *b) {
 
 void ssaox_blur_resize(ssaox_blur *b, int w, int h) {
     if (b->w == w && b->h == h) return;
-glid prog = b->prog;
-ssaox_blur_destroy(b);
-ssaox_blur_init(b, w, h, prog);
+    glid prog = b->prog;
+    ssaox_blur_destroy(b);
+    ssaox_blur_init(b, w, h, prog);
 }
 
 glid ssaox_blur_run(ssaox_blur *b, glid occl_tex, glid fs_vao) {
@@ -72,6 +75,21 @@ glid ssaox_blur_run(ssaox_blur *b, glid occl_tex, glid fs_vao) {
 
 void ssaox_blur_cpu(const float *in, float *out, int w, int h, int radius) {
     if (radius < 0) radius = 0;
-for (int y = 0;
-y < h;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float sum = 0.0f;
+            int n = 0;
+            for (int dy = -radius; dy <= radius; dy++) {
+                int sy = y + dy;
+                if (sy < 0 || sy >= h) continue;   // clamp by skipping edges
+                for (int dx = -radius; dx <= radius; dx++) {
+                    int sx = x + dx;
+                    if (sx < 0 || sx >= w) continue;
+                    sum += in[sy * w + sx];
+                    n++;
+                }
+            }
+            out[y * w + x] = (n > 0) ? sum / (float)n : in[y * w + x];
+        }
+    }
 }
