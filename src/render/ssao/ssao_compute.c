@@ -66,3 +66,16 @@ float lit = 1.0f - occlusion;
 lit = clamp01(lit);
 if (prm->power != 1.0f) lit = powf(lit, prm->power);
 return lit;
+}
+
+void ssaox_compute_buffer(const ssaox_compute_params *prm,
+                          const ssaox_kernel *k, const ssaox_noise *noise,
+                          const vec3 *pos, const vec3 *nrm,
+                          float *out_occl) {
+    for (int y = 0; y < prm->h; y++) {
+        for (int x = 0; x < prm->w; x++) {
+            out_occl[y * prm->w + x] =
+                ssaox_compute_pixel(prm, k, noise, pos, nrm, x, y);
+        }
+    }
+}
