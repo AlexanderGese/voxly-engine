@@ -1,7 +1,9 @@
 #include "skyb_gradient.h"
 #include "skyb_dither.h"
+
 #include <math.h>
 #include <stdlib.h>
+
 skyb_rgb skyb_gradient_eval(const skyb_gradient *g, vec3 dir) {
     dir = vec3_normalize(dir);
 
@@ -49,18 +51,14 @@ skyb_rgb skyb_gradient_eval(const skyb_gradient *g, vec3 dir) {
 static void push(skyb_dome *d, vec3 dir, skyb_rgb c) {
     if (d->count == d->cap) {
         int nc = d->cap ? d->cap * 2 : 256;
-skyb_dome_vertex *nv = realloc(d->verts, nc * sizeof *nv);
-if (!nv) return;
-d->verts = nv;
-d->cap = nc;
-}
+        skyb_dome_vertex *nv = realloc(d->verts, nc * sizeof *nv);
+        if (!nv) return; // out of memory; caller will just draw fewer tris
+        d->verts = nv;
+        d->cap = nc;
+    }
     skyb_dome_vertex *v = &d->verts[d->count++];
-v->x = dir.x;
-v->y = dir.y;
-v->z = dir.z;
-v->r = c.x;
-v->g = c.y;
-v->b = c.z;
+    v->x = dir.x; v->y = dir.y; v->z = dir.z;
+    v->r = c.x; v->g = c.y; v->b = c.z;
 }
 
 // direction on the dome for ring i (0=top) / sector j. rings span from the
@@ -78,15 +76,41 @@ static vec3 dome_dir(int i, int j, int rings, int sectors) {
 
 void skyb_dome_build(skyb_dome *d, int rings, int sectors, float radius) {
     d->verts = NULL;
-d->count = 0;
-d->cap = 0;
-d->rings = rings;
-d->sectors = sectors;
-d->radius = radius;
-;
-for (int i = 0;
-i < rings;
-i < d->count;
-d->verts = NULL;
-d->count = d->cap = 0;
+    d->count = 0;
+    d->cap = 0;
+    d->rings = rings;
+    d->sectors = sectors;
+    d->radius = radius;
+
+    // emit two triangles per quad cell. colors are filled later by shade();
+    // we just lay down positions with black for now.
+    skyb_rgb k = { 0, 0, 0 };
+    for (int i = 0; i < rings; i++) {
+        for (int j = 0; j < sectors; j++) {
+            vec3 a = dome_dir(i,     j,     rings, sectors);
+            vec3 b = dome_dir(i,     j + 1, rings, sectors);
+            vec3 c = dome_dir(i + 1, j,     rings, sectors);
+            vec3 e = dome_dir(i + 1, j + 1, rings, sectors);
+            // tri 1: a, c, b   tri 2: b, c, e  (ccw seen from inside)
+            push(d, a, k); push(d, c, k); push(d, b, k);
+            push(d, b, k); push(d, c, k); push(d, e, k);
+        }
+    }
+}
+
+void skyb_dome_shade(skyb_dome *d, const skyb_gradient *g) {
+    for (int i = 0; i < d->count; i++) {
+        skyb_dome_vertex *v = &d->verts[i];
+        vec3 dir = { v->x, v->y, v->z };
+        skyb_rgb c = skyb_gradient_eval(g, dir);
+        // break up 8-bit banding on the smooth ramp; cell = vertex index
+        c = skyb_dither_quantize(c, i, 8);
+        v->r = c.x; v->g = c.y; v->b = c.z;
+    }
+}
+
+void skyb_dome_free(skyb_dome *d) {
+    free(d->verts);
+    d->verts = NULL;
+    d->count = d->cap = 0;
 }
