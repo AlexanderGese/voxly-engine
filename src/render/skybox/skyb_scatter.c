@@ -1,5 +1,7 @@
 #include "skyb_scatter.h"
+
 #include <math.h>
+
 void skyb_scatter_default(skyb_scatter *s) {
     s->rayleigh  = 1.0f;
     s->mie       = 0.45f;
@@ -24,8 +26,11 @@ float skyb_phase_mie(float cos_theta, float g) {
 
 float skyb_optical_depth(vec3 view_dir) {
     view_dir = vec3_normalize(view_dir);
-float c = skyb_clampf(view_dir.y, 0.02f, 1.0f);
-return 1.0f / (c + 0.15f * expf(-c * 8.0f));
+    // path length ~ 1/(cos(zenith)) clamped; we use the altitude (dir.y) as a
+    // stand-in. horizon (y~0) -> long path, zenith (y~1) -> short.
+    float c = skyb_clampf(view_dir.y, 0.02f, 1.0f);
+    // soft chapman-ish: blow up gently toward the horizon
+    return 1.0f / (c + 0.15f * expf(-c * 8.0f));
 }
 
 skyb_rgb skyb_scatter_eval(const skyb_scatter *s, vec3 view_dir,
