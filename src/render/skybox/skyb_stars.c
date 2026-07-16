@@ -1,17 +1,20 @@
 #include "skyb_stars.h"
+
 #include <math.h>
 #include <stdint.h>
+
+// local xorshift32 so the star bake is deterministic and doesn't drag in the
+// engine rng. (same idea as world/sky/sky_rand, kept private here.)
 typedef struct { uint32_t s; } srng;
+
 static void srng_seed(srng *r, uint32_t seed) {
     r->s = seed ? seed : 0x9e3779b9u;
 }
 static uint32_t srng_u32(srng *r) {
     uint32_t x = r->s;
-x ^= x << 13;
-x ^= x >> 17;
-x ^= x << 5;
-r->s = x;
-return x;
+    x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+    r->s = x;
+    return x;
 }
 static float srng_f(srng *r) {
     return (srng_u32(r) >> 8) * (1.0f / 16777216.0f); // 24-bit mantissa
@@ -32,14 +35,14 @@ static skyb_rgb star_color(float t) {
 
 void skyb_starfield_bake(skyb_starfield *sf, int count, unsigned seed) {
     if (count > SKYB_STAR_MAX) count = SKYB_STAR_MAX;
-if (count < 0) count = 0;
-sf->count = count;
-sf->seed  = seed;
-srng rng;
-srng_seed(&rng, (uint32_t)seed);
-for (int i = 0;
-i < count;
-i++) {
+    if (count < 0) count = 0;
+    sf->count = count;
+    sf->seed  = seed;
+
+    srng rng;
+    srng_seed(&rng, (uint32_t)seed);
+
+    for (int i = 0; i < count; i++) {
         skyb_star *s = &sf->star[i];
 
         // uniform point on the upper hemisphere (bias slightly up so we don't
@@ -63,10 +66,11 @@ i++) {
 
 float skyb_star_visibility(float hour) {
     hour = skyb_wrap24(hour);
-if (hour >= 21.0f || hour <= 4.0f) return 1.0f;
-if (hour > 4.0f && hour < 6.0f)  return skyb_smooth(6.0f, 4.0f, hour);
-if (hour > 19.0f && hour < 21.0f) return skyb_smooth(19.0f, 21.0f, hour);
-return 0.0f;
+    // full dark between ~21 and ~4, fading across dawn/dusk.
+    if (hour >= 21.0f || hour <= 4.0f) return 1.0f;
+    if (hour > 4.0f && hour < 6.0f)  return skyb_smooth(6.0f, 4.0f, hour);
+    if (hour > 19.0f && hour < 21.0f) return skyb_smooth(19.0f, 21.0f, hour);
+    return 0.0f;
 }
 
 float skyb_star_brightness(const skyb_star *s, float vis, float time_s) {
@@ -82,8 +86,23 @@ float skyb_star_brightness(const skyb_star *s, float vis, float time_s) {
 int skyb_starfield_emit(const skyb_starfield *sf, skyb_star_vertex *out,
                         float hour, float time_s, float radius, float min_b) {
     float vis = skyb_star_visibility(hour);
-if (vis <= 0.0f) return 0;
-int n = 0;
-for (int i = 0;
-i < sf->count;
+    if (vis <= 0.0f) return 0;
+
+    int n = 0;
+    for (int i = 0; i < sf->count; i++) {
+        const skyb_star *s = &sf->star[i];
+        float b = skyb_star_brightness(s, vis, time_s);
+        if (b < min_b) continue;
+
+        skyb_star_vertex *v = &out[n++];
+        v->x = s->dir.x * radius;
+        v->y = s->dir.y * radius;
+        v->z = s->dir.z * radius;
+        v->r = s->color.x * b;
+        v->g = s->color.y * b;
+        v->b = s->color.z * b;
+        // size falls off slightly with brightness so faint stars are pinpricks
+        v->size = s->size * (0.6f + 0.4f * b);
+    }
+    return n;
 }
