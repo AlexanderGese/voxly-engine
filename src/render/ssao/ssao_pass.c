@@ -110,4 +110,61 @@ glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, p->tex_occl, 0);
 glBindFramebuffer(GL_FRAMEBUFFER, 0);
 ssaox_blur_resize(&p->blur, p->w, p->h);
+}
+
+int ssaox_pass_run(ssaox_pass *p, const ssaox_gbuffer *g) {
+    if (!p->enabled) return 0;
+    if (!ssaox_gbuffer_valid(g)) return 0;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, p->fbo_occl);
+    glViewport(0, 0, p->w, p->h);
+    glUseProgram(p->prog_occl);
+
+    // gbuffer inputs
+    glActiveTexture(GL_TEXTURE0 + SSAOX_TEX_UNIT_DEPTH);
+    glBindTexture(GL_TEXTURE_2D, g->tex_depth);
+    gl_set_uniform_int(p->prog_occl, "u_depth", SSAOX_TEX_UNIT_DEPTH);
+
+    glActiveTexture(GL_TEXTURE0 + SSAOX_TEX_UNIT_NORMAL);
+    glBindTexture(GL_TEXTURE_2D, g->tex_normal);
+    gl_set_uniform_int(p->prog_occl, "u_normal", SSAOX_TEX_UNIT_NORMAL);
+
+    glActiveTexture(GL_TEXTURE0 + SSAOX_TEX_UNIT_NOISE);
+    glBindTexture(GL_TEXTURE_2D, p->noise.tex);
+    gl_set_uniform_int(p->prog_occl, "u_noise", SSAOX_TEX_UNIT_NOISE);
+
+    // matrices
+    gl_set_uniform_mat4(p->prog_occl, "u_proj", mat4_data(&g->proj));
+    gl_set_uniform_mat4(p->prog_occl, "u_inv_proj", mat4_data(&g->inv_proj));
+
+    // tunables
+    gl_set_uniform_float(p->prog_occl, "u_radius", p->radius);
+    gl_set_uniform_float(p->prog_occl, "u_bias", p->bias);
+    gl_set_uniform_float(p->prog_occl, "u_power", p->power);
+    gl_set_uniform_float(p->prog_occl, "u_strength", p->strength);
+
+    float ns[2];
+    ssaox_noise_scale(&p->noise, p->w, p->h, ns);
+    gl_set_uniform_float(p->prog_occl, "u_noise_scale_x", ns[0]);
+    gl_set_uniform_float(p->prog_occl, "u_noise_scale_y", ns[1]);
+
+    ssaox_fsquad_draw(&p->quad);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // blur the raw occlusion into blur.tex
+    ssaox_blur_run(&p->blur, p->tex_occl, p->quad.vao);
+    return 1;
+}
+
+glid ssaox_pass_result(const ssaox_pass *p) {
+    // if the blur shader is missing the blur stage hands back the raw tex.
+    if (p->blur.prog && p->blur.tex) return p->blur.tex;
 return p->tex_occl;
+}
+
+void ssaox_pass_reseed(ssaox_pass *p, uint64_t seed) {
+    ssaox_kernel_reroll(&p->kernel, seed);
+    ssaox_noise_build(&p->noise, seed ^ 0xD1B54A32ull);
+    ssaox_noise_upload(&p->noise);
+    upload_kernel(p);
+}
