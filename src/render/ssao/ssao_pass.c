@@ -1,6 +1,8 @@
 #include "ssao_pass.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 static int divup_scale(int v, int scale) {
     int r = v / scale;
     return r < 1 ? 1 : r;
@@ -8,20 +10,19 @@ static int divup_scale(int v, int scale) {
 
 static glid make_occl_tex(int w, int h) {
     glid t;
-glGenTextures(1, &t);
-glBindTexture(GL_TEXTURE_2D, t);
-glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-glBindTexture(GL_TEXTURE_2D, 0);
-return t;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return t;
 }
 
 // upload the packed kernel into the occlusion shader. called once per init
-// and on reseed;
-the kernel is constant across frames otherwise.
+// and on reseed; the kernel is constant across frames otherwise.
 static void upload_kernel(ssaox_pass *p) {
     if (!p->prog_occl) return;
     float packed[SSAOX_KERNEL_MAX * 3];
@@ -50,38 +51,44 @@ static void upload_kernel(ssaox_pass *p) {
 
 int ssaox_pass_init(ssaox_pass *p, int full_w, int full_h, int kernel_count) {
     p->full_w = full_w;
-p->full_h = full_h;
-p->scale  = SSAOX_DEFAULT_SCALE;
-p->w = divup_scale(full_w, p->scale);
-p->h = divup_scale(full_h, p->scale);
-p->radius   = SSAOX_DEFAULT_RADIUS;
-p->bias     = SSAOX_DEFAULT_BIAS;
-p->power    = SSAOX_DEFAULT_POWER;
-p->strength = SSAOX_DEFAULT_STRENGTH;
-if (kernel_count <= 0) kernel_count = SSAOX_KERNEL_DEFAULT;
-ssaox_kernel_build(&p->kernel, kernel_count, 0xA0C0FFEEull);
-ssaox_noise_build(&p->noise, 0x9E3779B9ull);
-ssaox_noise_upload(&p->noise);
-p->tex_occl = make_occl_tex(p->w, p->h);
-glGenFramebuffers(1, &p->fbo_occl);
-glBindFramebuffer(GL_FRAMEBUFFER, p->fbo_occl);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+    p->full_h = full_h;
+    p->scale  = SSAOX_DEFAULT_SCALE;
+    p->w = divup_scale(full_w, p->scale);
+    p->h = divup_scale(full_h, p->scale);
+
+    p->radius   = SSAOX_DEFAULT_RADIUS;
+    p->bias     = SSAOX_DEFAULT_BIAS;
+    p->power    = SSAOX_DEFAULT_POWER;
+    p->strength = SSAOX_DEFAULT_STRENGTH;
+
+    if (kernel_count <= 0) kernel_count = SSAOX_KERNEL_DEFAULT;
+    ssaox_kernel_build(&p->kernel, kernel_count, 0xA0C0FFEEull);
+    ssaox_noise_build(&p->noise, 0x9E3779B9ull);
+    ssaox_noise_upload(&p->noise);
+
+    p->tex_occl = make_occl_tex(p->w, p->h);
+    glGenFramebuffers(1, &p->fbo_occl);
+    glBindFramebuffer(GL_FRAMEBUFFER, p->fbo_occl);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, p->tex_occl, 0);
-if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         LOGW("ssaox occlusion fbo incomplete");
-glBindFramebuffer(GL_FRAMEBUFFER, 0);
-p->prog_occl = gl_load_shader(SSAOX_VERT_PATH, SSAOX_FRAG_OCCL_PATH);
-p->prog_blur = gl_load_shader(SSAOX_VERT_PATH, SSAOX_FRAG_BLUR_PATH);
-ssaox_fsquad_init(&p->quad);
-ssaox_blur_init(&p->blur, p->w, p->h, p->prog_blur);
-p->enabled = (p->prog_occl != 0);
-if (!p->enabled) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    p->prog_occl = gl_load_shader(SSAOX_VERT_PATH, SSAOX_FRAG_OCCL_PATH);
+    p->prog_blur = gl_load_shader(SSAOX_VERT_PATH, SSAOX_FRAG_BLUR_PATH);
+
+    ssaox_fsquad_init(&p->quad);
+    ssaox_blur_init(&p->blur, p->w, p->h, p->prog_blur);
+
+    p->enabled = (p->prog_occl != 0);
+    if (!p->enabled) {
         LOGW("ssaox: occlusion shader missing — pass disabled (cpu path still ok)");
     } else {
         upload_kernel(p);
-LOGI("ssaox: ready, %d samples @ %dx%d (1/%d res)",
+        LOGI("ssaox: ready, %d samples @ %dx%d (1/%d res)",
              p->kernel.count, p->w, p->h, p->scale);
-}
+    }
     return p->enabled;
 }
 
@@ -99,17 +106,19 @@ void ssaox_pass_destroy(ssaox_pass *p) {
 
 void ssaox_pass_resize(ssaox_pass *p, int full_w, int full_h) {
     if (p->full_w == full_w && p->full_h == full_h) return;
-p->full_w = full_w;
-p->full_h = full_h;
-p->w = divup_scale(full_w, p->scale);
-p->h = divup_scale(full_h, p->scale);
-if (p->tex_occl) glDeleteTextures(1, &p->tex_occl);
-p->tex_occl = make_occl_tex(p->w, p->h);
-glBindFramebuffer(GL_FRAMEBUFFER, p->fbo_occl);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+    p->full_w = full_w;
+    p->full_h = full_h;
+    p->w = divup_scale(full_w, p->scale);
+    p->h = divup_scale(full_h, p->scale);
+
+    if (p->tex_occl) glDeleteTextures(1, &p->tex_occl);
+    p->tex_occl = make_occl_tex(p->w, p->h);
+    glBindFramebuffer(GL_FRAMEBUFFER, p->fbo_occl);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, p->tex_occl, 0);
-glBindFramebuffer(GL_FRAMEBUFFER, 0);
-ssaox_blur_resize(&p->blur, p->w, p->h);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    ssaox_blur_resize(&p->blur, p->w, p->h);
 }
 
 int ssaox_pass_run(ssaox_pass *p, const ssaox_gbuffer *g) {
@@ -159,7 +168,7 @@ int ssaox_pass_run(ssaox_pass *p, const ssaox_gbuffer *g) {
 glid ssaox_pass_result(const ssaox_pass *p) {
     // if the blur shader is missing the blur stage hands back the raw tex.
     if (p->blur.prog && p->blur.tex) return p->blur.tex;
-return p->tex_occl;
+    return p->tex_occl;
 }
 
 void ssaox_pass_reseed(ssaox_pass *p, uint64_t seed) {
