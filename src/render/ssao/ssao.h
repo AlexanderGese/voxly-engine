@@ -1,5 +1,6 @@
 #ifndef RENDER_SSAO_H
 #define RENDER_SSAO_H
+
 // screen-space ambient occlusion. umbrella header for the ssao subsystem.
 // include this and you get the whole thing.
 //
@@ -25,6 +26,8 @@
 // ... per frame, after the geometry pass ...
 // ssaox_gbuffer g; ssaox_gbuffer_clear(&g); fill g.tex_*, g.proj, ...
 // ssaox_pass_run(&p, &g);
+// bind ssaox_pass_result(&p) when shading ambient.
+
 #include "ssao_config.h"
 #include "ssao_kernel.h"
 #include "ssao_kernel_stats.h"
@@ -37,4 +40,5 @@
 #include "ssao_compute.h"
 #include "ssao_settings.h"
 #include "ssao_debug.h"
+
 #endif

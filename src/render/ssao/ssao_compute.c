@@ -1,7 +1,9 @@
 #include "ssao_compute.h"
 #include "ssao_sample.h"
 #include "ssao_config.h"
+
 #include <math.h>
+
 static float clamp01(float v) {
     return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
 }
@@ -10,15 +12,14 @@ static float clamp01(float v) {
 // exactly like the GL_REPEAT NEAREST sampler does.
 static vec3 noise_at(const ssaox_noise *n, int px, int py) {
     int nx = px % n->dim;
-int ny = py % n->dim;
-if (nx < 0) nx += n->dim;
-if (ny < 0) ny += n->dim;
-return n->texels[ny * n->dim + nx];
+    int ny = py % n->dim;
+    if (nx < 0) nx += n->dim;
+    if (ny < 0) ny += n->dim;
+    return n->texels[ny * n->dim + nx];
 }
 
 // transform a tangent-space kernel sample into view space via the TBN.
-// the tbn columns are t,b,n;
-multiply as a rotation (w irrelevant).
+// the tbn columns are t,b,n; multiply as a rotation (w irrelevant).
 static vec3 tbn_apply(mat4 tbn, vec3 s) {
     return mat4_mul_vec3(tbn, s);
 }
@@ -28,15 +29,17 @@ float ssaox_compute_pixel(const ssaox_compute_params *prm,
                           const vec3 *pos, const vec3 *nrm,
                           int px, int py) {
     int idx = py * prm->w + px;
-vec3 frag = pos[idx];
-vec3 n    = vec3_normalize(nrm[idx]);
-vec3 rot = noise_at(noise, px, py);
-mat4 tbn = ssaox_tbn(n, rot);
-float occlusion = 0.0f;
-int   counted   = 0;
-for (int i = 0;
-i < k->count;
-i++) {
+    vec3 frag = pos[idx];
+    vec3 n    = vec3_normalize(nrm[idx]);
+
+    // orient the kernel: TBN from the normal + this pixel's noise rotation.
+    vec3 rot = noise_at(noise, px, py);
+    mat4 tbn = ssaox_tbn(n, rot);
+
+    float occlusion = 0.0f;
+    int   counted   = 0;
+
+    for (int i = 0; i < k->count; i++) {
         // sample point in view space
         vec3 dir = tbn_apply(tbn, k->samples[i]);
         vec3 sp  = vec3_add(frag, vec3_scale(dir, prm->radius));
@@ -60,12 +63,14 @@ i++) {
         counted++;
     }
 
-    if (counted == 0) return 1.0f;
-occlusion = occlusion / (float)counted;
-float lit = 1.0f - occlusion;
-lit = clamp01(lit);
-if (prm->power != 1.0f) lit = powf(lit, prm->power);
-return lit;
+    if (counted == 0) return 1.0f;   // nothing sampled, treat as fully lit
+
+    occlusion = occlusion / (float)counted;
+    float lit = 1.0f - occlusion;
+    lit = clamp01(lit);
+    // contrast curve
+    if (prm->power != 1.0f) lit = powf(lit, prm->power);
+    return lit;
 }
 
 void ssaox_compute_buffer(const ssaox_compute_params *prm,
