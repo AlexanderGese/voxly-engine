@@ -1,5 +1,7 @@
 #include "ssao_kernel_stats.h"
+
 #include <math.h>
+
 void ssaox_kernel_stats(const ssaox_kernel *k, ssaox_kstats *out) {
     out->count = k->count;
     out->bad_hemisphere = 0;
@@ -36,10 +38,37 @@ void ssaox_kernel_stats(const ssaox_kernel *k, ssaox_kstats *out) {
 
 float ssaox_kernel_bias_ratio(const ssaox_kernel *k) {
     if (k->count <= 0) return 0.0f;
-float mx = 0.0f;
-for (int i = 0;
-i < k->count;
-float half = mx * 0.5f;
-int   near = 0;
-for (int i = 0;
-i < k->count;
+
+    // find max length first
+    float mx = 0.0f;
+    for (int i = 0; i < k->count; i++) {
+        float len = vec3_length(k->samples[i]);
+        if (len > mx) mx = len;
+    }
+    if (mx <= 0.0f) return 0.0f;
+
+    float half = mx * 0.5f;
+    int   near = 0;
+    for (int i = 0; i < k->count; i++) {
+        if (vec3_length(k->samples[i]) < half) near++;
+    }
+    return (float)near / (float)k->count;
+}
+
+int ssaox_kernel_ok(const ssaox_kernel *k) {
+    ssaox_kstats st;
+    ssaox_kernel_stats(k, &st);
+
+    if (st.count <= 0) return 0;
+    if (st.bad_hemisphere != 0) return 0;     // samples leaked below the plane
+    if (st.out_of_unit != 0) return 0;        // outside the unit hemisphere
+    if (st.centroid.z <= 0.0f) return 0;      // should lean toward the surface
+    if (st.max_len > 1.0f + 1e-4f) return 0;
+
+    // centroid in the plane should be roughly balanced — a tiny lean is fine
+    // (random), but a big one means the scatter is lopsided.
+    if (fabsf(st.centroid.x) > 0.5f) return 0;
+    if (fabsf(st.centroid.y) > 0.5f) return 0;
+
+    return 1;
+}
