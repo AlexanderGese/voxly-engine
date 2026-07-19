@@ -1,9 +1,12 @@
 #include "text_panel.h"
 #include "../../util/log.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
 // sample the dead-center of the baked white block so a solid fill is solid no
+// matter what the sampler does at the edges.
 static void white_uv(const text_font *f, float *u, float *v) {
     if (f->white.w == 0) { *u = 0; *v = 0; return; }
     float cx = f->white.x + f->white.w * 0.5f;
@@ -15,8 +18,9 @@ static void white_uv(const text_font *f, float *u, float *v) {
 static void fill_rect(text_ctx *c, float x0, float y0, float x1, float y1,
                       text_rgba color) {
     float u, v;
-white_uv(&c->font, &u, &v);
-text_batch_push_quad(&c->batch, x0, y0, x1, y1, u, v, u, v, color);
+    white_uv(&c->font, &u, &v);
+    // degenerate uv (all corners the same texel) => flat color, no bleeding.
+    text_batch_push_quad(&c->batch, x0, y0, x1, y1, u, v, u, v, color);
 }
 
 void text_panel_begin(text_panel *p, text_ctx *c, float x, float y) {
@@ -32,14 +36,16 @@ void text_panel_begin(text_panel *p, text_ctx *c, float x, float y) {
 
 float text_panel_row_color(text_panel *p, const char *s, text_rgba color) {
     text_layout_opts o;
-memset(&o, 0, sizeof o);
-o.line_spacing = 1.0f;
-float w = 0, h = 0;
-text_ctx_draw_ex(p->ctx, s, p->x, p->y, &o, color, p->ctx->shadow, &w, &h);
-if (w > p->widest) p->widest = w;
-p->y += (h > 0 ? h : p->row_step);
-p->rows++;
-return w;
+    memset(&o, 0, sizeof o);
+    o.line_spacing = 1.0f;
+
+    float w = 0, h = 0;
+    text_ctx_draw_ex(p->ctx, s, p->x, p->y, &o, color, p->ctx->shadow, &w, &h);
+
+    if (w > p->widest) p->widest = w;
+    p->y += (h > 0 ? h : p->row_step);
+    p->rows++;
+    return w;
 }
 
 float text_panel_row(text_panel *p, const char *s) {
@@ -48,12 +54,12 @@ float text_panel_row(text_panel *p, const char *s) {
 
 float text_panel_rowf(text_panel *p, const char *fmt, ...) {
     char buf[512];
-va_list ap;
-va_start(ap, fmt);
-int n = vsnprintf(buf, sizeof buf, fmt, ap);
-va_end(ap);
-if (n < 0) return 0;
-return text_panel_row(p, buf);
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n < 0) return 0;
+    return text_panel_row(p, buf);
 }
 
 void text_panel_gap(text_panel *p) {
