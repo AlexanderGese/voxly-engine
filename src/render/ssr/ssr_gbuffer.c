@@ -1,8 +1,11 @@
 #include "ssr_gbuffer.h"
+
 #include <math.h>
+
 // view-space reconstruction + reprojection. these two functions are the
 // contract between the cpu march and the glsl: if they disagree the cpu tests
 // stop being a meaningful reference. so keep them in lockstep.
+
 void ssrx_gbuffer_clear(ssrx_gbuffer *g) {
     g->tex_depth = g->tex_normal = g->tex_color = g->tex_material = 0;
     g->proj     = mat4_identity();
@@ -11,11 +14,10 @@ void ssrx_gbuffer_clear(ssrx_gbuffer *g) {
 }
 
 int ssrx_gbuffer_valid(const ssrx_gbuffer *g) {
-    // material is optional;
-the other three are not.
+    // material is optional; the other three are not.
     if (!g->tex_depth || !g->tex_normal || !g->tex_color) return 0;
-if (g->w <= 0 || g->h <= 0) return 0;
-return 1;
+    if (g->w <= 0 || g->h <= 0) return 0;
+    return 1;
 }
 
 // multiply inv_proj by a clip-space vec4 by hand. mat4 only ships a vec3
@@ -32,15 +34,17 @@ static void inv_proj_mul(const mat4 *m, float cx, float cy, float cz, float cw,
 vec3 ssrx_gbuffer_view_pos(const ssrx_gbuffer *g, float u, float v, float depth) {
     // uv [0,1] + ndc depth [0,1] -> ndc clip [-1,1] -> view via inv_proj.
     float nx = u * 2.0f - 1.0f;
-float ny = v * 2.0f - 1.0f;
-float nz = depth * 2.0f - 1.0f;
-float view[4];
-inv_proj_mul(&g->inv_proj, nx, ny, nz, 1.0f, view);
-// perspective divide. degenerate w means the point is on/behind the eye;
-// hand back something harmless rather than an inf.
-if (fabsf(view[3]) < 1e-8f) return vec3_new(0.0f, 0.0f, 0.0f);
-float inv_w = 1.0f / view[3];
-return vec3_new(view[0] * inv_w, view[1] * inv_w, view[2] * inv_w);
+    float ny = v * 2.0f - 1.0f;
+    float nz = depth * 2.0f - 1.0f;
+
+    float view[4];
+    inv_proj_mul(&g->inv_proj, nx, ny, nz, 1.0f, view);
+
+    // perspective divide. degenerate w means the point is on/behind the eye;
+    // hand back something harmless rather than an inf.
+    if (fabsf(view[3]) < 1e-8f) return vec3_new(0.0f, 0.0f, 0.0f);
+    float inv_w = 1.0f / view[3];
+    return vec3_new(view[0] * inv_w, view[1] * inv_w, view[2] * inv_w);
 }
 
 // forward project a view-space point through g->proj.
@@ -55,17 +59,20 @@ static void proj_mul(const mat4 *m, vec3 p, float out[4]) {
 int ssrx_gbuffer_project(const ssrx_gbuffer *g, vec3 view_pos,
                          vec2 *out_uv, float *out_depth) {
     float clip[4];
-proj_mul(&g->proj, view_pos, clip);
-// w<=0 is at/behind the near plane — not on screen, bail untouched.
-if (clip[3] <= 1e-8f) return 0;
-float inv_w = 1.0f / clip[3];
-float nx = clip[0] * inv_w;
-float ny = clip[1] * inv_w;
-float nz = clip[2] * inv_w;
-if (out_uv) {
+    proj_mul(&g->proj, view_pos, clip);
+
+    // w<=0 is at/behind the near plane — not on screen, bail untouched.
+    if (clip[3] <= 1e-8f) return 0;
+
+    float inv_w = 1.0f / clip[3];
+    float nx = clip[0] * inv_w;
+    float ny = clip[1] * inv_w;
+    float nz = clip[2] * inv_w;
+
+    if (out_uv) {
         out_uv->x = nx * 0.5f + 0.5f;
         out_uv->y = ny * 0.5f + 0.5f;
     }
     if (out_depth) *out_depth = nz * 0.5f + 0.5f;
-return 1;
+    return 1;
 }
