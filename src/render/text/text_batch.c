@@ -2,8 +2,10 @@
 #include "../../config.h"
 #include "../../util/darray.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
 #include <string.h>
+
 int text_batch_init(text_batch *b, glid prog) {
     memset(b, 0, sizeof *b);
     b->prog = prog;
@@ -39,9 +41,9 @@ int text_batch_init(text_batch *b, glid prog) {
 
 void text_batch_destroy(text_batch *b) {
     if (b->vao) glDeleteVertexArrays(1, &b->vao);
-if (b->vbo) glDeleteBuffers(1, &b->vbo);
-darr_free(b->verts);
-memset(b, 0, sizeof *b);
+    if (b->vbo) glDeleteBuffers(1, &b->vbo);
+    darr_free(b->verts);
+    memset(b, 0, sizeof *b);
 }
 
 void text_batch_reset(text_batch *b) {
@@ -51,7 +53,7 @@ void text_batch_reset(text_batch *b) {
 
 void text_batch_set_screen(text_batch *b, float w, float h) {
     b->screen_w = w > 0 ? w : 1.0f;
-b->screen_h = h > 0 ? h : 1.0f;
+    b->screen_h = h > 0 ? h : 1.0f;
 }
 
 void text_batch_push_quad(text_batch *b,
@@ -81,6 +83,64 @@ void text_batch_push_quad(text_batch *b,
 void text_batch_push_layout(text_batch *b, const text_font *font,
                             const text_layout *l, float ox, float oy,
                             text_rgba color) {
-    for (int i = 0;
-i < l->count;
-text_batch_push_layout(b, font, l, ox, oy, color);
+    for (int i = 0; i < l->count; i++) {
+        const text_placement *pl = &l->items[i];
+        const text_glyph *g = pl->g;
+        if (g->w == 0 || g->h == 0) continue; // blanks have no quad
+
+        float u0, v0, u1, v1;
+        text_atlas_uv(&font->atlas, &g->rect, &u0, &v0, &u1, &v1);
+
+        float x0 = ox + pl->x;
+        float y0 = oy + pl->y;
+        text_batch_push_quad(b, x0, y0, x0 + g->w, y0 + g->h,
+                             u0, v0, u1, v1, color);
+    }
+}
+
+void text_batch_push_layout_shadow(text_batch *b, const text_font *font,
+                                   const text_layout *l, float ox, float oy,
+                                   text_rgba color, text_rgba shadow,
+                                   float dx, float dy) {
+    // shadow underneath first so the main glyphs draw over it. same batch, so
+    // it's still one draw call.
+    text_batch_push_layout(b, font, l, ox + dx, oy + dy, shadow);
+    text_batch_push_layout(b, font, l, ox, oy, color);
+}
+
+void text_batch_flush(text_batch *b, glid tex) {
+    int vcount = (int)darr_len(b->verts);
+    if (vcount == 0) return;
+
+    glBindBuffer(GL_ARRAY_BUFFER, b->vbo);
+    // re-orphan if we overflowed the preallocated size; otherwise sub-update.
+    GLsizeiptr bytes = (GLsizeiptr)vcount * sizeof(text_vertex);
+    GLsizeiptr cap   = (GLsizeiptr)(TEXT_BATCH_MAX_QUADS * 6 * sizeof(text_vertex));
+    if (bytes > cap) {
+        glBufferData(GL_ARRAY_BUFFER, bytes, b->verts, GL_DYNAMIC_DRAW);
+    } else {
+        glBufferData(GL_ARRAY_BUFFER, cap, NULL, GL_DYNAMIC_DRAW); // orphan
+        glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, b->verts);
+    }
+
+    glUseProgram(b->prog);
+    gl_set_uniform_float(b->prog, "u_screen_w", b->screen_w);
+    gl_set_uniform_float(b->prog, "u_screen_h", b->screen_h);
+    gl_set_uniform_int(b->prog, "u_atlas", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+
+    glBindVertexArray(b->vao);
+    glDrawArrays(GL_TRIANGLES, 0, vcount);
+    glBindVertexArray(0);
+
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+
+    text_batch_reset(b);
+}
