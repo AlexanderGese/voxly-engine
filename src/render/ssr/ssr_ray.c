@@ -1,13 +1,16 @@
 #include "ssr_ray.h"
 #include "ssr_config.h"
+
 #include <math.h>
+
 static float clamp01(float v) {
     return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
 }
 
 vec3 ssrx_reflect(vec3 incident, vec3 normal) {
     float d = vec3_dot(incident, normal);
-return vec3_sub(incident, vec3_scale(normal, 2.0f * d));
+    // i - 2(i·n)n
+    return vec3_sub(incident, vec3_scale(normal, 2.0f * d));
 }
 
 ssrx_ray ssrx_ray_make(vec3 view_pos, vec3 normal) {
