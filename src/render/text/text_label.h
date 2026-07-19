@@ -16,4 +16,5 @@ void text_label_init(text_label *lb);
 void text_label_free(text_label *lb);
 int  text_label_set(text_label *lb, const text_font *font, const char *s,
                     const text_layout_opts *opts);
+void text_label_invalidate(text_label *lb);
 #endif
