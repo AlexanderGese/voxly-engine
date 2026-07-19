@@ -1,9 +1,22 @@
 #ifndef RENDER_TEXT_GLYPHDATA_H
 #define RENDER_TEXT_GLYPHDATA_H
+
+// embedded 5x7 pixel font, ascii 32..126. each glyph is 7 rows, one byte per
+// row, the low 5 bits are the pixels left-to-right (bit 4 = leftmost column).
+// i drew most of these by hand in a spreadsheet at 2am so if a glyph looks off
+// thats on me, not the rasterizer.
+//
+// the rasterizer (text_font.c) trims trailing empty columns per glyph so the
+// font ends up proportional-ish: an 'i' is narrower than an 'm'. width 0 glyphs
+// (space) are handled specially.
+
 #include <stdint.h>
 #include "text_common.h"
+
 #define TEXT_GLYPH_ROWS 7
 #define TEXT_GLYPH_COLS 5
+
+// 7 rows per glyph, TEXT_GLYPH_COUNT glyphs.
 static const uint8_t TEXT_GLYPH_BITS[TEXT_GLYPH_COUNT][TEXT_GLYPH_ROWS] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // ' '
     {0x04,0x04,0x04,0x04,0x00,0x00,0x04}, // '!'
@@ -100,6 +113,6 @@ static const uint8_t TEXT_GLYPH_BITS[TEXT_GLYPH_COUNT][TEXT_GLYPH_ROWS] = {
     {0x04,0x04,0x04,0x04,0x04,0x04,0x04}, // '|'
     {0x0C,0x02,0x02,0x01,0x02,0x02,0x0C}, // '}'
     {0x00,0x08,0x15,0x02,0x00,0x00,0x00}, // '~'
-}
-;
+};
+
 #endif
