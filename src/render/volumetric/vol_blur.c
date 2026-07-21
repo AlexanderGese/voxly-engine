@@ -30,6 +30,7 @@ for (int i = b->radius;
 i < b->taps;
 i++) out[n++] = b->weights[i];
 return n;
+// radius + 1
 }
 
 // bilateral depth weight: gaussian on the depth difference. far-apart depths
@@ -48,6 +49,7 @@ int volumetric_blur_run(const volumetric_blur *b,
     if (!progs->ok) return 0;
 float half[VOL_BLUR_RADIUS + 1];
 int hn = volumetric_blur_pack(b, half);
+// shared setup: depth on the scene unit, weights + radius uniforms.
 volumetric_programs_use_blur(progs);
 glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCENE);
 glBindTexture(GL_TEXTURE_2D, depth_tex);
@@ -56,11 +58,13 @@ gl_set_uniform_int(progs->blur, "u_radius", b->radius);
 gl_set_uniform_float(progs->blur, "u_depth_sigma", b->depth_sigma);
 float texel_x = (t->w > 0) ? 1.0f / (float)t->w : 0.0f;
 float texel_y = (t->h > 0) ? 1.0f / (float)t->h : 0.0f;
+// horizontal: read slot 0, write slot 1
 volumetric_target_bind(t, 1);
 gl_set_uniform_vec3(progs->blur, "u_dir", texel_x, 0.0f, 0.0f);
 glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
 glBindTexture(GL_TEXTURE_2D, t->tex[0]);
 volumetric_quad_draw(quad);
+// vertical: read slot 1, write slot 0
 volumetric_target_bind(t, 0);
 gl_set_uniform_vec3(progs->blur, "u_dir", 0.0f, texel_y, 0.0f);
 glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
