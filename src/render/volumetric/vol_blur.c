@@ -1,6 +1,8 @@
 #include "vol_blur.h"
+
 #include <math.h>
 #include <stddef.h>
+
 void volumetric_blur_build(volumetric_blur *b) {
     b->radius = VOL_BLUR_RADIUS;
     b->taps = 2 * b->radius + 1;
@@ -23,14 +25,10 @@ void volumetric_blur_build(volumetric_blur *b) {
 }
 
 int volumetric_blur_pack(const volumetric_blur *b, float *out) {
-    // centre + positive side only;
-the gpu folds the symmetric negative half.
+    // centre + positive side only; the gpu folds the symmetric negative half.
     int n = 0;
-for (int i = b->radius;
-i < b->taps;
-i++) out[n++] = b->weights[i];
-return n;
-// radius + 1
+    for (int i = b->radius; i < b->taps; i++) out[n++] = b->weights[i];
+    return n;   // radius + 1
 }
 
 // bilateral depth weight: gaussian on the depth difference. far-apart depths
@@ -47,31 +45,37 @@ int volumetric_blur_run(const volumetric_blur *b,
                         volumetric_target *t,
                         glid depth_tex) {
     if (!progs->ok) return 0;
-float half[VOL_BLUR_RADIUS + 1];
-int hn = volumetric_blur_pack(b, half);
-// shared setup: depth on the scene unit, weights + radius uniforms.
-volumetric_programs_use_blur(progs);
-glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCENE);
-glBindTexture(GL_TEXTURE_2D, depth_tex);
-glUniform1fv(glGetUniformLocation(progs->blur, "u_weights"), hn, half);
-gl_set_uniform_int(progs->blur, "u_radius", b->radius);
-gl_set_uniform_float(progs->blur, "u_depth_sigma", b->depth_sigma);
-float texel_x = (t->w > 0) ? 1.0f / (float)t->w : 0.0f;
-float texel_y = (t->h > 0) ? 1.0f / (float)t->h : 0.0f;
-// horizontal: read slot 0, write slot 1
-volumetric_target_bind(t, 1);
-gl_set_uniform_vec3(progs->blur, "u_dir", texel_x, 0.0f, 0.0f);
-glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
-glBindTexture(GL_TEXTURE_2D, t->tex[0]);
-volumetric_quad_draw(quad);
-// vertical: read slot 1, write slot 0
-volumetric_target_bind(t, 0);
-gl_set_uniform_vec3(progs->blur, "u_dir", 0.0f, texel_y, 0.0f);
-glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
-glBindTexture(GL_TEXTURE_2D, t->tex[1]);
-volumetric_quad_draw(quad);
-glBindFramebuffer(GL_FRAMEBUFFER, 0);
-return 1;
+
+    float half[VOL_BLUR_RADIUS + 1];
+    int hn = volumetric_blur_pack(b, half);
+
+    // shared setup: depth on the scene unit, weights + radius uniforms.
+    volumetric_programs_use_blur(progs);
+    glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCENE);
+    glBindTexture(GL_TEXTURE_2D, depth_tex);
+    glUniform1fv(glGetUniformLocation(progs->blur, "u_weights"), hn, half);
+    gl_set_uniform_int(progs->blur, "u_radius", b->radius);
+    gl_set_uniform_float(progs->blur, "u_depth_sigma", b->depth_sigma);
+
+    float texel_x = (t->w > 0) ? 1.0f / (float)t->w : 0.0f;
+    float texel_y = (t->h > 0) ? 1.0f / (float)t->h : 0.0f;
+
+    // horizontal: read slot 0, write slot 1
+    volumetric_target_bind(t, 1);
+    gl_set_uniform_vec3(progs->blur, "u_dir", texel_x, 0.0f, 0.0f);
+    glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
+    glBindTexture(GL_TEXTURE_2D, t->tex[0]);
+    volumetric_quad_draw(quad);
+
+    // vertical: read slot 1, write slot 0
+    volumetric_target_bind(t, 0);
+    gl_set_uniform_vec3(progs->blur, "u_dir", 0.0f, texel_y, 0.0f);
+    glActiveTexture(GL_TEXTURE0 + VOL_TEX_UNIT_SCATTER);
+    glBindTexture(GL_TEXTURE_2D, t->tex[1]);
+    volumetric_quad_draw(quad);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return 1;
 }
 
 // one separable bilateral pass along a stride. clamps at the borders.
@@ -107,5 +111,5 @@ void volumetric_blur_cpu(const volumetric_blur *b,
                          const float *depth, int w, int h) {
     // horizontal img -> scratch, then vertical scratch -> img
     blur_axis(b, img, scratch, depth, w, h, 1, 0);
-blur_axis(b, scratch, img, depth, w, h, 0, 1);
+    blur_axis(b, scratch, img, depth, w, h, 0, 1);
 }
