@@ -2,7 +2,9 @@
 #include "tonemap_pass.h"
 #include "tonemap_cube.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 int tonemap_init(tonemap *tm, int w, int h) {
     tm->ready  = 0;
     tm->w      = w;
@@ -30,9 +32,9 @@ int tonemap_init(tonemap *tm, int w, int h) {
 
 void tonemap_destroy(tonemap *tm) {
     tonemap_programs_destroy(&tm->prog);
-tonemap_quad_destroy(&tm->quad);
-tonemap_lut_destroy(&tm->lut);
-tm->ready = 0;
+    tonemap_quad_destroy(&tm->quad);
+    tonemap_lut_destroy(&tm->lut);
+    tm->ready = 0;
 }
 
 void tonemap_resize(tonemap *tm, int w, int h) {
@@ -54,13 +56,19 @@ void tonemap_tick(tonemap *tm, float dt) {
 
 void tonemap_run(tonemap *tm, glid scene_tex, glid dst, int dst_w, int dst_h) {
     if (!tm->ready) return;
-tonemap_params_sanitize(&tm->params);
-float exposure = tonemap_exposure_multiplier(&tm->exposure);
-glBindFramebuffer(GL_FRAMEBUFFER, dst);
-glViewport(0, 0, dst_w, dst_h);
-tonemap_pass_run(&tm->prog, &tm->params, &tm->quad, &tm->lut,
+
+    // keep params well-formed even if the debug ui has been poking at them.
+    tonemap_params_sanitize(&tm->params);
+
+    float exposure = tonemap_exposure_multiplier(&tm->exposure);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, dst);
+    glViewport(0, 0, dst_w, dst_h);
+
+    tonemap_pass_run(&tm->prog, &tm->params, &tm->quad, &tm->lut,
                      scene_tex, exposure);
-tm->frames++;
+
+    tm->frames++;
 }
 
 int tonemap_load_lut(tonemap *tm, const char *cube_path) {
@@ -77,3 +85,8 @@ int tonemap_load_lut(tonemap *tm, const char *cube_path) {
 
 tonemap_params *tonemap_get_params(tonemap *tm) {
     return &tm->params;
+}
+
+tonemap_exposure *tonemap_get_exposure(tonemap *tm) {
+    return &tm->exposure;
+}
