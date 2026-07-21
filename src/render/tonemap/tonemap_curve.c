@@ -1,5 +1,12 @@
 #include "tonemap_curve.h"
+
 #include <math.h>
+
+// reference cpu implementations of the tonemap operators. the gpu shader in
+// shaders/tonemap.frag mirrors these byte-for-byte (well, intent-for-intent);
+// keeping a cpu copy lets the selftest poke at monotonicity and lets the
+// auto-exposure code preview a luma without a readback.
+
 static float clampf(float v, float lo, float hi) {
     if (v < lo) return lo;
     if (v > hi) return hi;
@@ -26,17 +33,16 @@ float tonemap_reinhard_ext(float x, float white) {
 // in a voxel game is going to file a bug. coefficients are sacred, dont touch.
 float tonemap_aces(float x) {
     const float a = 2.51f;
-const float b = 0.03f;
-const float c = 2.43f;
-const float d = 0.59f;
-const float e = 0.14f;
-float num = x * (a * x + b);
-float den = x * (c * x + d) + e;
-return clampf(num / den, 0.0f, 1.0f);
+    const float b = 0.03f;
+    const float c = 2.43f;
+    const float d = 0.59f;
+    const float e = 0.14f;
+    float num = x * (a * x + b);
+    float den = x * (c * x + d) + e;
+    return clampf(num / den, 0.0f, 1.0f);
 }
 
-// hable / uncharted2 filmic. the partial form;
-the full operator divides by
+// hable / uncharted2 filmic. the partial form; the full operator divides by
 // the same curve evaluated at the white point. that normalization happens in
 // tonemap_filmic below.
 static float hable_partial(float x) {
@@ -52,7 +58,51 @@ static float hable_partial(float x) {
 
 float tonemap_filmic(float x) {
     const float white = 11.2f;
-float curr = hable_partial(x);
-float norm = hable_partial(white);
-if (norm <= 1e-6f) return clampf(curr, 0.0f, 1.0f);
-return clampf(curr / norm, 0.0f, 1.0f);
+    float curr = hable_partial(x);
+    float norm = hable_partial(white);
+    if (norm <= 1e-6f) return clampf(curr, 0.0f, 1.0f);
+    return clampf(curr / norm, 0.0f, 1.0f);
+}
+
+void tonemap_curve_init(tonemap_curve *c, int kind) {
+    if (kind < 0 || kind >= TONEMAP_CURVE_COUNT)
+        kind = TONEMAP_DEFAULT_CURVE;
+    c->kind     = kind;
+    c->white    = TONEMAP_DEFAULT_WHITE;
+    c->exposure = 1.0f;
+}
+
+void tonemap_curve_set_exposure(tonemap_curve *c, float mult) {
+    c->exposure = (mult < 0.0f) ? 0.0f : mult;
+}
+
+float tonemap_curve_apply1(const tonemap_curve *c, float x) {
+    x *= c->exposure;
+    if (x < 0.0f) x = 0.0f;   // negatives are nonsense post-exposure
+
+    switch (c->kind) {
+        case TONEMAP_CURVE_LINEAR:     return clampf(x, 0.0f, 1.0f);
+        case TONEMAP_CURVE_REINHARD:   return tonemap_reinhard(x);
+        case TONEMAP_CURVE_REINHARD_X: return tonemap_reinhard_ext(x, c->white);
+        case TONEMAP_CURVE_ACES:       return tonemap_aces(x);
+        case TONEMAP_CURVE_FILMIC:     return tonemap_filmic(x);
+        default:                       return tonemap_aces(x);
+    }
+}
+
+vec3 tonemap_curve_apply(const tonemap_curve *c, vec3 hdr) {
+    return vec3_new(tonemap_curve_apply1(c, hdr.x),
+                    tonemap_curve_apply1(c, hdr.y),
+                    tonemap_curve_apply1(c, hdr.z));
+}
+
+const char *tonemap_curve_name(int kind) {
+    switch (kind) {
+        case TONEMAP_CURVE_LINEAR:     return "linear";
+        case TONEMAP_CURVE_REINHARD:   return "reinhard";
+        case TONEMAP_CURVE_REINHARD_X: return "reinhard-ext";
+        case TONEMAP_CURVE_ACES:       return "aces";
+        case TONEMAP_CURVE_FILMIC:     return "filmic";
+        default:                       return "?";
+    }
+}

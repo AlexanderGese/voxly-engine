@@ -1,9 +1,13 @@
 #include "tonemap_cube.h"
 #include "../../util/log.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+
+// tiny line cursor over a fixed buffer. returns the next line into `dst`
+// (nul-terminated, trimmed of the newline), advances *pos. returns 0 at eof.
 static int next_line(const char *text, size_t len, size_t *pos,
                      char *dst, size_t cap) {
     if (*pos >= len) return 0;
@@ -22,7 +26,7 @@ static int next_line(const char *text, size_t len, size_t *pos,
 // is the line blank or a comment? .cube comments are '#' to end of line.
 static int skippable(const char *s) {
     while (*s && isspace((unsigned char)*s)) s++;
-return (*s == '\0' || *s == '#');
+    return (*s == '\0' || *s == '#');
 }
 
 int tonemap_cube_parse(tonemap_lut *out, const char *text, size_t len) {
@@ -91,11 +95,28 @@ int tonemap_cube_parse(tonemap_lut *out, const char *text, size_t len) {
 
 int tonemap_cube_load_file(tonemap_lut *out, const char *path) {
     FILE *f = fopen(path, "rb");
-long sz = ftell(f);
-fseek(f, 0, SEEK_SET);
-buf[rd] = '\0';
-fclose(f);
-int ok = tonemap_cube_parse(out, buf, rd);
-// free(buf);
-return ok;
+    if (!f) {
+        LOGW("tonemap: cant open cube file '%s'", path);
+        tonemap_lut_make_identity(out, TONEMAP_LUT_DEFAULT_DIM);
+        return 0;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0) {
+        fclose(f);
+        LOGW("tonemap: empty cube file '%s'", path);
+        tonemap_lut_make_identity(out, TONEMAP_LUT_DEFAULT_DIM);
+        return 0;
+    }
+
+    char *buf = (char *)malloc((size_t)sz + 1);
+    if (!buf) { fclose(f); return 0; }
+    size_t rd = fread(buf, 1, (size_t)sz, f);
+    buf[rd] = '\0';
+    fclose(f);
+
+    int ok = tonemap_cube_parse(out, buf, rd);
+    free(buf);
+    return ok;
 }
