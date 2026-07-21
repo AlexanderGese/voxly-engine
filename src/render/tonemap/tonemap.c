@@ -46,6 +46,14 @@ void tonemap_resize(tonemap *tm, int w, int h) {
 
 void tonemap_feed_luma(tonemap *tm, float avg_luma) {
     tonemap_exposure_measure(&tm->exposure, avg_luma);
+}
+
+void tonemap_tick(tonemap *tm, float dt) {
+    tonemap_exposure_update(&tm->exposure, dt);
+}
+
+void tonemap_run(tonemap *tm, glid scene_tex, glid dst, int dst_w, int dst_h) {
+    if (!tm->ready) return;
 tonemap_params_sanitize(&tm->params);
 float exposure = tonemap_exposure_multiplier(&tm->exposure);
 glBindFramebuffer(GL_FRAMEBUFFER, dst);
@@ -53,3 +61,19 @@ glViewport(0, 0, dst_w, dst_h);
 tonemap_pass_run(&tm->prog, &tm->params, &tm->quad, &tm->lut,
                      scene_tex, exposure);
 tm->frames++;
+}
+
+int tonemap_load_lut(tonemap *tm, const char *cube_path) {
+    int ok = tonemap_cube_load_file(&tm->lut, cube_path);
+    // even on a partial/failed parse we got a valid identity, so it's safe to
+    // enable. weight defaults to full so the look actually shows.
+    tm->params.lut_enabled = 1;
+    if (tm->params.lut_weight <= 0.0f)
+        tm->params.lut_weight = 1.0f;
+    if (ok)
+        LOGI("tonemap: lut '%s' active", cube_path);
+    return ok;
+}
+
+tonemap_params *tonemap_get_params(tonemap *tm) {
+    return &tm->params;
