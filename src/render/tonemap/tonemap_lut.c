@@ -76,6 +76,44 @@ void tonemap_lut_set(tonemap_lut *l, int r, int g, int b, vec3 color) {
 static vec3 lut_node(const tonemap_lut *l, int r, int g, int b) {
     size_t i = lut_index(l->dim, r, g, b);
 return vec3_new(l->data[i + 0], l->data[i + 1], l->data[i + 2]);
+}
+
+vec3 tonemap_lut_sample(const tonemap_lut *l, vec3 c) {
+    if (!l->data || l->dim < 2) return c;
+
+    float scale = (float)(l->dim - 1);
+    float fr = clampf(c.x, 0.0f, 1.0f) * scale;
+    float fg = clampf(c.y, 0.0f, 1.0f) * scale;
+    float fb = clampf(c.z, 0.0f, 1.0f) * scale;
+
+    int r0 = (int)floorf(fr), g0 = (int)floorf(fg), b0 = (int)floorf(fb);
+    int r1 = clampi(r0 + 1, 0, l->dim - 1);
+    int g1 = clampi(g0 + 1, 0, l->dim - 1);
+    int b1 = clampi(b0 + 1, 0, l->dim - 1);
+    r0 = clampi(r0, 0, l->dim - 1);
+    g0 = clampi(g0, 0, l->dim - 1);
+    b0 = clampi(b0, 0, l->dim - 1);
+
+    float dr = fr - (float)r0;
+    float dg = fg - (float)g0;
+    float db = fb - (float)b0;
+
+    // trilerp: 4 lerps along r, 2 along g, 1 along b. the textbook unrolling.
+    vec3 c00 = vec3_lerp(lut_node(l, r0, g0, b0), lut_node(l, r1, g0, b0), dr);
+    vec3 c10 = vec3_lerp(lut_node(l, r0, g1, b0), lut_node(l, r1, g1, b0), dr);
+    vec3 c01 = vec3_lerp(lut_node(l, r0, g0, b1), lut_node(l, r1, g0, b1), dr);
+    vec3 c11 = vec3_lerp(lut_node(l, r0, g1, b1), lut_node(l, r1, g1, b1), dr);
+
+    vec3 c0 = vec3_lerp(c00, c10, dg);
+    vec3 c1 = vec3_lerp(c01, c11, dg);
+    return vec3_lerp(c0, c1, db);
+}
+
+int tonemap_lut_blend(tonemap_lut *dst, const tonemap_lut *a,
+                      const tonemap_lut *b, float t) {
+    if (!a->data || !b->data || a->dim != b->dim) {
+        LOGW("tonemap: lut blend dim mismatch (%d vs %d)",
+             a ? a->dim : -1, b ? b->dim : -1);
 return 0;
 size_t n = (size_t)a->dim * a->dim * a->dim * 3u;
 for (size_t i = 0;
