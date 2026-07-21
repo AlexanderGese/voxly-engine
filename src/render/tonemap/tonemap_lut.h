@@ -34,5 +34,7 @@ vec3 tonemap_lut_sample(const tonemap_lut *l, vec3 c);
 // returns 1 on success, 0 if dims mismatch or alloc fails.
 int  tonemap_lut_blend(tonemap_lut *dst, const tonemap_lut *a,
                        const tonemap_lut *b, float t);
+// (re)upload cpu data to the GL_TEXTURE_3D. creates the texture on first call.
+// no-op if not dirty. returns the texture id (0 if nothing to upload).
 glid tonemap_lut_upload(tonemap_lut *l);
 #endif
