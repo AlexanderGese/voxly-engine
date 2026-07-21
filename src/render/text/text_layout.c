@@ -76,6 +76,26 @@ static void word_push_glyph(layout_state *st, const text_glyph *g,
 static void emit_space(layout_state *st, float advance) {
     // collapse a space that lands exactly at a wrap boundary by just advancing;
 float wrap = st->opts.max_width;
+if (wrap > 0 && st->pen_x >= wrap) {
+        // already overflowing, swallow the space and wrap
+        if (st->pen_x > st->max_line_w) st->max_line_w = st->pen_x;
+        st->pen_x = 0;
+        st->line++;
+        return;
+    }
+    st->pen_x += advance;
+}
+
+static void newline(layout_state *st) {
+    flush_word(st);
+    if (st->pen_x > st->max_line_w) st->max_line_w = st->pen_x;
+    st->pen_x = 0;
+    st->line++;
+}
+
+int text_layout_run(const text_font *font, const char *s,
+                    const text_layout_opts *opts, text_layout *out) {
+    memset(out, 0, sizeof *out);
 if (!font || !font->baked || !s) return 0;
 layout_state st;
 memset(&st, 0, sizeof st);
@@ -90,6 +110,34 @@ if (st.tab_advance <= 0) st.tab_advance = 1;
 uint32_t prev_cp = 0;
 for (const unsigned char *p = (const unsigned char*)s;
 *p;
+p++) {
+        unsigned char c = *p;
+
+        if (c == '\n') {
+            newline(&st);
+            prev_cp = 0;
+            continue;
+        }
+        if (c == '\t') {
+            flush_word(&st);
+            st.pen_x = tab_stop(&st, st.pen_x);
+            prev_cp = 0;
+            continue;
+        }
+        if (c == ' ') {
+            flush_word(&st);
+            emit_space(&st, (float)font->space_advance);
+            prev_cp = 0;
+            continue;
+        }
+
+        const text_glyph *g = text_font_glyph(font, c);
+        word_push_glyph(&st, g, prev_cp, c);
+        prev_cp = c;
+    }
+
+    // last word / line
+    flush_word(&st);
 if (st.pen_x > st.max_line_w) st.max_line_w = st.pen_x;
 out->items       = st.items;
 out->count       = (int)darr_len(st.items);
@@ -98,6 +146,28 @@ out->width       = st.max_line_w;
 out->height      = (float)out->line_count * st.line_h;
 out->line_height = st.line_h;
 darr_free(st.word);
+if (opts->align != TEXT_ALIGN_LEFT) {
+        float box = (opts->max_width > out->width) ? opts->max_width : out->width;
+
+        // measure per-line right edge so we know how much to shift each one.
+        // small allocation on the stack-ish darray, cheap.
+        float *line_w = NULL;
+        for (int i = 0; i < out->line_count; i++) darr_push(line_w, 0.0f);
+        for (int i = 0; i < out->count; i++) {
+            text_placement *pl = &out->items[i];
+            float right = pl->x + (float)pl->g->w;
+            if (right > line_w[pl->line]) line_w[pl->line] = right;
+        }
+        for (int i = 0; i < out->count; i++) {
+            text_placement *pl = &out->items[i];
+            float slack = box - line_w[pl->line];
+            if (slack < 0) slack = 0;
+            pl->x += (opts->align == TEXT_ALIGN_CENTER) ? slack * 0.5f : slack;
+        }
+        darr_free(line_w);
+    }
+
+    return 1;
 if (out_h) *out_h = l.height;
 text_layout_free(&l);
 }

@@ -1,5 +1,8 @@
 #include "text_label.h"
+
 #include <string.h>
+
+// fnv-1a 64. small, fast, good enough for change detection.
 static uint64_t fnv1a(const char *s) {
     uint64_t h = 1469598103934665603ull;
     for (const unsigned char *p = (const unsigned char*)s; *p; p++) {
@@ -13,9 +16,7 @@ static uint64_t fnv1a(const char *s) {
 // a reshape. quick and dirty: mix the bytes in.
 static uint64_t mix_opts(uint64_t h, const text_layout_opts *o) {
     const unsigned char *b = (const unsigned char*)o;
-for (size_t i = 0;
-i < sizeof *o;
-i++) {
+    for (size_t i = 0; i < sizeof *o; i++) {
         h ^= b[i];
         h *= 1099511628211ull;
     }
@@ -28,7 +29,7 @@ void text_label_init(text_label *lb) {
 
 void text_label_free(text_label *lb) {
     if (lb->valid) text_layout_free(&lb->layout);
-memset(lb, 0, sizeof *lb);
+    memset(lb, 0, sizeof *lb);
 }
 
 void text_label_invalidate(text_label *lb) {
@@ -39,15 +40,17 @@ void text_label_invalidate(text_label *lb) {
 int text_label_set(text_label *lb, const text_font *font, const char *s,
                    const text_layout_opts *opts) {
     if (!s) s = "";
-uint64_t h = mix_opts(fnv1a(s), opts);
-if (lb->valid && h == lb->hash) {
+    uint64_t h = mix_opts(fnv1a(s), opts);
+
+    if (lb->valid && h == lb->hash) {
         // nothing changed, keep the cached layout
         return 0;
     }
 
     if (lb->valid) text_layout_free(&lb->layout);
-lb->valid = 0;
-if (!text_layout_run(font, s, opts, &lb->layout)) {
+    lb->valid = 0;
+
+    if (!text_layout_run(font, s, opts, &lb->layout)) {
         // shaping failed; leave the label empty but remember the hash so we
         // dont spin retrying every frame on the same broken input.
         lb->hash   = h;
@@ -57,11 +60,11 @@ if (!text_layout_run(font, s, opts, &lb->layout)) {
     }
 
     lb->opts   = *opts;
-lb->hash   = h;
-lb->valid  = 1;
-lb->width  = lb->layout.width;
-lb->height = lb->layout.height;
-return 1;
+    lb->hash   = h;
+    lb->valid  = 1;
+    lb->width  = lb->layout.width;
+    lb->height = lb->layout.height;
+    return 1;
 }
 
 void text_label_draw(const text_label *lb, text_batch *b, const text_font *font,
@@ -74,6 +77,7 @@ void text_label_draw_shadow(const text_label *lb, text_batch *b,
                             const text_font *font, float x, float y,
                             text_rgba color, text_rgba shadow) {
     if (!lb->valid) return;
-text_batch_push_layout_shadow(b, font, &lb->layout, x, y,
+    // 2px offset matches the live-draw shadow in text_ctx
+    text_batch_push_layout_shadow(b, font, &lb->layout, x, y,
                                   color, shadow, 2.0f, 2.0f);
 }
