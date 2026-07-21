@@ -4,7 +4,9 @@
 #include "tonemap_grade.h"
 #include "tonemap_lut.h"
 #include "../../util/log.h"
+
 #include <math.h>
+
 static int approx(float a, float b, float eps) {
     float d = a - b;
     if (d < 0) d = -d;
@@ -18,9 +20,7 @@ int tonemap_selftest_curves_monotonic(void) {
         TONEMAP_CURVE_REINHARD, TONEMAP_CURVE_REINHARD_X,
         TONEMAP_CURVE_ACES, TONEMAP_CURVE_FILMIC
     };
-for (unsigned k = 0;
-k < sizeof kinds / sizeof kinds[0];
-k++) {
+    for (unsigned k = 0; k < sizeof kinds / sizeof kinds[0]; k++) {
         tonemap_curve c;
         tonemap_curve_init(&c, kinds[k]);
         float prev = -1.0f;
@@ -63,19 +63,18 @@ int tonemap_selftest_curve_bounds(void) {
 // negative.
 int tonemap_selftest_exposure_adapt(void) {
     tonemap_exposure e;
-tonemap_exposure_init(&e);
-tonemap_exposure_measure(&e, 0.01f);
-if (e.target_ev <= 0.0f) {
+    tonemap_exposure_init(&e);
+
+    // a dark scene: luma well below middle grey -> brighten -> positive target
+    tonemap_exposure_measure(&e, 0.01f);
+    if (e.target_ev <= 0.0f) {
         LOGE("tonemap selftest: dark scene didnt brighten (ev=%f)", e.target_ev);
         return 0;
     }
 
-    // step a few seconds;
-auto_ev should converge close to target.
-    for (int i = 0;
-i < 600;
-i++) tonemap_exposure_update(&e, 1.0f / 60.0f);
-if (!approx(e.auto_ev, e.target_ev, 1e-2f)) {
+    // step a few seconds; auto_ev should converge close to target.
+    for (int i = 0; i < 600; i++) tonemap_exposure_update(&e, 1.0f / 60.0f);
+    if (!approx(e.auto_ev, e.target_ev, 1e-2f)) {
         LOGE("tonemap selftest: exposure didnt converge (%f vs %f)",
              e.auto_ev, e.target_ev);
         return 0;
@@ -83,7 +82,7 @@ if (!approx(e.auto_ev, e.target_ev, 1e-2f)) {
 
     // a bright scene wants to stop down.
     tonemap_exposure_measure(&e, 2.0f);
-if (e.target_ev >= 0.0f) {
+    if (e.target_ev >= 0.0f) {
         LOGE("tonemap selftest: bright scene didnt darken (ev=%f)",
              e.target_ev);
         return 0;
@@ -110,25 +109,65 @@ int tonemap_selftest_grade_identity(void) {
 // an identity lut must round-trip any color it's sampled with.
 int tonemap_selftest_lut_identity(void) {
     tonemap_lut l;
-if (!tonemap_lut_make_identity(&l, 17)) return 0;
-vec3 probes[] = {
+    if (!tonemap_lut_make_identity(&l, 17)) return 0;
+
+    vec3 probes[] = {
         vec3_new(0.0f, 0.0f, 0.0f),
         vec3_new(1.0f, 1.0f, 1.0f),
         vec3_new(0.25f, 0.5f, 0.75f),
         vec3_new(0.9f, 0.1f, 0.4f),
+    };
+    int ok = 1;
+    for (unsigned i = 0; i < sizeof probes / sizeof probes[0]; i++) {
+        vec3 s = tonemap_lut_sample(&l, probes[i]);
+        if (!approx(s.x, probes[i].x, 2e-2f) ||
+            !approx(s.y, probes[i].y, 2e-2f) ||
+            !approx(s.z, probes[i].z, 2e-2f)) {
+            LOGE("tonemap selftest: identity lut altered (%f,%f,%f)->(%f,%f,%f)",
+                 probes[i].x, probes[i].y, probes[i].z, s.x, s.y, s.z);
+            ok = 0;
+            break;
+        }
     }
-;
-int ok = 1;
-for (unsigned i = 0;
-i < sizeof probes / sizeof probes[0];
-return ok;
-fails += !tonemap_selftest_curves_monotonic();
-fails += !tonemap_selftest_curve_bounds();
-fails += !tonemap_selftest_exposure_adapt();
-fails += !tonemap_selftest_grade_identity();
-fails += !tonemap_selftest_lut_identity();
-fails += !tonemap_selftest_lut_blend();
-if (fails == 0) LOGI("tonemap selftest: all passed");
-else            LOGW("tonemap selftest: %d failure(s)", fails);
-return fails;
+    tonemap_lut_destroy(&l);
+    return ok;
+}
+
+// blending two identity luts at any t must still be identity.
+int tonemap_selftest_lut_blend(void) {
+    tonemap_lut a, b, dst;
+    tonemap_lut_init(&dst);
+    if (!tonemap_lut_make_identity(&a, 9) ||
+        !tonemap_lut_make_identity(&b, 9)) {
+        tonemap_lut_destroy(&a);
+        tonemap_lut_destroy(&b);
+        return 0;
+    }
+    int ok = tonemap_lut_blend(&dst, &a, &b, 0.37f);
+    if (ok) {
+        vec3 s = tonemap_lut_sample(&dst, vec3_new(0.3f, 0.6f, 0.2f));
+        if (!approx(s.x, 0.3f, 2e-2f) || !approx(s.y, 0.6f, 2e-2f) ||
+            !approx(s.z, 0.2f, 2e-2f)) {
+            LOGE("tonemap selftest: blended identity drifted");
+            ok = 0;
+        }
+    }
+    tonemap_lut_destroy(&a);
+    tonemap_lut_destroy(&b);
+    tonemap_lut_destroy(&dst);
+    return ok;
+}
+
+int tonemap_selftest_run_all(void) {
+    int fails = 0;
+    fails += !tonemap_selftest_curves_monotonic();
+    fails += !tonemap_selftest_curve_bounds();
+    fails += !tonemap_selftest_exposure_adapt();
+    fails += !tonemap_selftest_grade_identity();
+    fails += !tonemap_selftest_lut_identity();
+    fails += !tonemap_selftest_lut_blend();
+
+    if (fails == 0) LOGI("tonemap selftest: all passed");
+    else            LOGW("tonemap selftest: %d failure(s)", fails);
+    return fails;
 }
