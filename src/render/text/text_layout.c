@@ -1,6 +1,13 @@
 #include "text_layout.h"
 #include "../../util/darray.h"
+
 #include <string.h>
+
+// the layout pass walks the string once, accumulating a "pen" x along the
+// current line. words are buffered so that when wrapping kicks in we can shove
+// the whole word down a line instead of breaking mid-word. it's a tiny state
+// machine: we flush the pending word on whitespace, newline, or end of string.
+
 typedef struct {
     const text_font *font;
     text_layout_opts opts;
@@ -17,6 +24,7 @@ typedef struct {
     text_placement *word;    // darray
     float word_w;            // total advance width of the pending word
 } layout_state;
+
 static float tab_stop(const layout_state *st, float x) {
     // snap x up to the next multiple of tab_advance
     float n = x / (float)st->tab_advance;
@@ -29,8 +37,9 @@ static float tab_stop(const layout_state *st, float x) {
 // to a new line first if it wouldnt fit and the line already has content.
 static void flush_word(layout_state *st) {
     if (darr_len(st->word) == 0) return;
-float wrap = st->opts.max_width;
-if (wrap > 0 && st->pen_x > 0 && st->pen_x + st->word_w > wrap) {
+
+    float wrap = st->opts.max_width;
+    if (wrap > 0 && st->pen_x > 0 && st->pen_x + st->word_w > wrap) {
         // doesnt fit and we're not at line start -> new line for the word
         if (st->pen_x > st->max_line_w) st->max_line_w = st->pen_x;
         st->pen_x = 0;
@@ -38,10 +47,8 @@ if (wrap > 0 && st->pen_x > 0 && st->pen_x + st->word_w > wrap) {
     }
 
     float base_x = st->pen_x;
-float base_y = (float)st->line * st->line_h;
-for (size_t i = 0;
-i < darr_len(st->word);
-i++) {
+    float base_y = (float)st->line * st->line_h;
+    for (size_t i = 0; i < darr_len(st->word); i++) {
         text_placement p = st->word[i];
         p.x += base_x;
         p.y += base_y;
@@ -49,8 +56,8 @@ i++) {
         darr_push(st->items, p);
     }
     st->pen_x += st->word_w;
-darr_clear(st->word);
-st->word_w = 0;
+    darr_clear(st->word);
+    st->word_w = 0;
 }
 
 // append a glyph to the pending word, advancing the in-word cursor.
@@ -75,8 +82,9 @@ static void word_push_glyph(layout_state *st, const text_glyph *g,
 // next line as leading space — we drop them at wrap points instead).
 static void emit_space(layout_state *st, float advance) {
     // collapse a space that lands exactly at a wrap boundary by just advancing;
-float wrap = st->opts.max_width;
-if (wrap > 0 && st->pen_x >= wrap) {
+    // it contributes width but produces no quad.
+    float wrap = st->opts.max_width;
+    if (wrap > 0 && st->pen_x >= wrap) {
         // already overflowing, swallow the space and wrap
         if (st->pen_x > st->max_line_w) st->max_line_w = st->pen_x;
         st->pen_x = 0;
@@ -96,21 +104,24 @@ static void newline(layout_state *st) {
 int text_layout_run(const text_font *font, const char *s,
                     const text_layout_opts *opts, text_layout *out) {
     memset(out, 0, sizeof *out);
-if (!font || !font->baked || !s) return 0;
-layout_state st;
-memset(&st, 0, sizeof st);
-st.font = font;
-st.opts = *opts;
-float spacing = opts->line_spacing > 0 ? opts->line_spacing : 1.0f;
-st.line_h = (float)font->line_height * spacing;
-int tab_cols = opts->tab_cols > 0 ? opts->tab_cols : font->tab_cols;
-if (tab_cols <= 0) tab_cols = 4;
-st.tab_advance = font->space_advance * tab_cols;
-if (st.tab_advance <= 0) st.tab_advance = 1;
-uint32_t prev_cp = 0;
-for (const unsigned char *p = (const unsigned char*)s;
-*p;
-p++) {
+    if (!font || !font->baked || !s) return 0;
+
+    layout_state st;
+    memset(&st, 0, sizeof st);
+    st.font = font;
+    st.opts = *opts;
+
+    float spacing = opts->line_spacing > 0 ? opts->line_spacing : 1.0f;
+    st.line_h = (float)font->line_height * spacing;
+
+    int tab_cols = opts->tab_cols > 0 ? opts->tab_cols : font->tab_cols;
+    if (tab_cols <= 0) tab_cols = 4;
+    st.tab_advance = font->space_advance * tab_cols;
+    if (st.tab_advance <= 0) st.tab_advance = 1;
+
+    uint32_t prev_cp = 0;
+
+    for (const unsigned char *p = (const unsigned char*)s; *p; p++) {
         unsigned char c = *p;
 
         if (c == '\n') {
@@ -138,15 +149,20 @@ p++) {
 
     // last word / line
     flush_word(&st);
-if (st.pen_x > st.max_line_w) st.max_line_w = st.pen_x;
-out->items       = st.items;
-out->count       = (int)darr_len(st.items);
-out->line_count  = st.line + 1;
-out->width       = st.max_line_w;
-out->height      = (float)out->line_count * st.line_h;
-out->line_height = st.line_h;
-darr_free(st.word);
-if (opts->align != TEXT_ALIGN_LEFT) {
+    if (st.pen_x > st.max_line_w) st.max_line_w = st.pen_x;
+
+    out->items       = st.items;
+    out->count       = (int)darr_len(st.items);
+    out->line_count  = st.line + 1;
+    out->width       = st.max_line_w;
+    out->height      = (float)out->line_count * st.line_h;
+    out->line_height = st.line_h;
+
+    darr_free(st.word);
+
+    // alignment: shift each line so it sits left/center/right inside the block
+    // width (or max_width if it was set and is larger).
+    if (opts->align != TEXT_ALIGN_LEFT) {
         float box = (opts->max_width > out->width) ? opts->max_width : out->width;
 
         // measure per-line right edge so we know how much to shift each one.
@@ -168,6 +184,23 @@ if (opts->align != TEXT_ALIGN_LEFT) {
     }
 
     return 1;
-if (out_h) *out_h = l.height;
-text_layout_free(&l);
+}
+
+void text_layout_free(text_layout *l) {
+    darr_free(l->items);
+    memset(l, 0, sizeof *l);
+}
+
+void text_layout_measure(const text_font *font, const char *s,
+                         const text_layout_opts *opts,
+                         float *out_w, float *out_h) {
+    text_layout l;
+    if (!text_layout_run(font, s, opts, &l)) {
+        if (out_w) *out_w = 0;
+        if (out_h) *out_h = 0;
+        return;
+    }
+    if (out_w) *out_w = l.width;
+    if (out_h) *out_h = l.height;
+    text_layout_free(&l);
 }
