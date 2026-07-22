@@ -1,9 +1,14 @@
 #include "water_caustics.h"
 #include "water_config.h"
 #include "../../util/log.h"
+
 #include <stdlib.h>
 #include <math.h>
+
 // the pattern is a sum of a few moving sine ridges crossed together. where the
+// ridges of two layers coincide you get a bright knot — looks enough like the
+// pinched light lines real caustics make.
+
 int water_caustics_create(water_caustics *c, int size) {
     c->size  = size < 8 ? 8 : size;
     c->phase = 0.0f;
@@ -26,9 +31,9 @@ int water_caustics_create(water_caustics *c, int size) {
 
 void water_caustics_destroy(water_caustics *c) {
     if (c->tex) glDeleteTextures(1, &c->tex);
-free(c->cpu);
-c->cpu = NULL;
-c->tex = 0;
+    free(c->cpu);
+    c->cpu = NULL;
+    c->tex = 0;
 }
 
 static float ridge(float v) {
@@ -39,12 +44,12 @@ static float ridge(float v) {
 
 void water_caustics_tick(water_caustics *c, float dt) {
     c->phase += dt * WATER_CAUSTIC_SPEED;
-float t = c->phase;
-int   n = c->size;
-float scale = (float)WATER_CAUSTIC_TILES * 6.28318530718f / (float)n;
-for (int y = 0;
-y < n;
-y++) {
+
+    float t = c->phase;
+    int   n = c->size;
+    float scale = (float)WATER_CAUSTIC_TILES * 6.28318530718f / (float)n;
+
+    for (int y = 0; y < n; y++) {
         for (int x = 0; x < n; x++) {
             float fx = (float)x * scale;
             float fy = (float)y * scale;
@@ -61,7 +66,7 @@ y++) {
     }
 
     glBindTexture(GL_TEXTURE_2D, c->tex);
-glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, n, n,
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, n, n,
                     GL_RED, GL_UNSIGNED_BYTE, c->cpu);
 }
 
@@ -89,5 +94,5 @@ float water_caustics_sample(const water_caustics *c, float u, float v) {
 
 void water_caustics_bind(const water_caustics *c, int unit) {
     glActiveTexture(GL_TEXTURE0 + unit);
-glBindTexture(GL_TEXTURE_2D, c->tex);
+    glBindTexture(GL_TEXTURE_2D, c->tex);
 }
