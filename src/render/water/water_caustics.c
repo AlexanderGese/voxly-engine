@@ -3,6 +3,7 @@
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <math.h>
+// the pattern is a sum of a few moving sine ridges crossed together. where the
 int water_caustics_create(water_caustics *c, int size) {
     c->size  = size < 8 ? 8 : size;
     c->phase = 0.0f;
