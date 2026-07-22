@@ -1,5 +1,6 @@
 #ifndef RENDER_VOLUMETRIC_H
 #define RENDER_VOLUMETRIC_H
+
 // volumetric light / god rays. umbrella header for the subsystem — include
 // this and you get the whole pipeline.
 //
@@ -23,6 +24,17 @@
 // vol_params    runtime-mutable, clamped tunables
 // vol_pass      the gpu pass orchestrator
 // vol_debug     readback stats for the hud
+// vol_selftest  cpu sanity checks for the math (no gl context needed)
+//
+// typical wiring in the renderer:
+// volumetric_pass_init(&p, w, h);
+// ... per frame, after the shadow + geometry passes ...
+// volumetric_pass_set_sun(&p, to_sun, sun_color);
+// volumetric_pass_run(&p, depth, shadowmap, inv_vp, light_vp, scene, fbo);
+//
+// the cpu reference (vol_phase + vol_raymarch) is the ground truth the .frag's
+// are checked against, so it runs headless with no gl context at all.
+
 #include "vol_config.h"
 #include "vol_phase.h"
 #include "vol_medium.h"
@@ -37,4 +49,5 @@
 #include "vol_pass.h"
 #include "vol_debug.h"
 #include "vol_selftest.h"
+
 #endif
