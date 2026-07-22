@@ -21,6 +21,7 @@ typedef struct {
 // build the 1d gaussian for the configured radius. sigma is derived from the
 // radius (radius/2, the usual rule of thumb) unless you override it after.
 void  volumetric_blur_build(volumetric_blur *b);
+// pack the half-kernel (radius+1 weights, centre first) for the shader uniform.
 int   volumetric_blur_pack(const volumetric_blur *b, float *out);
 int   volumetric_blur_run(const volumetric_blur *b,
                           const volumetric_programs *progs,
