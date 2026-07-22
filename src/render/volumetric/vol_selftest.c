@@ -23,3 +23,4 @@ c.dither = NULL;
 c.shadow = sh;
 c.shadow_user = NULL;
 return c;
+float T;
