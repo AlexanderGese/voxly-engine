@@ -1,10 +1,12 @@
 #include "entity.h"
+
 typedef struct {
     const char *name;
     float       width;
     float       height;
     int         max_hp;
 } entity_info;
+
 static const entity_info g_info[ET_COUNT] = {
     [ET_NONE]     = { "none",     0.0f, 0.0f,  0 },
     [ET_ZOMBIE]   = { "zombie",   0.6f, 1.95f, 20 },
@@ -12,8 +14,8 @@ static const entity_info g_info[ET_COUNT] = {
     [ET_PIG]      = { "pig",      0.9f, 0.9f,  10 },
     [ET_SKELETON] = { "skeleton", 0.6f, 1.99f, 20 },
     [ET_SPIDER]   = { "spider",   1.4f, 0.9f,  16 },
-}
-;
+};
+
 entity entity_new(entity_type t, vec3 pos) {
     entity e = {0};
     static uint32_t next_id = 1;
@@ -28,5 +30,13 @@ entity entity_new(entity_type t, vec3 pos) {
 
 aabb entity_aabb(const entity *e) {
     float hw = g_info[e->type].width * 0.5f;
-float h  = g_info[e->type].height;
-;
+    float h  = g_info[e->type].height;
+    return (aabb){
+        { e->pos.x - hw, e->pos.y,         e->pos.z - hw },
+        { e->pos.x + hw, e->pos.y + h,     e->pos.z + hw }
+    };
+}
+
+float entity_height(entity_type t) { return g_info[t].height; }
+float entity_width (entity_type t) { return g_info[t].width;  }
+const char *entity_name(entity_type t) { return g_info[t].name; }
