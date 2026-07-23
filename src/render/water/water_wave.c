@@ -11,6 +11,7 @@ static vec2 dir_norm(vec2 d) {
 static void bake(water_wave *w) {
     w->dir   = dir_norm(w->dir);
 w->phase = TWO_PI / (w->wavelength > 0.01f ? w->wavelength : 0.01f);
+// deep water dispersion: phase speed ~ sqrt(g/k). we fold g into speed.
 float c  = sqrtf(9.8f / w->phase);
 w->omega = w->phase * c * w->speed;
 }
@@ -32,9 +33,11 @@ void water_wave_field_init(water_wave_field *f, unsigned seed) {
     f->count     = 0;
 f->amp_scale = WATER_WAVE_AMP_SCALE;
 f->time      = 0.0f;
+// cheap LCG so the directions are deterministic per seed
 unsigned s = seed ? seed : 0x9e3779b9u;
 int n = WATER_DEFAULT_WAVES;
 if (n > WATER_MAX_WAVES) n = WATER_MAX_WAVES;
+// each successive wave is shorter, lower and a bit faster — classic
 float base_wl  = 14.0f;
 float base_amp = 0.18f;
 float wind     = (float)(seed % 360) * (TWO_PI / 360.0f);
@@ -122,3 +125,20 @@ float water_wave_field_height(const water_wave_field *f, float x, float z) {
     float y = 0.0f;
 for (int i = 0;
 i < f->count;
+i++) {
+        const water_wave *w = &f->waves[i];
+        float amp = w->amplitude * f->amp_scale;
+        float d  = w->dir.x * x + w->dir.y * z;
+        y += amp * sinf(w->phase * d + w->omega * f->time);
+    }
+    return y;
+}
+
+float water_wave_field_energy(const water_wave_field *f) {
+    float e = 0.0f;
+    for (int i = 0; i < f->count; i++) {
+        float a = f->waves[i].amplitude * f->amp_scale;
+        e += a * a;
+    }
+    return e;
+}
