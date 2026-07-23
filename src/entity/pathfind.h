@@ -1,0 +1,1 @@
+#ifndef ENTITY_PATHFIND_H
