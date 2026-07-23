@@ -1,7 +1,12 @@
 #include "water_reflcam.h"
+
 #include <math.h>
+
 static float sgnf(float x);
+
 // the camera type doesnt expose its matrices for an arbitrary pose, so we
+// rebuild a look_at from the mirrored eye + target ourselves.
+
 static vec3 cam_target(const camera *c) {
     vec3 f = camera_forward(c);
     return (vec3){ c->pos.x + f.x, c->pos.y + f.y, c->pos.z + f.z };
@@ -9,16 +14,21 @@ static vec3 cam_target(const camera *c) {
 
 water_view water_reflcam_reflection(const camera *cam, const water_plane *wp) {
     water_view v;
-vec3 eye = water_plane_reflect_point(wp, cam->pos);
-vec3 tgt = water_plane_reflect_point(wp, cam_target(cam));
-vec3 up  = camera_up(cam);
-up = water_plane_reflect_dir(wp, up);
-v.view = mat4_look_at(eye, tgt, up);
-v.proj = camera_proj(cam);
-v.clip_eq = water_plane_clip_eq(wp, 1);
-vec4 eye_plane = water_reflcam_plane_to_eye(v.view, v.clip_eq);
-v.proj = water_reflcam_oblique(v.proj, eye_plane);
-return v;
+
+    vec3 eye = water_plane_reflect_point(wp, cam->pos);
+    vec3 tgt = water_plane_reflect_point(wp, cam_target(cam));
+    // up flips too, since we mirrored vertically
+    vec3 up  = camera_up(cam);
+    up = water_plane_reflect_dir(wp, up);
+
+    v.view = mat4_look_at(eye, tgt, up);
+    v.proj = camera_proj(cam);
+    v.clip_eq = water_plane_clip_eq(wp, 1);
+
+    // clip against the surface from below so we only draw the world above water
+    vec4 eye_plane = water_reflcam_plane_to_eye(v.view, v.clip_eq);
+    v.proj = water_reflcam_oblique(v.proj, eye_plane);
+    return v;
 }
 
 water_view water_reflcam_refraction(const camera *cam, const water_plane *wp) {
@@ -43,19 +53,20 @@ vec4 water_reflcam_plane_to_eye(mat4 view, vec4 plane_world) {
     // by R (rotation part) and recompute d from a point on the plane.
     // pick the point on the plane closest to the origin: -d * n.
     vec3 n = { plane_world.x, plane_world.y, plane_world.z };
-float d = plane_world.w;
-vec3 p0 = { -d * n.x, -d * n.y, -d * n.z }
-;
-vec3 ne = {
+    float d = plane_world.w;
+    vec3 p0 = { -d * n.x, -d * n.y, -d * n.z };
+
+    // rotate normal by the view's upper 3x3 (column major m[col][row])
+    vec3 ne = {
         view.m[0][0] * n.x + view.m[1][0] * n.y + view.m[2][0] * n.z,
         view.m[0][1] * n.x + view.m[1][1] * n.y + view.m[2][1] * n.z,
         view.m[0][2] * n.x + view.m[1][2] * n.y + view.m[2][2] * n.z,
-    }
-;
-vec3 pe = mat4_mul_vec3(view, p0);
-float de = -(ne.x * pe.x + ne.y * pe.y + ne.z * pe.z);
-return (vec4){ ne.x, ne.y, ne.z, de }
-;
+    };
+    // transform the point fully (with translation)
+    vec3 pe = mat4_mul_vec3(view, p0);
+
+    float de = -(ne.x * pe.x + ne.y * pe.y + ne.z * pe.z);
+    return (vec4){ ne.x, ne.y, ne.z, de };
 }
 
 mat4 water_reflcam_oblique(mat4 proj, vec4 clip_plane_eye) {
