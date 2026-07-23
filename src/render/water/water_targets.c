@@ -1,7 +1,9 @@
 #include "water_targets.h"
 #include "water_config.h"
 #include "../../util/log.h"
+
 #include <stddef.h>
+
 static glid make_color(int w, int h) {
     glid t;
     glGenTextures(1, &t);
@@ -17,15 +19,15 @@ static glid make_color(int w, int h) {
 
 static glid make_depth_tex(int w, int h) {
     glid t;
-glGenTextures(1, &t);
-glBindTexture(GL_TEXTURE_2D, t);
-glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0,
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0,
                  GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-return t;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return t;
 }
 
 static int clampdim(int d) {
@@ -34,25 +36,29 @@ static int clampdim(int d) {
 
 int water_reflect_target_create(water_reflect_target *t, int w, int h) {
     t->w = clampdim(w);
-t->h = clampdim(h);
-glGenFramebuffers(1, &t->fbo);
-glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
-t->color = make_color(t->w, t->h);
-glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+    t->h = clampdim(h);
+
+    glGenFramebuffers(1, &t->fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+
+    t->color = make_color(t->w, t->h);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                            GL_TEXTURE_2D, t->color, 0);
-glGenRenderbuffers(1, &t->depth_rb);
-glBindRenderbuffer(GL_RENDERBUFFER, t->depth_rb);
-glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, t->w, t->h);
-glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+
+    glGenRenderbuffers(1, &t->depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, t->depth_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, t->w, t->h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                               GL_RENDERBUFFER, t->depth_rb);
-if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         LOGE("water reflection target incomplete");
         water_reflect_target_destroy(t);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return 0;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-return 1;
+    return 1;
 }
 
 int water_refract_target_create(water_refract_target *t, int w, int h) {
@@ -82,7 +88,24 @@ int water_refract_target_create(water_refract_target *t, int w, int h) {
 
 void water_reflect_target_destroy(water_reflect_target *t) {
     if (t->fbo)      glDeleteFramebuffers(1, &t->fbo);
-if (t->color)    glDeleteTextures(1, &t->color);
-if (t->depth_rb) glDeleteRenderbuffers(1, &t->depth_rb);
-t->fbo = t->color = t->depth_rb = 0;
-glViewport(0, 0, t->w, t->h);
+    if (t->color)    glDeleteTextures(1, &t->color);
+    if (t->depth_rb) glDeleteRenderbuffers(1, &t->depth_rb);
+    t->fbo = t->color = t->depth_rb = 0;
+}
+
+void water_refract_target_destroy(water_refract_target *t) {
+    if (t->fbo)       glDeleteFramebuffers(1, &t->fbo);
+    if (t->color)     glDeleteTextures(1, &t->color);
+    if (t->depth_tex) glDeleteTextures(1, &t->depth_tex);
+    t->fbo = t->color = t->depth_tex = 0;
+}
+
+void water_reflect_target_bind(const water_reflect_target *t) {
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+    glViewport(0, 0, t->w, t->h);
+}
+
+void water_refract_target_bind(const water_refract_target *t) {
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+    glViewport(0, 0, t->w, t->h);
+}
