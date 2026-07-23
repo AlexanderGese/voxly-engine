@@ -2,9 +2,13 @@
 #include "water_config.h"
 #include "../../util/darray.h"
 #include "../../world/block.h"
+
 #include <math.h>
 #include <stdlib.h>
+
+// rescan if the camera has wandered this many blocks from the last scan center
 #define WATER_FOAM_RESCAN_DIST 8
+
 void water_foam_init(water_foam_set *s, int surface_y, int region) {
     s->points    = NULL;
     s->surface_y = surface_y;
@@ -27,12 +31,9 @@ static int is_water(world *w, int x, int y, int z) {
 // neighbour is air (the water's outer rim against open space below sea level).
 static float shoreline_strength(world *w, int x, int y, int z) {
     static const int dx[4] = { 1, -1, 0, 0 };
-static const int dz[4] = { 0, 0, 1, -1 }
-;
-int contacts = 0;
-for (int i = 0;
-i < 4;
-i++) {
+    static const int dz[4] = { 0, 0, 1, -1 };
+    int contacts = 0;
+    for (int i = 0; i < 4; i++) {
         block_id nb = world_get_block(w, x + dx[i], y, z + dz[i]);
         if (nb != BLOCK_WATER && nb != BLOCK_AIR && block_is_solid(nb))
             contacts++;

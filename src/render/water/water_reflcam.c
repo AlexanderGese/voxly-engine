@@ -1,6 +1,7 @@
 #include "water_reflcam.h"
 #include <math.h>
 static float sgnf(float x);
+// the camera type doesnt expose its matrices for an arbitrary pose, so we
 static vec3 cam_target(const camera *c) {
     vec3 f = camera_forward(c);
     return (vec3){ c->pos.x + f.x, c->pos.y + f.y, c->pos.z + f.z };
