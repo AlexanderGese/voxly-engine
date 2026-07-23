@@ -1,6 +1,9 @@
 #include "water_wave.h"
+
 #include <math.h>
+
 #define TWO_PI 6.28318530718f
+
 static vec2 dir_norm(vec2 d) {
     float l = sqrtf(d.x * d.x + d.y * d.y);
     if (l < 1e-6f) return (vec2){1, 0};
@@ -10,10 +13,10 @@ static vec2 dir_norm(vec2 d) {
 // bake the derived quantities so the inner loop is cheap
 static void bake(water_wave *w) {
     w->dir   = dir_norm(w->dir);
-w->phase = TWO_PI / (w->wavelength > 0.01f ? w->wavelength : 0.01f);
-// deep water dispersion: phase speed ~ sqrt(g/k). we fold g into speed.
-float c  = sqrtf(9.8f / w->phase);
-w->omega = w->phase * c * w->speed;
+    w->phase = TWO_PI / (w->wavelength > 0.01f ? w->wavelength : 0.01f);
+    // deep water dispersion: phase speed ~ sqrt(g/k). we fold g into speed.
+    float c  = sqrtf(9.8f / w->phase);
+    w->omega = w->phase * c * w->speed;
 }
 
 int water_wave_field_add(water_wave_field *f, vec2 dir, float wavelength,
@@ -31,19 +34,21 @@ int water_wave_field_add(water_wave_field *f, vec2 dir, float wavelength,
 
 void water_wave_field_init(water_wave_field *f, unsigned seed) {
     f->count     = 0;
-f->amp_scale = WATER_WAVE_AMP_SCALE;
-f->time      = 0.0f;
-// cheap LCG so the directions are deterministic per seed
-unsigned s = seed ? seed : 0x9e3779b9u;
-int n = WATER_DEFAULT_WAVES;
-if (n > WATER_MAX_WAVES) n = WATER_MAX_WAVES;
-// each successive wave is shorter, lower and a bit faster — classic
-float base_wl  = 14.0f;
-float base_amp = 0.18f;
-float wind     = (float)(seed % 360) * (TWO_PI / 360.0f);
-for (int i = 0;
-i < n;
-i++) {
+    f->amp_scale = WATER_WAVE_AMP_SCALE;
+    f->time      = 0.0f;
+
+    // cheap LCG so the directions are deterministic per seed
+    unsigned s = seed ? seed : 0x9e3779b9u;
+    int n = WATER_DEFAULT_WAVES;
+    if (n > WATER_MAX_WAVES) n = WATER_MAX_WAVES;
+
+    // each successive wave is shorter, lower and a bit faster — classic
+    // octave stack. directions fan out around a dominant wind direction.
+    float base_wl  = 14.0f;
+    float base_amp = 0.18f;
+    float wind     = (float)(seed % 360) * (TWO_PI / 360.0f);
+
+    for (int i = 0; i < n; i++) {
         s = s * 1664525u + 1013904223u;
         float jitter = ((float)(s >> 9) / (float)(1u << 23)) - 0.5f; // -0.5..0.5
         float ang = wind + jitter * 1.6f;
@@ -123,9 +128,7 @@ water_wave_sample water_wave_field_sample(const water_wave_field *f,
 
 float water_wave_field_height(const water_wave_field *f, float x, float z) {
     float y = 0.0f;
-for (int i = 0;
-i < f->count;
-i++) {
+    for (int i = 0; i < f->count; i++) {
         const water_wave *w = &f->waves[i];
         float amp = w->amplitude * f->amp_scale;
         float d  = w->dir.x * x + w->dir.y * z;
