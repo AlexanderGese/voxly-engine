@@ -1,16 +1,20 @@
 #include "pathfind_astar.h"
 #include "../world/block.h"
 #include "../config.h"
+
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+
 typedef struct {
     int parent;
     int g, h, f;
     int open, closed;
     int walkable;
 } cell;
+
 static cell grid[ASTAR_GRID][ASTAR_GRID];
+
 static int walkable_at(world *w, int wx, int wy, int wz) {
     block_id feet  = world_get_block(w, wx, wy, wz);
     block_id head  = world_get_block(w, wx, wy + 1, wz);
@@ -120,7 +124,7 @@ int astar_find(world *w, vec3 from, vec3 to, astar_path *out) {
 vec3 astar_next_target(const astar_path *path, vec3 entity_pos) {
     if (path->current >= path->length) {
         return entity_pos;
-}
+    }
     const astar_node *n = &path->nodes[path->current];
-;
+    return (vec3){(float)n->x + 0.5f, (float)n->y + 0.5f, (float)n->z + 0.5f};
 }
