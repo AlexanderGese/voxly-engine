@@ -1,11 +1,14 @@
 #include "vol_raymarch.h"
 #include "vol_config.h"
+
 #include <math.h>
 #include <stddef.h>
+
 // front-to-back accumulation. classic participating-media integration:
 // L = sum_i  T_i * sigma_s * phase * sun_visible_i * sun_color * dx
 // T_{i+1} = T_i * exp(-sigma_t * dx)
 // nothing fancy — but it matches the .frag exactly, which is the point.
+
 vec3 volumetric_world_from_depth(mat4 inv_view_proj,
                                  float ndc_x, float ndc_y, float depth01) {
     // depth buffer is [0,1]; ndc z is [-1,1]. unproject the clip-space point.
@@ -28,28 +31,37 @@ vec3 volumetric_march_ray(const volumetric_march_ctx *ctx,
                           int px, int py,
                           float *transmittance_out) {
     vec3 accum = VEC3_ZERO;
-float transmittance = 1.0f;
-int steps = ctx->steps;
-if (steps < 1) steps = 1;
-if (steps > VOL_STEPS_MAX) steps = VOL_STEPS_MAX;
-// ray from eye to the surface, clamped to the configured max distance.
-vec3 delta = vec3_sub(target, origin);
-float dist = vec3_length(delta);
-if (dist < 1e-4f) { if (transmittance_out) *transmittance_out = 1.0f; return accum; }
+    float transmittance = 1.0f;
+
+    int steps = ctx->steps;
+    if (steps < 1) steps = 1;
+    if (steps > VOL_STEPS_MAX) steps = VOL_STEPS_MAX;
+
+    // ray from eye to the surface, clamped to the configured max distance.
+    vec3 delta = vec3_sub(target, origin);
+    float dist = vec3_length(delta);
+    if (dist < 1e-4f) { if (transmittance_out) *transmittance_out = 1.0f; return accum; }
     if (dist > ctx->max_dist) dist = ctx->max_dist;
-vec3 dir = vec3_scale(delta, 1.0f / vec3_length(delta));
-float dx = dist / (float)steps;
-// dither the start so neighbouring rays don't band in lock-step. the offset
-float offset = 0.5f;
-if (ctx->dither) offset = volumetric_dither_at(ctx->dither, px, py);
-float cos_vl = volumetric_cos_between(dir, ctx->to_sun);
-float phase = volumetric_phase_hg(ctx->medium.g, cos_vl);
-float sigma_s = ctx->medium.scatter;
-float sigma_t = ctx->medium.extinct;
-float step_t = expf(-sigma_t * dx);
-for (int i = 0;
-i < steps;
-i++) {
+
+    vec3 dir = vec3_scale(delta, 1.0f / vec3_length(delta));
+    float dx = dist / (float)steps;
+
+    // dither the start so neighbouring rays don't band in lock-step. the offset
+    // is a fraction of one step; transmittance for the skipped sliver is folded
+    // into the first step's weight implicitly (it's tiny).
+    float offset = 0.5f;
+    if (ctx->dither) offset = volumetric_dither_at(ctx->dither, px, py);
+
+    // phase is constant along a straight ray (single directional light), so
+    // hoist it out of the loop. cos between the *view* dir and the to-sun dir.
+    float cos_vl = volumetric_cos_between(dir, ctx->to_sun);
+    float phase = volumetric_phase_hg(ctx->medium.g, cos_vl);
+
+    float sigma_s = ctx->medium.scatter;
+    float sigma_t = ctx->medium.extinct;
+    float step_t = expf(-sigma_t * dx);   // per-step transmittance, constant
+
+    for (int i = 0; i < steps; i++) {
         // sample at the dithered centre of step i
         float t = (((float)i + offset) ) * dx;
         if (t > dist) break;
@@ -75,5 +87,5 @@ i++) {
     }
 
     if (transmittance_out) *transmittance_out = transmittance;
-return accum;
+    return accum;
 }
