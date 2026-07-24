@@ -1,8 +1,10 @@
 #include "anim_clip.h"
 #include "anim_quat.h"
+
 #include <string.h>
 #include "../../util/darray.h"
 #include "../../util/assert.h"
+
 void animation_clip_init(animation_clip *clip, const char *name) {
     clip->tracks = NULL;       // darray, grown on demand
     clip->track_count = 0;
@@ -15,14 +17,14 @@ void animation_clip_init(animation_clip *clip, const char *name) {
 int animation_clip_add_track(animation_clip *clip, int bone,
                              animation_channel_kind kind) {
     animation_track t;
-t.bone = bone;
-t.kind = kind;
-t.interp = ANIM_INTERP_LINEAR;
-t.keys = NULL;
-t.key_count = 0;
-darr_push(clip->tracks, t);
-clip->track_count = (int)darr_len(clip->tracks);
-return clip->track_count - 1;
+    t.bone = bone;
+    t.kind = kind;
+    t.interp = ANIM_INTERP_LINEAR;
+    t.keys = NULL;             // darray
+    t.key_count = 0;
+    darr_push(clip->tracks, t);
+    clip->track_count = (int)darr_len(clip->tracks);
+    return clip->track_count - 1;
 }
 
 void animation_clip_set_interp(animation_clip *clip, int track,
@@ -32,8 +34,7 @@ void animation_clip_set_interp(animation_clip *clip, int track,
 }
 
 // shared key-append. enforces ascending time so sampling can binary/linear walk
-// without a sort pass. exporters emit sorted;
-a regression here is a data bug.
+// without a sort pass. exporters emit sorted; a regression here is a data bug.
 static animation_keyframe *push_key(animation_clip *clip, int track, float time) {
     VX_ASSERT(track >= 0 && track < clip->track_count);
     animation_track *t = &clip->tracks[track];
@@ -51,7 +52,7 @@ static animation_keyframe *push_key(animation_clip *clip, int track, float time)
 
 void animation_clip_push_vec(animation_clip *clip, int track, float time, vec3 v) {
     animation_keyframe *k = push_key(clip, track, time);
-k->v.vec = v;
+    k->v.vec = v;
 }
 
 void animation_clip_push_quat(animation_clip *clip, int track, float time,
@@ -62,9 +63,7 @@ void animation_clip_push_quat(animation_clip *clip, int track, float time,
 
 void animation_clip_finalize(animation_clip *clip) {
     float dur = 0.0f;
-for (int i = 0;
-i < clip->track_count;
-i++) {
+    for (int i = 0; i < clip->track_count; i++) {
         const animation_track *t = &clip->tracks[i];
         if (t->key_count > 0) {
             float last = t->keys[t->key_count - 1].time;
@@ -75,8 +74,7 @@ i++) {
 }
 
 // locate the key pair bracketing `time` and the blend factor between them.
-// returns the lower index;
-sets *frac to the [0,1] position toward index+1.
+// returns the lower index; sets *frac to the [0,1] position toward index+1.
 // clamps to the endpoints outside the track range.
 static int bracket(const animation_track *t, float time, float *frac) {
     if (time <= t->keys[0].time) { *frac = 0.0f; return 0; }
@@ -97,11 +95,33 @@ static int bracket(const animation_track *t, float time, float *frac) {
 int animation_clip_sample_track(const animation_track *track, float time,
                                 vec3 *out_vec, animation_quat *out_quat) {
     if (track->key_count == 0) return 0;
-float frac;
-int i = bracket(track, time, &frac);
-int j = (i + 1 < track->key_count) ? i + 1 : i;
-if (track->interp == ANIM_INTERP_STEP) frac = 0.0f;
-const animation_keyframe *ka = &track->keys[i];
-const animation_keyframe *kb = &track->keys[j];
-}
+
+    float frac;
+    int i = bracket(track, time, &frac);
+    int j = (i + 1 < track->key_count) ? i + 1 : i;
+
+    // step interp ignores frac entirely: snap to the lower key
+    if (track->interp == ANIM_INTERP_STEP) frac = 0.0f;
+    // cubic without authored tangents degrades to linear. it's a lie, but a
+    // visually harmless one until someone bakes real spline data. noted.
+
+    const animation_keyframe *ka = &track->keys[i];
+    const animation_keyframe *kb = &track->keys[j];
+
+    if (track->kind == ANIM_CHANNEL_ROTATION) {
+        if (out_quat)
+            *out_quat = animation_quat_nlerp(ka->v.quat, kb->v.quat, frac);
+    } else {
+        if (out_vec)
+            *out_vec = vec3_lerp(ka->v.vec, kb->v.vec, frac);
+    }
     return 1;
+}
+
+void animation_clip_free(animation_clip *clip) {
+    for (int i = 0; i < clip->track_count; i++)
+        darr_free(clip->tracks[i].keys);
+    darr_free(clip->tracks);
+    clip->track_count = 0;
+    clip->duration = 0.0f;
+}
