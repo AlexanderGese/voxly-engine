@@ -23,4 +23,16 @@ typedef struct {
         uint32_t eid;
     } as;
 } bb_value;
+typedef struct {
+    hashmap map;        // key hash -> bb_entry*
+    bb_value *pool;     // boxed values, indexed by slot. plain malloc array.
+    size_t    pool_len;
+    size_t    pool_cap;
+} behavior_blackboard;
+void behavior_bb_init(behavior_blackboard *bb);
+void behavior_bb_free(behavior_blackboard *bb);
+void behavior_bb_clear(behavior_blackboard *bb);
+void behavior_bb_set_int   (behavior_blackboard *bb, const char *key, int v);
+void behavior_bb_set_float (behavior_blackboard *bb, const char *key, float v);
+void behavior_bb_set_bool  (behavior_blackboard *bb, const char *key, int v);
 #endif
