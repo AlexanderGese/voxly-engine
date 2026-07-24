@@ -1,5 +1,7 @@
 #include "anim_quat.h"
+
 #include <math.h>
+
 animation_quat animation_quat_identity(void) {
     return (animation_quat){0.0f, 0.0f, 0.0f, 1.0f};
 }
@@ -58,8 +60,8 @@ animation_quat animation_quat_normalize(animation_quat q) {
 vec3 animation_quat_rotate_vec3(animation_quat q, vec3 v) {
     // v' = v + 2w(qv x v) + 2(qv x (qv x v)). the textbook fast form.
     vec3 u = vec3_new(q.x, q.y, q.z);
-vec3 t = vec3_scale(vec3_cross(u, v), 2.0f);
-return vec3_add(vec3_add(v, vec3_scale(t, q.w)), vec3_cross(u, t));
+    vec3 t = vec3_scale(vec3_cross(u, v), 2.0f);
+    return vec3_add(vec3_add(v, vec3_scale(t, q.w)), vec3_cross(u, t));
 }
 
 animation_quat animation_quat_nlerp(animation_quat a, animation_quat b, float t) {
@@ -78,22 +80,22 @@ animation_quat animation_quat_nlerp(animation_quat a, animation_quat b, float t)
 
 animation_quat animation_quat_slerp(animation_quat a, animation_quat b, float t) {
     float d = animation_quat_dot(a, b);
-if (d < 0.0f) { b = animation_quat_neg(b); d = -d; }
+    if (d < 0.0f) { b = animation_quat_neg(b); d = -d; }
 
     // nearly parallel: the sin denominator goes to zero, nlerp is stable & close
     if (d > 0.9995f) return animation_quat_nlerp(a, b, t);
-float theta = acosf(d);
-float sin_theta = sinf(theta);
-float wa = sinf((1.0f - t) * theta) / sin_theta;
-float wb = sinf(t * theta) / sin_theta;
-animation_quat r = {
+
+    float theta = acosf(d);
+    float sin_theta = sinf(theta);
+    float wa = sinf((1.0f - t) * theta) / sin_theta;
+    float wb = sinf(t * theta) / sin_theta;
+    animation_quat r = {
         a.x * wa + b.x * wb,
         a.y * wa + b.y * wb,
         a.z * wa + b.z * wb,
         a.w * wa + b.w * wb
-    }
-;
-return animation_quat_normalize(r);
+    };
+    return animation_quat_normalize(r);
 }
 
 mat4 animation_quat_to_mat4(animation_quat q) {
