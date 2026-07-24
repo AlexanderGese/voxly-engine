@@ -17,3 +17,4 @@ animation_skeleton_finalize(sk);
 i < bone_count;
 i++) mask[i] = 0;
 ;
+int n = (int)(sizeof(upper) / sizeof(upper[0]));
