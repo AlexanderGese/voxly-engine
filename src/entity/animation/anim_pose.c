@@ -1,7 +1,9 @@
 #include "anim_pose.h"
 #include "anim_transform.h"
 #include "anim_quat.h"
+
 #include <string.h>
+
 void animation_pose_reset(animation_pose *p, int bone_count) {
     p->bone_count = bone_count;
     animation_transform id = animation_transform_identity();
@@ -10,7 +12,7 @@ void animation_pose_reset(animation_pose *p, int bone_count) {
 
 void animation_pose_copy(animation_pose *dst, const animation_pose *src) {
     dst->bone_count = src->bone_count;
-memcpy(dst->locals, src->locals,
+    memcpy(dst->locals, src->locals,
            sizeof(animation_transform) * (size_t)src->bone_count);
 }
 
@@ -30,10 +32,8 @@ void animation_pose_blend_masked(animation_pose *out, const animation_pose *a,
                                  const animation_pose *b, float t,
                                  const unsigned char *mask) {
     int n = a->bone_count;
-out->bone_count = n;
-for (int i = 0;
-i < n;
-i++) {
+    out->bone_count = n;
+    for (int i = 0; i < n; i++) {
         if (mask[i]) {
             out->locals[i] = animation_transform_lerp(a->locals[i], b->locals[i], t);
         } else if (out != a) {
@@ -47,11 +47,9 @@ void animation_pose_add(animation_pose *out, const animation_pose *base,
                         const animation_pose *add, const animation_pose *ref,
                         float weight) {
     int n = base->bone_count;
-out->bone_count = n;
-if (weight <= 0.0f) { if (out != base) animation_pose_copy(out, base); return; }
-    for (int i = 0;
-i < n;
-i++)
+    out->bone_count = n;
+    if (weight <= 0.0f) { if (out != base) animation_pose_copy(out, base); return; }
+    for (int i = 0; i < n; i++)
         out->locals[i] = animation_transform_add(base->locals[i], add->locals[i],
                                                  ref->locals[i], weight);
 }
@@ -85,7 +83,12 @@ void animation_pose_accumulate(animation_pose *acc, const animation_pose *p,
 
 void animation_pose_normalize(animation_pose *acc, float total_weight) {
     int n = acc->bone_count;
-float inv = (total_weight > 1e-6f) ? 1.0f / total_weight : 0.0f;
-for (int i = 0;
-i < n;
+    float inv = (total_weight > 1e-6f) ? 1.0f / total_weight : 0.0f;
+    for (int i = 0; i < n; i++) {
+        animation_transform *a = &acc->locals[i];
+        a->translation = vec3_scale(a->translation, inv);
+        a->scale       = vec3_scale(a->scale, inv);
+        // weighted quat sum needs renormalizing back to the unit sphere
+        a->rotation    = animation_quat_normalize(a->rotation);
+    }
 }
