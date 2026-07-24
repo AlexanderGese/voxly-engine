@@ -1,6 +1,7 @@
 #include "entity_render.h"
 #include "../math/mat4.h"
 #include "../util/log.h"
+
 // cube verts (positions only, -0.5..0.5 box at origin)
 static const float cube[] = {
     -.5f,-.5f,-.5f,  .5f,-.5f,-.5f,  .5f, .5f,-.5f,
@@ -15,8 +16,8 @@ static const float cube[] = {
     -.5f,-.5f,-.5f, -.5f, .5f, .5f, -.5f,-.5f, .5f,
      .5f,-.5f,-.5f,  .5f, .5f,-.5f,  .5f, .5f, .5f,
      .5f,-.5f,-.5f,  .5f, .5f, .5f,  .5f,-.5f, .5f,
-}
-;
+};
+
 int entity_renderer_init(entity_renderer *er) {
     er->prog = gl_load_shader("shaders/entity.vert", "shaders/entity.frag");
     if (!er->prog) {
@@ -36,8 +37,8 @@ int entity_renderer_init(entity_renderer *er) {
 
 void entity_renderer_destroy(entity_renderer *er) {
     if (er->vao) glDeleteVertexArrays(1, &er->vao);
-if (er->vbo) glDeleteBuffers(1, &er->vbo);
-gl_delete_shader(er->prog);
+    if (er->vbo) glDeleteBuffers(1, &er->vbo);
+    gl_delete_shader(er->prog);
 }
 
 static void color_for(entity_type t, float *r, float *g, float *b) {
@@ -53,14 +54,14 @@ static void color_for(entity_type t, float *r, float *g, float *b) {
 
 void entity_renderer_draw(entity_renderer *er, mob_registry *mr, const camera *cam) {
     mat4 view = camera_view(cam);
-mat4 proj = camera_proj(cam);
-glUseProgram(er->prog);
-gl_set_uniform_mat4(er->prog, "u_view", mat4_data(&view));
-gl_set_uniform_mat4(er->prog, "u_proj", mat4_data(&proj));
-glBindVertexArray(er->vao);
-for (int i = 0;
-i < MAX_MOBS;
-i++) {
+    mat4 proj = camera_proj(cam);
+
+    glUseProgram(er->prog);
+    gl_set_uniform_mat4(er->prog, "u_view", mat4_data(&view));
+    gl_set_uniform_mat4(er->prog, "u_proj", mat4_data(&proj));
+    glBindVertexArray(er->vao);
+
+    for (int i = 0; i < MAX_MOBS; i++) {
         entity *e = &mr->list[i];
         if (!e->alive) continue;
         float w = entity_width(e->type);
