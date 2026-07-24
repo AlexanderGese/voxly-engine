@@ -1,5 +1,6 @@
 #include "anim_transform.h"
 #include "anim_quat.h"
+
 animation_transform animation_transform_identity(void) {
     return (animation_transform){
         .translation = VEC3_ZERO,
@@ -44,15 +45,16 @@ mat4 animation_transform_to_mat4(animation_transform x) {
 animation_transform animation_transform_combine(animation_transform parent,
                                                 animation_transform child) {
     animation_transform out;
-// scale composes component-wise (we only support non-rotated scale; full
-// shear would need a matrix, and nobody's authored that yet)
-out.scale = vec3_mul(parent.scale, child.scale);
-out.rotation = animation_quat_mul(parent.rotation, child.rotation);
-// child translation lives in parent space: scale it, rotate it, offset it.
-vec3 t = vec3_mul(child.translation, parent.scale);
-t = animation_quat_rotate_vec3(parent.rotation, t);
-out.translation = vec3_add(parent.translation, t);
-return out;
+    // scale composes component-wise (we only support non-rotated scale; full
+    // shear would need a matrix, and nobody's authored that yet)
+    out.scale = vec3_mul(parent.scale, child.scale);
+    out.rotation = animation_quat_mul(parent.rotation, child.rotation);
+
+    // child translation lives in parent space: scale it, rotate it, offset it.
+    vec3 t = vec3_mul(child.translation, parent.scale);
+    t = animation_quat_rotate_vec3(parent.rotation, t);
+    out.translation = vec3_add(parent.translation, t);
+    return out;
 }
 
 animation_transform animation_transform_lerp(animation_transform a,
@@ -73,16 +75,18 @@ animation_transform animation_transform_add(animation_transform base,
     // delta = add relative to ref. translation/scale are simple differences,
     // rotation is the relative quat ref^-1 * add.
     vec3 dt = vec3_sub(add.translation, ref.translation);
-vec3 ds = vec3_sub(add.scale, ref.scale);
-animation_quat dq = animation_quat_mul(
+    vec3 ds = vec3_sub(add.scale, ref.scale);
+    animation_quat dq = animation_quat_mul(
         animation_quat_conjugate(animation_quat_normalize(ref.rotation)),
         add.rotation);
-// scale the delta by weight, then apply to base
-animation_transform out;
-out.translation = vec3_add(base.translation, vec3_scale(dt, weight));
-out.scale       = vec3_add(base.scale, vec3_scale(ds, weight));
-// weighted rotation delta: nlerp from identity toward dq, then stack on base
-animation_quat wq = animation_quat_nlerp(animation_quat_identity(), dq, weight);
-out.rotation = animation_quat_normalize(animation_quat_mul(wq, base.rotation));
-return out;
+
+    // scale the delta by weight, then apply to base
+    animation_transform out;
+    out.translation = vec3_add(base.translation, vec3_scale(dt, weight));
+    out.scale       = vec3_add(base.scale, vec3_scale(ds, weight));
+
+    // weighted rotation delta: nlerp from identity toward dq, then stack on base
+    animation_quat wq = animation_quat_nlerp(animation_quat_identity(), dq, weight);
+    out.rotation = animation_quat_normalize(animation_quat_mul(wq, base.rotation));
+    return out;
 }

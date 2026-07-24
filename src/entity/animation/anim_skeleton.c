@@ -1,7 +1,9 @@
 #include "anim_skeleton.h"
 #include "anim_transform.h"
+
 #include <string.h>
 #include "../../util/assert.h"
+
 void animation_skeleton_init(animation_skeleton *sk) {
     sk->bone_count = 0;
 }
@@ -9,16 +11,21 @@ void animation_skeleton_init(animation_skeleton *sk) {
 int animation_skeleton_add_bone(animation_skeleton *sk, const char *name,
                                 int parent, animation_transform local) {
     if (sk->bone_count >= ANIM_MAX_BONES) return ANIM_BONE_NONE;
-VX_ASSERT(parent == ANIM_BONE_NONE || (parent >= 0 && parent < sk->bone_count));
-int idx = sk->bone_count++;
-animation_bone *b = &sk->bones[idx];
-b->parent = parent;
-b->local = local;
-b->inverse_bind = mat4_identity();
-size_t n = 0;
-while (name && name[n] && n < ANIM_MAX_NAME - 1) { b->name[n] = name[n]; n++; }
+    // topological invariant: parents are added first. if this trips, your
+    // rig export is out of order and resolve() would read stale matrices.
+    VX_ASSERT(parent == ANIM_BONE_NONE || (parent >= 0 && parent < sk->bone_count));
+
+    int idx = sk->bone_count++;
+    animation_bone *b = &sk->bones[idx];
+    b->parent = parent;
+    b->local = local;
+    b->inverse_bind = mat4_identity();  // baked in finalize
+
+    // copy name with a hard cap; truncation beats a smashed stack
+    size_t n = 0;
+    while (name && name[n] && n < ANIM_MAX_NAME - 1) { b->name[n] = name[n]; n++; }
     b->name[n] = '\0';
-return idx;
+    return idx;
 }
 
 int animation_skeleton_find(const animation_skeleton *sk, const char *name) {
@@ -31,9 +38,7 @@ int animation_skeleton_find(const animation_skeleton *sk, const char *name) {
 // single forward sweep, relies on topological order.
 static void resolve_locals(const animation_skeleton *sk,
                            const animation_transform *locals, mat4 *out) {
-    for (int i = 0;
-i < sk->bone_count;
-i++) {
+    for (int i = 0; i < sk->bone_count; i++) {
         mat4 local = animation_transform_to_mat4(locals[i]);
         int parent = sk->bones[i].parent;
         out[i] = (parent == ANIM_BONE_NONE)
@@ -47,14 +52,11 @@ void animation_skeleton_finalize(animation_skeleton *sk) {
     // mat4_inverse in the engine, but a rigid TRS bone inverts cheaply: build
     // the rest model, then invert the affine part by hand below.
     mat4 model[ANIM_MAX_BONES];
-animation_transform rest[ANIM_MAX_BONES];
-for (int i = 0;
-i < sk->bone_count;
-i++) rest[i] = sk->bones[i].local;
-resolve_locals(sk, rest, model);
-for (int i = 0;
-i < sk->bone_count;
-i++) {
+    animation_transform rest[ANIM_MAX_BONES];
+    for (int i = 0; i < sk->bone_count; i++) rest[i] = sk->bones[i].local;
+    resolve_locals(sk, rest, model);
+
+    for (int i = 0; i < sk->bone_count; i++) {
         mat4 m = model[i];
         // invert assuming uniform-ish scale: R*S in the 3x3, T in the last col.
         // recover per-axis scale length, normalize basis, transpose for inverse
@@ -95,8 +97,6 @@ void animation_skeleton_skinning(const animation_skeleton *sk,
 void animation_skeleton_rest_pose(const animation_skeleton *sk,
                                   animation_pose *out_pose) {
     out_pose->bone_count = sk->bone_count;
-for (int i = 0;
-i < sk->bone_count;
-i++)
+    for (int i = 0; i < sk->bone_count; i++)
         out_pose->locals[i] = sk->bones[i].local;
 }
