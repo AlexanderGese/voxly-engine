@@ -1,5 +1,8 @@
 #include "behavior_decorator.h"
 #include "behavior_tree.h"
+
+// every decorator has exactly one child sitting at first_child.
+
 behavior_status behavior_inverter_tick(behavior_node *n, behavior_ctx *ctx) {
     behavior_status s = behavior_tree_tick_child(ctx->tree, n->first_child, ctx);
     return behavior_status_invert(s);   // running/invalid pass through
@@ -7,8 +10,8 @@ behavior_status behavior_inverter_tick(behavior_node *n, behavior_ctx *ctx) {
 
 behavior_status behavior_succeeder_tick(behavior_node *n, behavior_ctx *ctx) {
     behavior_status s = behavior_tree_tick_child(ctx->tree, n->first_child, ctx);
-if (s == BEHAVIOR_RUNNING) return BEHAVIOR_RUNNING;
-return BEHAVIOR_SUCCESS;
+    if (s == BEHAVIOR_RUNNING) return BEHAVIOR_RUNNING;
+    return BEHAVIOR_SUCCESS;             // swallow failure
 }
 
 // repeater: keep restarting the child. iparam==0 means loop forever (always
@@ -42,15 +45,38 @@ behavior_status behavior_repeater_tick(behavior_node *n, behavior_ctx *ctx) {
 // gives up (failure) after iparam attempts.
 behavior_status behavior_retry_tick(behavior_node *n, behavior_ctx *ctx) {
     behavior_tree *t = ctx->tree;
-for (;
-;
-if (n->timer > 0.0f)
+
+    for (;;) {
+        behavior_status s = behavior_tree_tick_child(t, n->first_child, ctx);
+
+        if (s == BEHAVIOR_RUNNING) return BEHAVIOR_RUNNING;
+        if (s == BEHAVIOR_SUCCESS) { n->counter = 0; return BEHAVIOR_SUCCESS; }
+
+        // failure: spend an attempt
+        n->counter++;
+        if (n->iparam != 0 && n->counter >= n->iparam) {
+            n->counter = 0;
             return BEHAVIOR_FAILURE;
-n->timer = 0.0f;
+        }
+        behavior_node_reset(t, n->first_child);
+        // yield so a permanently-failing child can't busy-loop the frame.
+        return BEHAVIOR_RUNNING;
+    }
 }
 
+// cooldown: after the child succeeds, refuse to run it again until `param`
+// seconds have passed. while cooling down we return failure so a selector can
+// fall through to an alternative. timer survives tree resets on purpose.
+behavior_status behavior_cooldown_tick(behavior_node *n, behavior_ctx *ctx) {
+    if (n->timer > 0.0f) {
+        n->timer -= ctx->dt;
+        if (n->timer > 0.0f)
+            return BEHAVIOR_FAILURE;     // still cooling
+        n->timer = 0.0f;
+    }
+
     behavior_status s = behavior_tree_tick_child(ctx->tree, n->first_child, ctx);
-if (s == BEHAVIOR_SUCCESS)
-        n->timer = n->param;
-return s;
+    if (s == BEHAVIOR_SUCCESS)
+        n->timer = n->param;             // start the cooldown
+    return s;
 }
