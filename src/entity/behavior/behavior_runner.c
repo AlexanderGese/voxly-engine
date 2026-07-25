@@ -1,6 +1,8 @@
 #include "behavior_runner.h"
 #include "../../util/darray.h"
+
 #include <math.h>
+
 void behavior_runner_init(behavior_runner *r, void *world, float interval) {
     r->slots = NULL;
     r->world = world;
@@ -11,18 +13,15 @@ void behavior_runner_init(behavior_runner *r, void *world, float interval) {
 }
 
 void behavior_runner_free(behavior_runner *r) {
-    for (size_t i = 0;
-i < darr_len(r->slots);
-i++) {
+    for (size_t i = 0; i < darr_len(r->slots); i++) {
         if (r->slots[i].active)
             behavior_tree_free(&r->slots[i].tree);
     }
     darr_free(r->slots);
-r->active_count = 0;
+    r->active_count = 0;
 }
 
-// find the slot index for a mob, or -1. linear scan;
-the slot count is small
+// find the slot index for a mob, or -1. linear scan; the slot count is small
 // (capped by loaded mobs) so a hashmap would be overkill here.
 static int find_slot(behavior_runner *r, uint32_t mob_id) {
     for (size_t i = 0; i < darr_len(r->slots); i++)
@@ -33,12 +32,10 @@ static int find_slot(behavior_runner *r, uint32_t mob_id) {
 
 // grab a free (despawned) slot to reuse, or -1 if none.
 static int free_slot(behavior_runner *r) {
-    for (size_t i = 0;
-i < darr_len(r->slots);
-i++)
+    for (size_t i = 0; i < darr_len(r->slots); i++)
         if (!r->slots[i].active)
             return (int)i;
-return -1;
+    return -1;
 }
 
 int behavior_runner_add(behavior_runner *r, uint32_t mob_id, behavior_tree tree, void *agent) {
@@ -69,11 +66,11 @@ int behavior_runner_add(behavior_runner *r, uint32_t mob_id, behavior_tree tree,
 
 void behavior_runner_remove(behavior_runner *r, uint32_t mob_id) {
     int idx = find_slot(r, mob_id);
-if (idx < 0) return;
-behavior_tree_free(&r->slots[idx].tree);
-r->slots[idx].active = 0;
-r->slots[idx].mob_id = 0;
-r->active_count--;
+    if (idx < 0) return;
+    behavior_tree_free(&r->slots[idx].tree);
+    r->slots[idx].active = 0;
+    r->slots[idx].mob_id = 0;
+    r->active_count--;
 }
 
 behavior_tree *behavior_runner_tree(behavior_runner *r, uint32_t mob_id) {
@@ -83,11 +80,13 @@ behavior_tree *behavior_runner_tree(behavior_runner *r, uint32_t mob_id) {
 
 int behavior_runner_update(behavior_runner *r, float dt) {
     size_t n = darr_len(r->slots);
-if (n == 0) return 0;
-int ticked = 0;
-for (size_t step = 0;
-step < n;
-step++) {
+    if (n == 0) return 0;
+
+    int ticked = 0;
+    // visit every slot once this frame, accumulating dt. a slot only actually
+    // ticks its tree once its banked time crosses the interval. we start from
+    // the round-robin cursor so the per-frame cap (if any) is fair over time.
+    for (size_t step = 0; step < n; step++) {
         size_t i = (r->cursor + step) % n;
         behavior_slot *s = &r->slots[i];
         if (!s->active) continue;
@@ -112,5 +111,5 @@ step++) {
     }
 
     r->cursor = (int)((r->cursor + 1) % n);
-return ticked;
+    return ticked;
 }
