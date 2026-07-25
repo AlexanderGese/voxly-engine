@@ -1,0 +1,1 @@
+#ifndef ENTITY_COMBAT_COMBAT_HIT_H
