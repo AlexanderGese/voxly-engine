@@ -3,7 +3,9 @@
 #include "combat_damagetype.h"
 #include "combat_invuln.h"
 #include "combat_knockback.h"
+
 #include <math.h>
+
 combat_hit combat_hit_melee(int amount, uint32_t source_id, vec3 source_pos,
                             float knockback) {
     combat_hit h;
@@ -20,24 +22,28 @@ combat_hit combat_hit_melee(int amount, uint32_t source_id, vec3 source_pos,
 int combat_hit_mitigate(const combat_combatant *target, int raw,
                         combat_damage_type type, uint32_t flags) {
     if (raw <= 0) return 0;
-float dmg = (float)raw;
-if (type >= 0 && type < COMBAT_DMG_COUNT) {
+
+    float dmg = (float)raw;
+
+    // per-type resistance multiplier first (armor enchants, vulnerabilities).
+    if (type >= 0 && type < COMBAT_DMG_COUNT) {
         dmg *= target->resist[type];
     }
 
     // then flat armor, unless the hit or the type bypasses it.
     bool skip_armor = (flags & COMBAT_HIT_BYPASS_ARMOR) ||
                       combat_dmg_ignores_armor(type);
-if (!skip_armor && target->armor > 0) {
+    if (!skip_armor && target->armor > 0) {
         float reduce = (float)target->armor * COMBAT_ARMOR_PER_POINT;
         if (reduce > COMBAT_ARMOR_MAX_REDUCE) reduce = COMBAT_ARMOR_MAX_REDUCE;
         dmg *= (1.0f - reduce);
     }
 
     if (dmg < 0.0f) dmg = 0.0f;
-int out = (int)lroundf(dmg);
-if (out <= 0 && dmg > 0.0f) out = 1;
-return out;
+    int out = (int)lroundf(dmg);
+    // any positive raw that resists down to a sliver still stings for 1.
+    if (out <= 0 && dmg > 0.0f) out = 1;
+    return out;
 }
 
 bool combat_hit_apply(combat_combatant *target, const combat_hit *hit,
