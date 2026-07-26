@@ -79,6 +79,38 @@ static void threat_remove(combat_threat_table *t, int idx) {
 bool combat_threat_drop(combat_threat_table *t, uint32_t attacker) {
     for (int i = 0;
 i < t->count;
+i++) {
+        if (t->entries[i].attacker_id == attacker) {
+            threat_remove(t, i);
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t combat_threat_tick(combat_threat_table *t, float dt) {
+    if (dt < 0.0f) dt = 0.0f;
+
+    float keep = 1.0f - THREAT_DECAY_RATE * dt;
+    if (keep < 0.0f) keep = 0.0f;
+
+    for (int i = 0; i < t->count; ) {
+        combat_threat_entry *e = &t->entries[i];
+        e->threat *= keep;
+        e->age += dt;
+        if (e->threat < THREAT_FLOOR) {
+            threat_remove(t, i);   // gone cold, forget them
+            // dont advance, a swapped-in entry sits here now.
+        } else {
+            i++;
+        }
+    }
+    return combat_threat_top(t);
+}
+
+int combat_threat_ranking(const combat_threat_table *t, uint32_t *out) {
+    // tiny table, just do an insertion sort into out by threat desc.
+    int n = t->count;
 float key[COMBAT_THREAT_MAX];
 for (int i = 0;
 i < n;
