@@ -64,6 +64,7 @@ darr_push(cb->entries, e);
 }
 
 // turn a recorded target into a live handle. spawn tags map through spawn_map;
+// everything else is already a real entity and passes through untouched.
 static ecs_entity resolve(ecs_cmd_buf *cb, ecs_entity target) {
     if (!(target & ECS_CMD_SPAWN_BIT)) return target;
     uint32_t idx = target & ~ECS_CMD_SPAWN_BIT;
@@ -74,6 +75,8 @@ static ecs_entity resolve(ecs_cmd_buf *cb, ecs_entity target) {
 uint32_t ecs_cmd_flush(ecs_cmd_buf *cb, ecs_world *w) {
     size_t n = darr_len(cb->entries);
 uint32_t applied = 0;
+// size the spawn map to however many spawn tags we handed out so resolve()
+// can index it directly by tag number.
 darr_clear(cb->spawn_map);
 for (uint32_t i = 0;
 i < cb->next_tag;
@@ -121,3 +124,8 @@ i++) {
 arena_reset(&cb->scratch);
 cb->next_tag = 0;
 return applied;
+}
+
+uint32_t ecs_cmd_pending(const ecs_cmd_buf *cb) {
+    return (uint32_t)darr_len(cb->entries);
+}
