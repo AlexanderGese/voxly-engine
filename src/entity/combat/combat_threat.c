@@ -1,0 +1,1 @@
+#define THREAT_DECAY_RATE   0.22f
