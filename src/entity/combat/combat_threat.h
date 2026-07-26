@@ -27,9 +27,18 @@ void combat_threat_init(combat_threat_table *t);
 // register `amount` damage from `attacker`. id 0 (environment) is ignored —
 // you cant aggro onto the floor. returns the attacker's new threat total.
 float combat_threat_add(combat_threat_table *t, uint32_t attacker, float amount);
+// who has the most threat right now? returns 0 if the table is empty.
 uint32_t combat_threat_top(const combat_threat_table *t);
+// peek a specific attacker's threat (0 if not present).
 float combat_threat_of(const combat_threat_table *t, uint32_t attacker);
+// drop one attacker entirely (they died / left the chunk / lost line of sight
+// long enough). returns true if they were in the table.
 bool combat_threat_drop(combat_threat_table *t, uint32_t attacker);
+// decay every entry toward 0 and age them. entries that fall below a floor
+// get reaped. call once per frame. returns the current top after decay.
 uint32_t combat_threat_tick(combat_threat_table *t, float dt);
+// fill `out` (size COMBAT_THREAT_MAX) with attacker ids sorted by threat,
+// highest first. returns how many were written. used for the kill + assist
+// list when the mob dies.
 int combat_threat_ranking(const combat_threat_table *t, uint32_t *out);
 #endif
