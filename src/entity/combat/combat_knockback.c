@@ -1,7 +1,9 @@
 #include "combat_knockback.h"
 #include "combat_config.h"
 #include "combat_damagetype.h"
+
 #include <math.h>
+
 vec3 combat_knockback_dir(vec3 target_pos, vec3 source_pos,
                           float strength, combat_damage_type type) {
     const combat_dmg_info *info = combat_dmg_info_get(type);
@@ -37,13 +39,31 @@ vec3 combat_knockback_dir(vec3 target_pos, vec3 source_pos,
 vec3 combat_knockback_radial(vec3 target_pos, vec3 source_pos,
                              float power, float radius) {
     if (power <= 0.0f || radius <= 0.0f) return VEC3_ZERO;
-vec3 d = vec3_sub(target_pos, source_pos);
-float dist = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
-if (dist > radius) return VEC3_ZERO;
-float falloff = 1.0f - (dist / radius);
-vec3 dir;
-dir.y += 0.5f;
-}
+
+    vec3 d = vec3_sub(target_pos, source_pos);
+    float dist = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+    if (dist > radius) return VEC3_ZERO;
+
+    // linear falloff. dead center gets full power, edge gets ~0.
+    float falloff = 1.0f - (dist / radius);
+
+    vec3 dir;
+    if (dist < 0.0001f) {
+        dir = VEC3_UP;   // straight up if we are at the blast center
+    } else {
+        dir = vec3_scale(d, 1.0f / dist);
+        dir.y += 0.5f;   // explosions throw you up and out
+    }
 
     vec3 kb = vec3_scale(dir, power * falloff);
-return combat_knockback_clamp(kb);
+    return combat_knockback_clamp(kb);
+}
+
+vec3 combat_knockback_clamp(vec3 kb) {
+    float mag = sqrtf(kb.x * kb.x + kb.y * kb.y + kb.z * kb.z);
+    if (mag > COMBAT_KB_MAX && mag > 0.0001f) {
+        float s = COMBAT_KB_MAX / mag;
+        kb.x *= s; kb.y *= s; kb.z *= s;
+    }
+    return kb;
+}
