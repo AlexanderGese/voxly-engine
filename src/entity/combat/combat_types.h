@@ -1,8 +1,18 @@
 #ifndef ENTITY_COMBAT_COMBAT_TYPES_H
 #define ENTITY_COMBAT_COMBAT_TYPES_H
+
 #include "../../math/vec3.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+// self contained combat structs. like mob_common.h these stand on their
+// own so the combat/ files link clean without dragging in the whole entity
+// tree. the game glue copies hp / vel back onto the real entity each frame.
+//
+// everything here is prefixed combat_ so it wont collide with the older
+// entity/combat.c helpers.
+
+// how a hit deals its damage. resistances and on-hit behaviour key off this.
 typedef enum {
     COMBAT_DMG_GENERIC = 0,  // unspecified, no resist
     COMBAT_DMG_MELEE,        // swords, claws, punches
@@ -15,6 +25,18 @@ typedef enum {
     COMBAT_DMG_MAGIC,        // potions etc, ignores armor
     COMBAT_DMG_COUNT
 } combat_damage_type;
+
+// flags that travel with a hit and tweak how its resolved.
+enum {
+    COMBAT_HIT_NONE        = 0,
+    COMBAT_HIT_NO_KNOCKBACK = 1 << 0, // dont push the target
+    COMBAT_HIT_BYPASS_IFRAMES = 1 << 1, // ignore invuln window (fire ticks)
+    COMBAT_HIT_BYPASS_ARMOR = 1 << 2, // skip resistance multipliers
+    COMBAT_HIT_CRIT        = 1 << 3,  // was a critical (set by resolver)
+    COMBAT_HIT_LETHAL      = 1 << 4   // killed the target (set by resolver)
+};
+
+// a single incoming attack. built by the attacker, consumed by the resolver.
 typedef struct {
     int                 amount;     // raw damage before resist / variance
     combat_damage_type  type;
@@ -24,6 +46,8 @@ typedef struct {
     float               knockback;  // base knockback strength (m/s)
     uint32_t            flags;       // COMBAT_HIT_*
 } combat_hit;
+
+// the result of resolving a hit against a combatant.
 typedef struct {
     int      dealt;      // damage actually subtracted after all modifiers
     bool     blocked;    // fully absorbed (iframes / dead / immune)
@@ -31,6 +55,9 @@ typedef struct {
     bool     crit;       // rolled a crit
     vec3     knock;      // velocity delta to apply to the target
 } combat_result;
+
+// minimal combat state we attach to anything that can fight.
+// the rest of the entity (mesh, ai, etc) lives elsewhere.
 typedef struct {
     uint32_t id;
 
@@ -52,4 +79,5 @@ typedef struct {
     bool  dead;
     bool  invulnerable;     // god mode toggle (creative, cutscenes)
 } combat_combatant;
+
 #endif
