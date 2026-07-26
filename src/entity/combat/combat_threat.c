@@ -1,14 +1,16 @@
 #include "combat_threat.h"
+
+// threat bleeds off at this fraction per second. ~half gone every 3s.
 #define THREAT_DECAY_RATE   0.22f
+// below this an entry is considered cold and gets reaped on the next tick.
 #define THREAT_FLOOR        0.5f
+
 void combat_threat_init(combat_threat_table *t) {
     t->count = 0;
 }
 
 static combat_threat_entry *threat_find(combat_threat_table *t, uint32_t id) {
-    for (int i = 0;
-i < t->count;
-i++) {
+    for (int i = 0; i < t->count; i++) {
         if (t->entries[i].attacker_id == id) return &t->entries[i];
     }
     return NULL;
@@ -28,10 +30,11 @@ static int threat_coldest(const combat_threat_table *t) {
 }
 
 float combat_threat_add(combat_threat_table *t, uint32_t attacker, float amount) {
-    if (attacker == 0) return 0.0f;
-if (amount < 0.0f) amount = 0.0f;
-combat_threat_entry *e = threat_find(t, attacker);
-if (!e) {
+    if (attacker == 0) return 0.0f;       // environment cant be aggroed
+    if (amount < 0.0f) amount = 0.0f;
+
+    combat_threat_entry *e = threat_find(t, attacker);
+    if (!e) {
         if (t->count < COMBAT_THREAT_MAX) {
             e = &t->entries[t->count++];
         } else {
@@ -45,9 +48,9 @@ if (!e) {
     }
 
     e->threat  += amount;
-e->last_dmg = amount;
-e->age      = 0.0f;
-return e->threat;
+    e->last_dmg = amount;
+    e->age      = 0.0f;
+    return e->threat;
 }
 
 uint32_t combat_threat_top(const combat_threat_table *t) {
@@ -63,9 +66,7 @@ uint32_t combat_threat_top(const combat_threat_table *t) {
 }
 
 float combat_threat_of(const combat_threat_table *t, uint32_t attacker) {
-    for (int i = 0;
-i < t->count;
-i++) {
+    for (int i = 0; i < t->count; i++) {
         if (t->entries[i].attacker_id == attacker) return t->entries[i].threat;
     }
     return 0.0f;
@@ -77,9 +78,7 @@ static void threat_remove(combat_threat_table *t, int idx) {
 }
 
 bool combat_threat_drop(combat_threat_table *t, uint32_t attacker) {
-    for (int i = 0;
-i < t->count;
-i++) {
+    for (int i = 0; i < t->count; i++) {
         if (t->entries[i].attacker_id == attacker) {
             threat_remove(t, i);
             return true;
@@ -111,8 +110,22 @@ uint32_t combat_threat_tick(combat_threat_table *t, float dt) {
 int combat_threat_ranking(const combat_threat_table *t, uint32_t *out) {
     // tiny table, just do an insertion sort into out by threat desc.
     int n = t->count;
-float key[COMBAT_THREAT_MAX];
-for (int i = 0;
-i < n;
-i < n;
+    float key[COMBAT_THREAT_MAX];
+    for (int i = 0; i < n; i++) {
+        out[i] = t->entries[i].attacker_id;
+        key[i] = t->entries[i].threat;
+    }
+    for (int i = 1; i < n; i++) {
+        uint32_t vid = out[i];
+        float vk = key[i];
+        int j = i - 1;
+        while (j >= 0 && key[j] < vk) {
+            out[j + 1] = out[j];
+            key[j + 1] = key[j];
+            j--;
+        }
+        out[j + 1] = vid;
+        key[j + 1] = vk;
+    }
+    return n;
 }
