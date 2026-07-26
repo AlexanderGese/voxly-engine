@@ -1,6 +1,9 @@
 #include "ecs_cmd.h"
+
 #include <string.h>
+
 #include "../../util/darray.h"
+
 void ecs_cmd_init(ecs_cmd_buf *cb) {
     cb->entries   = NULL;
     cb->spawn_map = NULL;
@@ -10,8 +13,8 @@ void ecs_cmd_init(ecs_cmd_buf *cb) {
 
 void ecs_cmd_free(ecs_cmd_buf *cb) {
     darr_free(cb->entries);
-darr_free(cb->spawn_map);
-arena_free(&cb->scratch);
+    darr_free(cb->spawn_map);
+    arena_free(&cb->scratch);
 }
 
 ecs_entity ecs_cmd_spawn(ecs_cmd_buf *cb) {
@@ -31,11 +34,12 @@ ecs_entity ecs_cmd_spawn(ecs_cmd_buf *cb) {
 void ecs_cmd_add(ecs_cmd_buf *cb, ecs_entity target, ecs_cmp c,
                  const void *data) {
     ecs_cmd_entry e;
-e.op     = ECS_CMD_ADD;
-e.target = target;
-e.cmp    = c;
-e.payload = NULL;
-if (data) {
+    e.op     = ECS_CMD_ADD;
+    e.target = target;
+    e.cmp    = c;
+    e.payload = NULL;
+
+    if (data) {
         size_t sz = ecs_component_size(c);
         // copy the payload now -- the caller's struct is usually a stack local
         // that's gone by flush time.
@@ -56,11 +60,11 @@ void ecs_cmd_remove(ecs_cmd_buf *cb, ecs_entity target, ecs_cmp c) {
 
 void ecs_cmd_destroy(ecs_cmd_buf *cb, ecs_entity target) {
     ecs_cmd_entry e;
-e.op      = ECS_CMD_DESTROY;
-e.target  = target;
-e.cmp     = 0;
-e.payload = NULL;
-darr_push(cb->entries, e);
+    e.op      = ECS_CMD_DESTROY;
+    e.target  = target;
+    e.cmp     = 0;
+    e.payload = NULL;
+    darr_push(cb->entries, e);
 }
 
 // turn a recorded target into a live handle. spawn tags map through spawn_map;
@@ -74,17 +78,15 @@ static ecs_entity resolve(ecs_cmd_buf *cb, ecs_entity target) {
 
 uint32_t ecs_cmd_flush(ecs_cmd_buf *cb, ecs_world *w) {
     size_t n = darr_len(cb->entries);
-uint32_t applied = 0;
-// size the spawn map to however many spawn tags we handed out so resolve()
-// can index it directly by tag number.
-darr_clear(cb->spawn_map);
-for (uint32_t i = 0;
-i < cb->next_tag;
-i++)
+    uint32_t applied = 0;
+
+    // size the spawn map to however many spawn tags we handed out so resolve()
+    // can index it directly by tag number.
+    darr_clear(cb->spawn_map);
+    for (uint32_t i = 0; i < cb->next_tag; i++)
         darr_push(cb->spawn_map, ECS_NULL);
-for (size_t i = 0;
-i < n;
-i++) {
+
+    for (size_t i = 0; i < n; i++) {
         ecs_cmd_entry *e = &cb->entries[i];
         switch (e->op) {
         case ECS_CMD_SPAWN: {
@@ -121,9 +123,9 @@ i++) {
 
     // reset for the next frame: ops gone, arena rewound, tags back to zero.
     darr_clear(cb->entries);
-arena_reset(&cb->scratch);
-cb->next_tag = 0;
-return applied;
+    arena_reset(&cb->scratch);
+    cb->next_tag = 0;
+    return applied;
 }
 
 uint32_t ecs_cmd_pending(const ecs_cmd_buf *cb) {
