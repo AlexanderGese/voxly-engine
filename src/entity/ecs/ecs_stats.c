@@ -1,7 +1,9 @@
 #include "ecs_stats.h"
 #include "ecs_store.h"
+
 #include <stdio.h>
 #include <string.h>
+
 void ecs_stats_init(ecs_stats *s) {
     memset(s, 0, sizeof *s);
     s->hottest_sys = "-";
@@ -10,7 +12,7 @@ void ecs_stats_init(ecs_stats *s) {
 
 void ecs_stats_reset_peaks(ecs_stats *s) {
     s->tick_ms_peak = 0.0;
-s->hottest_ms   = 0.0;
+    s->hottest_ms   = 0.0;
 }
 
 void ecs_stats_sample(ecs_stats *s, const ecs_world *w,
@@ -59,7 +61,8 @@ void ecs_stats_sample(ecs_stats *s, const ecs_world *w,
 
 int ecs_stats_format(const ecs_stats *s, char *buf, int cap) {
     if (cap <= 0) return 0;
-int n = snprintf(buf, (size_t)cap,
+    // compact, one fact per line. snprintf clamps for us; we just track the cut.
+    int n = snprintf(buf, (size_t)cap,
         "ecs: %u ent  (%u free)\n"
         "tick %.2fms (peak %.2f)\n"
         "hot: %s %.2fms\n"
@@ -75,5 +78,8 @@ int n = snprintf(buf, (size_t)cap,
         s->per_component[ECS_CMP_AI],
         (unsigned long long)s->events_total,
         (unsigned long long)s->events_dropped);
-return n;
+
+    if (n < 0) { buf[0] = '\0'; return 0; }
+    if (n >= cap) n = cap - 1;     // snprintf returns would-be length
+    return n;
 }
