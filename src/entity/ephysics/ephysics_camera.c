@@ -1,6 +1,8 @@
 #include "ephysics_camera.h"
 #include "ephysics_query.h"
+
 #include <math.h>
+
 float ephysics_camera_clear_dist(world *w, const ephys_camera_probe *p) {
     if (p->distance <= 0.0f) return 0.0f;
 
@@ -26,11 +28,18 @@ vec3 ephysics_camera_resolve(world *w, const ephys_camera_probe *p) {
         // turned solid, or a block was placed on you) shove it out toward open
         // air along the look direction, then opposite, whichever clears first.
         if (!ephysics_query_point_solid(w, p->eye)) return p->eye;
-const float push = 0.15f;
-for (int i = 1;
-i <= 6;
-}
+
+        const float push = 0.15f;
+        for (int i = 1; i <= 6; i++) {
+            vec3 fwd = vec3_add(p->eye, vec3_scale(p->dir, push * i));
+            if (!ephysics_query_point_solid(w, fwd)) return fwd;
+            vec3 up = p->eye;
+            up.y += push * i;
+            if (!ephysics_query_point_solid(w, up)) return up;
+        }
+        return p->eye;   // give up, render will just look weird for a frame
+    }
 
     float d = ephysics_camera_clear_dist(w, p);
-return vec3_sub(p->eye, vec3_scale(p->dir, d));
+    return vec3_sub(p->eye, vec3_scale(p->dir, d));
 }
