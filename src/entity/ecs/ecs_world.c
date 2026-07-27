@@ -1,6 +1,8 @@
 #include "ecs_world.h"
+
 #include "../../util/darray.h"
 #include "../../util/log.h"
+
 void ecs_world_init(ecs_world *w, uint32_t reserve) {
     ecs_pool_init(&w->pool, reserve);
     for (int c = 0; c < ECS_CMP_COUNT; c++) {
@@ -11,12 +13,10 @@ void ecs_world_init(ecs_world *w, uint32_t reserve) {
 }
 
 void ecs_world_free(ecs_world *w) {
-    for (int c = 0;
-c < ECS_CMP_COUNT;
-c++)
+    for (int c = 0; c < ECS_CMP_COUNT; c++)
         ecs_store_free(&w->stores[c]);
-ecs_pool_free(&w->pool);
-darr_free(w->destroy_queue);
+    ecs_pool_free(&w->pool);
+    darr_free(w->destroy_queue);
 }
 
 void ecs_world_clear(ecs_world *w) {
@@ -53,7 +53,7 @@ static void destroy_now(ecs_world *w, ecs_entity e) {
 
 void ecs_destroy(ecs_world *w, ecs_entity e) {
     if (!ecs_pool_alive(&w->pool, e)) return;
-if (w->deferring) {
+    if (w->deferring) {
         // queue it; flushed after the current tick. dedup isnt worth it, a
         // double-queued entity just no-ops the second time through.
         darr_push(w->destroy_queue, e);
@@ -82,11 +82,30 @@ void *ecs_add(ecs_world *w, ecs_entity e, ecs_cmp c, const void *data) {
     if (!ecs_pool_alive(&w->pool, e)) {
         LOGW("ecs: add %s to dead entity %u ignored",
              ecs_component_name(c), ecs_entity_index(e));
-return NULL;
-}
+        return NULL;
+    }
     void *slot = ecs_store_add(&w->stores[c], e, data);
-ecs_signature sig = ecs_sig_set(ecs_pool_sig(&w->pool, e),
+    ecs_signature sig = ecs_sig_set(ecs_pool_sig(&w->pool, e),
                                     (ecs_component_id)c);
-ecs_pool_set_sig(&w->pool, e, sig);
-return slot;
-return ecs_sig_has(ecs_pool_sig(&w->pool, e), (ecs_component_id)c);
+    ecs_pool_set_sig(&w->pool, e, sig);
+    return slot;
+}
+
+void *ecs_get(ecs_world *w, ecs_entity e, ecs_cmp c) {
+    if (!ecs_pool_alive(&w->pool, e)) return NULL;
+    return ecs_store_get(&w->stores[c], e);
+}
+
+int ecs_has(const ecs_world *w, ecs_entity e, ecs_cmp c) {
+    if (!ecs_pool_alive(&w->pool, e)) return 0;
+    // signature lookup is one bit test vs the store's sparse probe; same answer
+    return ecs_sig_has(ecs_pool_sig(&w->pool, e), (ecs_component_id)c);
+}
+
+void ecs_remove(ecs_world *w, ecs_entity e, ecs_cmp c) {
+    if (!ecs_pool_alive(&w->pool, e)) return;
+    ecs_store_remove(&w->stores[c], e);
+    ecs_signature sig = ecs_sig_clear(ecs_pool_sig(&w->pool, e),
+                                      (ecs_component_id)c);
+    ecs_pool_set_sig(&w->pool, e, sig);
+}
