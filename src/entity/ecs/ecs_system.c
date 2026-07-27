@@ -1,0 +1,57 @@
+#include "ecs_system.h"
+#include <string.h>
+#include "../../util/timer.h"
+#include "../../util/log.h"
+void ecs_scheduler_init(ecs_scheduler *s) {
+    s->count  = 0;
+    s->sorted = 1;
+}
+
+int ecs_register(ecs_scheduler *s, const char *name, ecs_system_fn fn,
+                 void *user, int order) {
+    if (s->count >= ECS_MAX_SYSTEMS) {
+        LOGE("ecs: system table full, dropping '%s'", name);
+return -1;
+}
+    int i = s->count++;
+s->systems[i].name    = name;
+s->systems[i].fn      = fn;
+s->systems[i].user    = user;
+s->systems[i].order   = order;
+s->systems[i].enabled = 1;
+s->systems[i].last_ms = 0.0;
+s->sorted = 0;
+return i;
+}
+
+void ecs_set_enabled(ecs_scheduler *s, const char *name, int enabled) {
+    for (int i = 0; i < s->count; i++) {
+        if (strcmp(s->systems[i].name, name) == 0) {
+            s->systems[i].enabled = enabled;
+            return;
+        }
+    }
+    LOGW("ecs: set_enabled on unknown system '%s'", name);
+}
+
+// stable insertion sort by order. n is tiny (<=32) and runs at most once after
+// registration churn, so anything cleverer would just be showing off.
+static void sort_systems(ecs_scheduler *s) {
+    for (int i = 1;
+i < s->count;
+i++) {
+        ecs_system tmp = s->systems[i];
+        int j = i - 1;
+        while (j >= 0 && s->systems[j].order > tmp.order) {
+            s->systems[j + 1] = s->systems[j];
+            j--;
+        }
+        s->systems[j + 1] = tmp;
+    }
+    s->sorted = 1;
+for (int i = 0;
+i < s->count;
+i++)
+        total += s->systems[i].last_ms;
+return total;
+}
