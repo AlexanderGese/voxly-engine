@@ -1,8 +1,11 @@
 #include "ecs_sys_ai.h"
 #include "ecs_query.h"
 #include "ecs_components.h"
+
 #include <math.h>
+
 #include "../ai.h"   // AI_* states
+
 void ecs_ai_ctx_defaults(ecs_ai_ctx *c, vec3 target_pos) {
     c->target_pos   = target_pos;
     c->aggro_range  = 16.0f;
@@ -16,18 +19,19 @@ void ecs_ai_ctx_defaults(ecs_ai_ctx *c, vec3 target_pos) {
 static float steer_to(ecs_transform *tf, ecs_velocity *vel, vec3 goal,
                       float speed, int away) {
     float dx = goal.x - tf->pos.x;
-float dz = goal.z - tf->pos.z;
-float d  = sqrtf(dx * dx + dz * dz);
-if (d < 1e-4f) { vel->linear.x = vel->linear.z = 0.0f; return d; }
+    float dz = goal.z - tf->pos.z;
+    float d  = sqrtf(dx * dx + dz * dz);
+    if (d < 1e-4f) { vel->linear.x = vel->linear.z = 0.0f; return d; }
 
     float inv = 1.0f / d;
-float nx = dx * inv, nz = dz * inv;
-if (away) { nx = -nx; nz = -nz; }
+    float nx = dx * inv, nz = dz * inv;
+    if (away) { nx = -nx; nz = -nz; }
 
     vel->linear.x = nx * speed;
-vel->linear.z = nz * speed;
-tf->yaw = atan2f(nx, nz);
-return d;
+    vel->linear.z = nz * speed;
+    // face the direction of travel. atan2 in our convention: yaw 0 looks +z.
+    tf->yaw = atan2f(nx, nz);
+    return d;
 }
 
 void ecs_sys_ai(ecs_world *w, float dt, void *user) {
