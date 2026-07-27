@@ -2,7 +2,12 @@
 #include "ephysics_aabb.h"
 #include "ephysics_fluid.h"
 #include "../../world/block.h"
+
 #include <math.h>
+
+// slab ids live in the ext range. we dont want to pull all of block_ext.h in
+// here just for two constants, so the slab check is a soft predicate the fluid
+// module already centralizes. for collision height we special-case here.
 static int is_half_block(block_id id) {
     // BLOCK_SLAB_STONE / BLOCK_SLAB_WOOD are the only bottom-half coll;
     // querying block_ext for is_slab would be cleaner but couples us harder.
@@ -11,11 +16,11 @@ static int is_half_block(block_id id) {
 
 int ephysics_block_box(world *w, int wx, int wy, int wz, block_id id, aabb *out) {
     (void)w;
-if (!block_is_solid(id)) return 0;
-float h = is_half_block(id) ? 0.5f : 1.0f;
-out->min = vec3_new((float)wx,       (float)wy,       (float)wz);
-out->max = vec3_new((float)wx + 1.f, (float)wy + h,   (float)wz + 1.f);
-return 1;
+    if (!block_is_solid(id)) return 0;       // air, plants, fluids: no box
+    float h = is_half_block(id) ? 0.5f : 1.0f;
+    out->min = vec3_new((float)wx,       (float)wy,       (float)wz);
+    out->max = vec3_new((float)wx + 1.f, (float)wy + h,   (float)wz + 1.f);
+    return 1;
 }
 
 // union of the start box and the box after applying delta, then padded by one
@@ -33,12 +38,10 @@ static aabb swept_region(const ephys_body *b, vec3 delta) {
 }
 
 static void push_box(ephys_candidates *out, aabb box, block_id id) {
-    if (out->count >= EPHYS_MAX_CANDIDATES) { out->overflowed = 1;
-return;
-}
+    if (out->count >= EPHYS_MAX_CANDIDATES) { out->overflowed = 1; return; }
     out->boxes[out->count] = box;
-out->ids[out->count]   = id;
-out->count++;
+    out->ids[out->count]   = id;
+    out->count++;
 }
 
 void ephysics_gather(world *w, const ephys_body *b, vec3 delta,
@@ -67,11 +70,25 @@ void ephysics_gather(world *w, const ephys_body *b, vec3 delta,
 
 void ephysics_gather_fluid(world *w, const ephys_body *b, ephys_candidates *out) {
     out->count = 0;
-out->overflowed = 0;
-aabb a = ephysics_body_box(b);
-int x0 = (int)floorf(a.min.x), x1 = (int)floorf(a.max.x);
-int y0 = (int)floorf(a.min.y), y1 = (int)floorf(a.max.y);
-int z0 = (int)floorf(a.min.z), z1 = (int)floorf(a.max.z);
-for (int y = y0;
-y <= y1;
+    out->overflowed = 0;
+
+    aabb a = ephysics_body_box(b);
+    int x0 = (int)floorf(a.min.x), x1 = (int)floorf(a.max.x);
+    int y0 = (int)floorf(a.min.y), y1 = (int)floorf(a.max.y);
+    int z0 = (int)floorf(a.min.z), z1 = (int)floorf(a.max.z);
+
+    for (int y = y0; y <= y1; y++) {
+        if (y < 0 || y >= CHUNK_SIZE_Y) continue;
+        for (int z = z0; z <= z1; z++) {
+            for (int x = x0; x <= x1; x++) {
+                block_id id = world_get_block(w, x, y, z);
+                if (!ephysics_is_fluid(id)) continue;
+                // fluid box is a full cell; the overlap math handles partials.
+                aabb box;
+                box.min = vec3_new((float)x,      (float)y,      (float)z);
+                box.max = vec3_new((float)x + 1.f, (float)y + 1.f,(float)z + 1.f);
+                push_box(out, box, id);
+            }
+        }
+    }
 }
