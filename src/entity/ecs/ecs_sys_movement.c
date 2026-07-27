@@ -1,6 +1,11 @@
 #include "ecs_sys_movement.h"
 #include "ecs_query.h"
+
 #include "../../config.h"
+
+// semi-implicit euler. gravity first so the integrated position uses the
+// post-gravity velocity -- feels less floaty than the other order, which i
+// only noticed because jumps felt mushy for a week.
 void ecs_sys_movement(ecs_world *w, float dt, void *user) {
     (void)user;
     ecs_query q;
@@ -43,9 +48,10 @@ void ecs_sys_movement(ecs_world *w, float dt, void *user) {
 
 void ecs_sys_lifetime(ecs_world *w, float dt, void *user) {
     (void)user;
-ecs_query q;
-ecs_query_begin(&q, w, ecs_with(ECS_CMP_LIFETIME, -1), 0);
-while (ecs_query_next(&q)) {
+    ecs_query q;
+    ecs_query_begin(&q, w, ecs_with(ECS_CMP_LIFETIME, -1), 0);
+
+    while (ecs_query_next(&q)) {
         ecs_lifetime *lt = ecs_query_get(&q, ECS_CMP_LIFETIME);
         lt->remaining -= dt;
         if (lt->remaining <= 0.0f)
@@ -55,9 +61,10 @@ while (ecs_query_next(&q)) {
 
 void ecs_sys_health(ecs_world *w, float dt, void *user) {
     (void)user;
-ecs_query q;
-ecs_query_begin(&q, w, ecs_with(ECS_CMP_HEALTH, -1), 0);
-while (ecs_query_next(&q)) {
+    ecs_query q;
+    ecs_query_begin(&q, w, ecs_with(ECS_CMP_HEALTH, -1), 0);
+
+    while (ecs_query_next(&q)) {
         ecs_health *h = ecs_query_get(&q, ECS_CMP_HEALTH);
         if (h->hurt_timer > 0.0f) {
             h->hurt_timer -= dt;
