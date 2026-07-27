@@ -1,6 +1,8 @@
 #include "ecs_sys_combat.h"
 #include "ecs_components.h"
+
 #include "../../math/vec3.h"
+
 void ecs_combat_ctx_defaults(ecs_combat_ctx *c, ecs_events *events) {
     c->events      = events;
     c->iframe_time = 0.4f;   // matches the old combat.c hurt cooldown
@@ -10,8 +12,11 @@ void ecs_combat_ctx_defaults(ecs_combat_ctx *c, ecs_events *events) {
 void ecs_deal_damage(ecs_combat_ctx *c, ecs_entity src, ecs_entity dst,
                      float amount) {
     if (!c || !c->events) return;
-if (amount < 0.0f) amount = 0.0f;
-ecs_events_emit(c->events, ECS_EV_DAMAGED, src, dst, amount, VEC3_ZERO);
+    if (amount < 0.0f) amount = 0.0f;
+    // we dont have the world here to read the victim's position, so leave
+    // `where` zeroed -- the combat pass fills in real positions when it knows
+    // them. the event just needs to carry who/who/howmuch.
+    ecs_events_emit(c->events, ECS_EV_DAMAGED, src, dst, amount, VEC3_ZERO);
 }
 
 // apply one damage event. returns 1 if it actually landed (wasnt blocked by
@@ -32,12 +37,11 @@ static int apply_hit(ecs_world *w, ecs_combat_ctx *c, const ecs_event *ev) {
 
 void ecs_sys_combat(ecs_world *w, float dt, void *user) {
     (void)dt;
-ecs_combat_ctx *c = user;
-if (!c || !c->events) return;
-uint32_t n = ecs_events_count(c->events);
-for (uint32_t i = 0;
-i < n;
-i++) {
+    ecs_combat_ctx *c = user;
+    if (!c || !c->events) return;
+
+    uint32_t n = ecs_events_count(c->events);
+    for (uint32_t i = 0; i < n; i++) {
         const ecs_event *ev = ecs_events_at(c->events, i);
         if (ev->kind != ECS_EV_DAMAGED) continue;
 
