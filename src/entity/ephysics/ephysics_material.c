@@ -1,5 +1,6 @@
 #include "ephysics_material.h"
 #include "../../config.h"
+
 ephys_material ephysics_material_default(void) {
     ephys_material m;
     m.mass           = 1.0f;
@@ -15,11 +16,11 @@ ephys_material ephysics_material_default(void) {
 
 ephys_material ephysics_material_player(void) {
     ephys_material m = ephysics_material_default();
-m.step_height    = 0.6f;
-m.ground_friction= 0.74f;
-m.buoyancy       = 0.96f;
-m.max_speed      = PLAYER_MOVE_SPEED * PLAYER_SPRINT_MULT * 1.3f;
-return m;
+    m.step_height    = 0.6f;          // classic half-a-bit-more block step
+    m.ground_friction= 0.74f;
+    m.buoyancy       = 0.96f;         // can tread water indefinitely
+    m.max_speed      = PLAYER_MOVE_SPEED * PLAYER_SPRINT_MULT * 1.3f;
+    return m;
 }
 
 ephys_material ephysics_material_item(void) {
@@ -35,7 +36,7 @@ ephys_material ephysics_material_item(void) {
 
 ephys_material ephysics_material_for(entity_type t) {
     ephys_material m = ephysics_material_default();
-switch (t) {
+    switch (t) {
         case ET_ZOMBIE:
         case ET_SKELETON:
             m.step_height = 0.6f;     // humanoids step up blocks
@@ -53,6 +54,24 @@ switch (t) {
             break;
     }
     return m;
-e->vel       = b->vel;
-e->on_ground = (b->flags & EPHYS_F_GROUNDED) ? 1 : 0;
+}
+
+ephys_body ephysics_body_from_entity(const entity *e) {
+    ephys_body b;
+    float w = entity_width(e->type);
+    float h = entity_height(e->type);
+    b.pos      = e->pos;
+    b.vel      = e->vel;
+    b.half     = vec3_new(w * 0.5f, h * 0.5f, w * 0.5f);
+    b.center_y = h * 0.5f;
+    b.mat      = ephysics_material_for(e->type);
+    b.flags    = e->on_ground ? EPHYS_F_GROUNDED : 0;
+    b.fluid_h  = 0.0f;
+    return b;
+}
+
+void ephysics_body_to_entity(const ephys_body *b, entity *e) {
+    e->pos       = b->pos;
+    e->vel       = b->vel;
+    e->on_ground = (b->flags & EPHYS_F_GROUNDED) ? 1 : 0;
 }
