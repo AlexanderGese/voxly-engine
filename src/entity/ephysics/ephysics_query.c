@@ -1,7 +1,9 @@
 #include "ephysics_query.h"
 #include "ephysics_aabb.h"
 #include "ephysics_broadphase.h"
+
 #include <math.h>
+
 int ephysics_query_solid_cell(world *w, int wx, int wy, int wz) {
     block_id id = world_get_block(w, wx, wy, wz);
     aabb box;
@@ -12,12 +14,13 @@ int ephysics_query_solid_cell(world *w, int wx, int wy, int wz) {
 
 int ephysics_query_point_solid(world *w, vec3 p) {
     int wx = (int)floorf(p.x);
-int wy = (int)floorf(p.y);
-int wz = (int)floorf(p.z);
-block_id id = world_get_block(w, wx, wy, wz);
-aabb box;
-if (!ephysics_block_box(w, wx, wy, wz, id, &box)) return 0;
-return aabb_contains(box, p);
+    int wy = (int)floorf(p.y);
+    int wz = (int)floorf(p.z);
+    block_id id = world_get_block(w, wx, wy, wz);
+    aabb box;
+    if (!ephysics_block_box(w, wx, wy, wz, id, &box)) return 0;
+    // slabs etc dont fill the whole cell, so actually test the point.
+    return aabb_contains(box, p);
 }
 
 int ephysics_query_box_solid(world *w, aabb box) {
@@ -38,14 +41,15 @@ int ephysics_query_box_solid(world *w, aabb box) {
 
 float ephysics_query_ground_dist(world *w, const ephys_body *b, float max) {
     aabb box = ephysics_body_box(b);
-float feet = box.min.y;
-int x0 = (int)floorf(box.min.x), x1 = (int)floorf(box.max.x);
-int z0 = (int)floorf(box.min.z), z1 = (int)floorf(box.max.z);
-int ystart = (int)floorf(feet - 0.001f);
-int ystop  = (int)floorf(feet - max);
-for (int y = ystart;
-y >= ystop;
-y--) {
+    float feet = box.min.y;
+    // walk down cell by cell under the footprint. step is one block; we refine
+    // to the exact surface y of whatever box we land on.
+    int x0 = (int)floorf(box.min.x), x1 = (int)floorf(box.max.x);
+    int z0 = (int)floorf(box.min.z), z1 = (int)floorf(box.max.z);
+
+    int ystart = (int)floorf(feet - 0.001f);
+    int ystop  = (int)floorf(feet - max);
+    for (int y = ystart; y >= ystop; y--) {
         float best = -1.0f;
         for (int z = z0; z <= z1; z++)
             for (int x = x0; x <= x1; x++) {
