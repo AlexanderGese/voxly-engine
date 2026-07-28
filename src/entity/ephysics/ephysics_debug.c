@@ -1,7 +1,9 @@
 #include "ephysics_debug.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+
 const char *ephysics_flags_str(uint32_t flags, char *buf, int cap) {
     if (cap <= 0) return buf;
     buf[0] = '\0';
@@ -31,7 +33,15 @@ const char *ephysics_flags_str(uint32_t flags, char *buf, int cap) {
 
 int ephysics_debug_boxes(const ephys_candidates *c, aabb *out, int cap) {
     int n = c->count < cap ? c->count : cap;
-for (int i = 0;
-i < n;
-i++) out[i] = c->boxes[i];
-return n;
+    for (int i = 0; i < n; i++) out[i] = c->boxes[i];
+    return n;
+}
+
+void ephysics_debug_line(const ephys_body *b, char *buf, int cap) {
+    char flags[64];
+    ephysics_flags_str(b->flags, flags, sizeof flags);
+    float spd = sqrtf(b->vel.x * b->vel.x + b->vel.z * b->vel.z);
+    snprintf(buf, cap,
+             "pos %.2f,%.2f,%.2f  vy %+.2f  hspd %.2f  fluid %.2f  [%s]",
+             b->pos.x, b->pos.y, b->pos.z, b->vel.y, spd, b->fluid_h, flags);
+}
