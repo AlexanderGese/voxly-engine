@@ -6,7 +6,9 @@
 #include "ephysics_friction.h"
 #include "ephysics_fluid.h"
 #include "../../config.h"
+
 #include <math.h>
+
 ephys_input ephysics_input_none(void) {
     ephys_input in;
     in.wish_vel = VEC3_ZERO;
@@ -20,16 +22,16 @@ ephys_input ephysics_input_none(void) {
 // approach so direction changes feel weighty but responsive.
 static void apply_wish(ephys_body *b, const ephys_input *in, float dt) {
     if (in->accel <= 0.0f) return;
-vec3 cur  = vec3_new(b->vel.x, 0.0f, b->vel.z);
-vec3 want = vec3_new(in->wish_vel.x, 0.0f, in->wish_vel.z);
-vec3 diff = vec3_sub(want, cur);
-float dist = vec3_length(diff);
-if (dist < 1e-5f) return;
-float dv = in->accel * dt;
-if (dv > dist) dv = dist;
-vec3 add = vec3_scale(vec3_normalize(diff), dv);
-b->vel.x += add.x;
-b->vel.z += add.z;
+    vec3 cur  = vec3_new(b->vel.x, 0.0f, b->vel.z);
+    vec3 want = vec3_new(in->wish_vel.x, 0.0f, in->wish_vel.z);
+    vec3 diff = vec3_sub(want, cur);
+    float dist = vec3_length(diff);
+    if (dist < 1e-5f) return;
+    float dv = in->accel * dt;
+    if (dv > dist) dv = dist;          // dont overshoot the target velocity
+    vec3 add = vec3_scale(vec3_normalize(diff), dv);
+    b->vel.x += add.x;
+    b->vel.z += add.z;
 }
 
 static void apply_gravity(ephys_body *b, float dt) {
@@ -44,14 +46,14 @@ static void apply_gravity(ephys_body *b, float dt) {
 
 static void handle_jump(ephys_body *b, const ephys_input *in) {
     if (!in) return;
-if (in->jump && (b->flags & EPHYS_F_GROUNDED)) {
+    if (in->jump && (b->flags & EPHYS_F_GROUNDED)) {
         b->vel.y = PLAYER_JUMP_VEL;
         b->flags &= ~(uint32_t)EPHYS_F_GROUNDED;
     } else if (in->swim_up && (b->flags & EPHYS_F_IN_WATER)) {
         // paddle: bleed toward an upward swim speed instead of snapping.
         float target = 3.0f;
-if (b->vel.y < target) b->vel.y += (target - b->vel.y) * 0.4f;
-}
+        if (b->vel.y < target) b->vel.y += (target - b->vel.y) * 0.4f;
+    }
 }
 
 void ephysics_step_body(world *w, ephys_body *b, const ephys_input *in, float dt) {
@@ -118,7 +120,7 @@ void ephysics_step_body(world *w, ephys_body *b, const ephys_input *in, float dt
 
 void ephysics_tick_entity(world *w, entity *e, const ephys_input *in, float dt) {
     if (!e || !e->alive) return;
-ephys_body b = ephysics_body_from_entity(e);
-ephysics_step_body(w, &b, in, dt);
-ephysics_body_to_entity(&b, e);
+    ephys_body b = ephysics_body_from_entity(e);
+    ephysics_step_body(w, &b, in, dt);
+    ephysics_body_to_entity(&b, e);
 }
