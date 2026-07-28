@@ -1,7 +1,11 @@
 #include "ephysics_friction.h"
 #include "ephysics_aabb.h"
 #include "../../world/block.h"
+
 #include <math.h>
+
+// per-block surface multipliers. most blocks are 1.0 (use the body default).
+// ice is the notable exception. slime would go here too if we had it.
 static float block_friction_mult(block_id id) {
     switch (id) {
         case BLOCK_ICE:   return 0.18f;   // very slippy
@@ -13,15 +17,21 @@ static float block_friction_mult(block_id id) {
 
 float ephysics_surface_friction(world *w, const ephys_body *b) {
     if (!(b->flags & EPHYS_F_GROUNDED)) return b->mat.air_friction;
-aabb box = ephysics_body_box(b);
-int wx = (int)floorf((box.min.x + box.max.x) * 0.5f);
-int wz = (int)floorf((box.min.z + box.max.z) * 0.5f);
-int wy = (int)floorf(box.min.y - 0.05f);
-block_id below = world_get_block(w, wx, wy, wz);
-float mult = block_is_solid(below) ? block_friction_mult(below) : 1.0f;
-float loss = (1.0f - b->mat.ground_friction) * mult;
-if (loss > 1.0f) loss = 1.0f;
-return 1.0f - loss;
+
+    // sample the cell just below the body's feet box. nudge down past the skin.
+    aabb box = ephysics_body_box(b);
+    int wx = (int)floorf((box.min.x + box.max.x) * 0.5f);
+    int wz = (int)floorf((box.min.z + box.max.z) * 0.5f);
+    int wy = (int)floorf(box.min.y - 0.05f);
+
+    block_id below = world_get_block(w, wx, wy, wz);
+    float mult = block_is_solid(below) ? block_friction_mult(below) : 1.0f;
+
+    // retained-velocity model: lower friction coeff -> keep more speed. so we
+    // interpolate the *loss* by the multiplier. mult<1 (ice) means less loss.
+    float loss = (1.0f - b->mat.ground_friction) * mult;
+    if (loss > 1.0f) loss = 1.0f;
+    return 1.0f - loss;
 }
 
 void ephysics_friction_apply(world *w, ephys_body *b, float dt) {
@@ -53,11 +63,11 @@ void ephysics_friction_apply(world *w, ephys_body *b, float dt) {
 
 int ephysics_clamp_speed(ephys_body *b) {
     float spd2 = b->vel.x * b->vel.x + b->vel.z * b->vel.z;
-float max  = b->mat.max_speed;
-if (spd2 <= max * max) return 0;
-float spd = sqrtf(spd2);
-float s = max / spd;
-b->vel.x *= s;
-b->vel.z *= s;
-return 1;
+    float max  = b->mat.max_speed;
+    if (spd2 <= max * max) return 0;
+    float spd = sqrtf(spd2);
+    float s = max / spd;
+    b->vel.x *= s;
+    b->vel.z *= s;
+    return 1;
 }

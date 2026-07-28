@@ -3,13 +3,15 @@
 #include "ephysics_broadphase.h"
 #include "../../world/block.h"
 #include "../../config.h"
+
 #include <math.h>
+
 int ephysics_is_fluid(block_id id) {
     return id == BLOCK_WATER;   // only fluid we have. lava someday.
 }
 
 int ephysics_is_climbable(block_id id) {
-    return id == 36 /*ladder*/;
+    return id == 36 /*ladder*/;   // ext id, see block_ext.h BLOCK_LADDER
 }
 
 // how much of the body box (by height) is below the fluid surface, 0..1.
@@ -25,29 +27,32 @@ static float submerged_fraction(const ephys_body *b, float surface_y) {
 
 ephys_fluid_state ephysics_fluid_sample(world *w, const ephys_body *b) {
     ephys_fluid_state fs;
-fs.density   = 0.0f;
-fs.push      = 0.0f;
-fs.flow      = VEC3_ZERO;
-fs.surface_y = -1e9f;
-ephys_candidates c;
-ephysics_gather_fluid(w, b, &c);
-if (c.count == 0) return fs;
-for (int i = 0;
-i < c.count;
-i++)
+    fs.density   = 0.0f;
+    fs.push      = 0.0f;
+    fs.flow      = VEC3_ZERO;
+    fs.surface_y = -1e9f;
+
+    ephys_candidates c;
+    ephysics_gather_fluid(w, b, &c);
+    if (c.count == 0) return fs;
+
+    // surface is the highest top face among overlapping fluid cells.
+    for (int i = 0; i < c.count; i++)
         if (c.boxes[i].max.y > fs.surface_y) fs.surface_y = c.boxes[i].max.y;
-fs.density = 1.0f;
-int fx = (int)floorf(b->pos.x);
-int fy = (int)floorf(b->pos.y);
-int fz = (int)floorf(b->pos.z);
-vec3 flow = VEC3_ZERO;
-static const int dx[4] = { 1, -1, 0, 0 }
-;
-static const int dz[4] = { 0, 0, 1, -1 }
-;
-for (int k = 0;
-k < 4;
-k++) {
+
+    fs.density = 1.0f;
+
+    // crude flow: look at the 4 horizontal neighbours of the feet cell. fluid
+    // "wants" to move toward the neighbour that has air below it (a drop). this
+    // isnt the real fluid sim's notion of level but it reads fine for pushing
+    // entities downstream.
+    int fx = (int)floorf(b->pos.x);
+    int fy = (int)floorf(b->pos.y);
+    int fz = (int)floorf(b->pos.z);
+    vec3 flow = VEC3_ZERO;
+    static const int dx[4] = { 1, -1, 0, 0 };
+    static const int dz[4] = { 0, 0, 1, -1 };
+    for (int k = 0; k < 4; k++) {
         block_id side  = world_get_block(w, fx + dx[k], fy, fz + dz[k]);
         block_id below = world_get_block(w, fx + dx[k], fy - 1, fz + dz[k]);
         if (!ephysics_is_fluid(side) && !block_is_solid(side)) {
@@ -62,8 +67,8 @@ k++) {
     }
     if (fabsf(flow.x) > 1e-4f || fabsf(flow.z) > 1e-4f) {
         fs.flow = vec3_normalize(flow);
-fs.push = 0.8f;
-}
+        fs.push = 0.8f;
+    }
     return fs;
 }
 
