@@ -11,6 +11,7 @@
 // (footstep sfx, fall damage, splash particles) without re-deriving them.
 //
 // it also keeps a tiny per-frame stat block which the f3 overlay reads. nothing
+// here owns the entities; the caller passes its own array and we mutate in place.
 typedef struct {
     uint32_t entity_id;
     float    land_speed;    // downward closing speed on touchdown, 0 if airborne
