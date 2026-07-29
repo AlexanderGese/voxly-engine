@@ -2,8 +2,10 @@
 #include "ephysics_integrate.h"
 #include "ephysics_material.h"
 #include "ephysics_impulse.h"
+
 #include <math.h>
 #include <stddef.h>
+
 int ephysics_world_tick_one(world *w, entity *e, const ephys_input *in, float dt,
                             ephys_event *out) {
     if (!e || !e->alive) return 0;
@@ -54,11 +56,9 @@ int ephysics_world_tick(world *w, entity *ents, int n,
                         ephys_event *out_events, int out_cap,
                         ephys_world_stats *stats) {
     int nevents = 0;
-ephys_world_stats st = {0, 0, 0, 0, 0.0f}
-;
-for (int i = 0;
-i < n;
-i++) {
+    ephys_world_stats st = {0, 0, 0, 0, 0.0f};
+
+    for (int i = 0; i < n; i++) {
         entity *e = &ents[i];
         if (!e->alive) continue;
 
@@ -88,5 +88,5 @@ i++) {
     }
 
     if (stats) *stats = st;
-return nevents;
+    return nevents;
 }
