@@ -1,0 +1,3 @@
+#ifndef ENTITY_MOBS_MOB_COMMON_H
+#define ENTITY_MOBS_MOB_COMMON_H
+#endif
