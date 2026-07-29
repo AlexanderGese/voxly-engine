@@ -1,4 +1,6 @@
 #include "mob_drops.h"
+
+// small helper: push a stack if there's room. returns the new write index.
 static int voxl_drop_push(voxl_drop *out, int n, int max,
                           voxl_drop_item item, int count) {
     if (n >= max || count <= 0 || item == VOXL_DROP_NONE) return n;
@@ -10,24 +12,24 @@ static int voxl_drop_push(voxl_drop *out, int n, int max,
 const char *voxl_drop_name(voxl_drop_item item) {
     switch (item) {
     case VOXL_DROP_ROTTEN_FLESH: return "rotten flesh";
-case VOXL_DROP_BONE:         return "bone";
-case VOXL_DROP_ARROW:        return "arrow";
-case VOXL_DROP_GUNPOWDER:    return "gunpowder";
-case VOXL_DROP_STRING:       return "string";
-case VOXL_DROP_SPIDER_EYE:   return "spider eye";
-case VOXL_DROP_RAW_BEEF:     return "raw beef";
-case VOXL_DROP_COOKED_BEEF:  return "steak";
-case VOXL_DROP_LEATHER:      return "leather";
-case VOXL_DROP_RAW_PORK:     return "raw porkchop";
-case VOXL_DROP_COOKED_PORK:  return "cooked porkchop";
-case VOXL_DROP_RAW_CHICKEN:  return "raw chicken";
-case VOXL_DROP_COOKED_CHICKEN: return "cooked chicken";
-case VOXL_DROP_FEATHER:      return "feather";
-case VOXL_DROP_WOOL:         return "wool";
-case VOXL_DROP_MUTTON:       return "mutton";
-case VOXL_DROP_COOKED_MUTTON: return "cooked mutton";
-default:                     return "nothing";
-}
+    case VOXL_DROP_BONE:         return "bone";
+    case VOXL_DROP_ARROW:        return "arrow";
+    case VOXL_DROP_GUNPOWDER:    return "gunpowder";
+    case VOXL_DROP_STRING:       return "string";
+    case VOXL_DROP_SPIDER_EYE:   return "spider eye";
+    case VOXL_DROP_RAW_BEEF:     return "raw beef";
+    case VOXL_DROP_COOKED_BEEF:  return "steak";
+    case VOXL_DROP_LEATHER:      return "leather";
+    case VOXL_DROP_RAW_PORK:     return "raw porkchop";
+    case VOXL_DROP_COOKED_PORK:  return "cooked porkchop";
+    case VOXL_DROP_RAW_CHICKEN:  return "raw chicken";
+    case VOXL_DROP_COOKED_CHICKEN: return "cooked chicken";
+    case VOXL_DROP_FEATHER:      return "feather";
+    case VOXL_DROP_WOOL:         return "wool";
+    case VOXL_DROP_MUTTON:       return "mutton";
+    case VOXL_DROP_COOKED_MUTTON: return "cooked mutton";
+    default:                     return "nothing";
+    }
 }
 
 int voxl_mob_roll_drops(voxl_mob_kind kind, int burning,

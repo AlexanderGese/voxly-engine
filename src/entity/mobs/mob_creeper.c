@@ -4,9 +4,14 @@
 #include "mob_health.h"
 #include "behavior_wander.h"
 #include "behavior_chase.h"
+
 #define VOXL_CREEPER_FUSE_TIME  1.5f   // seconds from ignite to boom
 #define VOXL_CREEPER_TRIGGER    3.0f   // start hissing within this range
 #define VOXL_CREEPER_BLAST      4.0f
+
+// we stash the fuse charge in attack_cd (0..fuse_time). it is unused
+// otherwise for the creeper, which never makes a melee swing.
+
 voxl_mob_creeper_result
 voxl_mob_creeper_update(voxl_mob *m, voxl_mob_rng *r,
                         vec3 player_pos, float dt) {
