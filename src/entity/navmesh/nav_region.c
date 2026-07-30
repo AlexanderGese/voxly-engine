@@ -1,5 +1,10 @@
 #include "nav_region.h"
 #include "../../util/darray.h"
+
+// iterative flood so a huge open field doesn't blow the C stack. the stack
+// here is a darray of cell indices; we reuse one across all seeds and just
+// clear it between components.
+
 int nav_region_flood(nav_grid *g) {
     // clear any stale labels first (reset() zeroes cells, but a rebuild that
     // reused the array without reset would leave them). cheap insurance.
@@ -43,8 +48,8 @@ int nav_region_flood(nav_grid *g) {
 
 int nav_region_connected(const nav_grid *g, int a, int b) {
     if (a < 0 || b < 0 || a >= g->count || b >= g->count) return 0;
-uint16_t ra = g->cells[a].region;
-uint16_t rb = g->cells[b].region;
-if (ra == NAV_REGION_NONE || rb == NAV_REGION_NONE) return 0;
-return ra == rb;
+    uint16_t ra = g->cells[a].region;
+    uint16_t rb = g->cells[b].region;
+    if (ra == NAV_REGION_NONE || rb == NAV_REGION_NONE) return 0;
+    return ra == rb;
 }
