@@ -3,6 +3,7 @@
 #include "nav_link.h"
 #include "nav_region.h"
 #include "../../config.h"
+// per-column floor scratch. a column rarely has more than a handful of floors
 #define NAV_COL_FLOORS 16
 int nav_build_patch(nav_grid *g, world *w, int pcx, int pcz,
                     nav_build_stats *stats) {
