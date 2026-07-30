@@ -1,5 +1,10 @@
 #include "nav_island.h"
+
 #include <string.h>
+
+// find (or append) the summary slot for a region id. linear scan — region
+// counts per patch are small enough that a map would be overkill, and the
+// flood hands them out densely so the first-seen order is already tight.
 static nav_island *slot_for(nav_island_set *set, uint16_t region) {
     for (int i = 0; i < set->count; i++)
         if (set->items[i].region == region) return &set->items[i];
@@ -14,9 +19,8 @@ static nav_island *slot_for(nav_island_set *set, uint16_t region) {
 
 int nav_island_build(nav_island_set *set, const nav_grid *g) {
     set->count = 0;
-for (int i = 0;
-i < g->count;
-i++) {
+
+    for (int i = 0; i < g->count; i++) {
         const nav_cell *c = &g->cells[i];
         if (c->region == NAV_REGION_NONE) continue;   // unlabelled, skip
 
@@ -43,9 +47,10 @@ const nav_island *nav_island_get(const nav_island_set *set, int region) {
 
 vec3 nav_island_centroid(const nav_island *isl) {
     if (!isl || isl->cells == 0) return VEC3_ZERO;
-float cx = (float)isl->sx / (float)isl->cells + 0.5f;
-float cz = (float)isl->sz / (float)isl->cells + 0.5f;
-return vec3_new(cx, (float)(isl->floor_y + 1), cz);
+    float cx = (float)isl->sx / (float)isl->cells + 0.5f;
+    float cz = (float)isl->sz / (float)isl->cells + 0.5f;
+    // stand on top of the representative floor, same convention as the cells.
+    return vec3_new(cx, (float)(isl->floor_y + 1), cz);
 }
 
 int nav_island_largest(const nav_island_set *set) {
