@@ -1,7 +1,12 @@
 #include "nav_los.h"
 #include "nav_query.h"
+
 #include <stdlib.h>
 #include <math.h>
+
+// find a cell in column (x,z) whose floor sits within `slack` of `want_y`.
+// returns the cell idx or -1. the bake is sparse so we probe the band directly
+// rather than scanning the whole column.
 static int cell_near_y(const nav_grid *g, int x, int z, int want_y, int slack) {
     // probe outward from the expected height so the closest match wins, which
     // keeps the walk hugging the interpolated line on gentle slopes.
@@ -17,8 +22,7 @@ static int cell_near_y(const nav_grid *g, int x, int z, int want_y, int slack) {
 }
 
 // integer 2d supercover-ish march from (x0,z0) to (x1,z1). at each block we
-// call `visit`;
-if it returns 0 the walk aborts and we report how far we got.
+// call `visit`; if it returns 0 the walk aborts and we report how far we got.
 // returns 1 if the whole line was clear. expected floor height is lerped along
 // the run so slopes track.
 static int march(const nav_grid *g, int x0, int y0, int z0,
@@ -57,24 +61,40 @@ static int march(const nav_grid *g, int x0, int y0, int z0,
 
 int nav_los_cells(const nav_grid *g, int a, int b) {
     if (a < 0 || b < 0 || a >= g->count || b >= g->count) return 0;
-if (a == b) return 1;
-const nav_cell *ca = &g->cells[a];
-const nav_cell *cb = &g->cells[b];
-int ox, oz;
-return march(g, ca->x, ca->y, ca->z, cb->x, cb->y, cb->z,
+    if (a == b) return 1;
+    const nav_cell *ca = &g->cells[a];
+    const nav_cell *cb = &g->cells[b];
+    int ox, oz;
+    return march(g, ca->x, ca->y, ca->z, cb->x, cb->y, cb->z,
                  NAV_LOS_Y_SLACK, &ox, &oz);
-if (b < 0 || b >= g->count) return a;
-if (a == b) return a;
-const nav_cell *ca = &g->cells[a];
-const nav_cell *cb = &g->cells[b];
-int ox = ca->x, oz = ca->z;
-march(g, ca->x, ca->y, ca->z, cb->x, cb->y, cb->z,
+}
+
+int nav_los_pos(const nav_grid *g, vec3 from, vec3 to) {
+    int a = nav_query_nearest(g, from, 2);
+    int b = nav_query_nearest(g, to, 2);
+    if (a < 0 || b < 0) return 0;
+    return nav_los_cells(g, a, b);
+}
+
+int nav_los_furthest(const nav_grid *g, int a, int b) {
+    if (a < 0 || a >= g->count) return a;
+    if (b < 0 || b >= g->count) return a;
+    if (a == b) return a;
+
+    const nav_cell *ca = &g->cells[a];
+    const nav_cell *cb = &g->cells[b];
+    int ox = ca->x, oz = ca->z;
+    march(g, ca->x, ca->y, ca->z, cb->x, cb->y, cb->z,
           NAV_LOS_Y_SLACK, &ox, &oz);
-int t = (abs(cb->x - ca->x) + abs(cb->z - ca->z));
-int span = t > 0 ? t : 1;
-int done = abs(ox - ca->x) + abs(oz - ca->z);
-float frac = (float)done / (float)span;
-int want_y = ca->y + (int)lroundf((cb->y - ca->y) * frac);
-int idx = cell_near_y(g, ox, oz, want_y, NAV_LOS_Y_SLACK);
-return idx >= 0 ? idx : a;
+
+    // the march stamped the last clear block into (ox,oz). resolve it back to a
+    // cell at the height it found. if that somehow misses, fall back to `a`.
+    int t = (abs(cb->x - ca->x) + abs(cb->z - ca->z));
+    int span = t > 0 ? t : 1;
+    int done = abs(ox - ca->x) + abs(oz - ca->z);
+    float frac = (float)done / (float)span;
+    int want_y = ca->y + (int)lroundf((cb->y - ca->y) * frac);
+
+    int idx = cell_near_y(g, ox, oz, want_y, NAV_LOS_Y_SLACK);
+    return idx >= 0 ? idx : a;
 }
