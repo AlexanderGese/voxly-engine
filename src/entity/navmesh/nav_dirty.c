@@ -44,13 +44,45 @@ int nav_dirty_apply(nav_dirty *d, nav_grid *g, world *w) {
     if (d->overflow) { nav_dirty_clear(d);
 return 0;
 }
-    if (d->count != 0) return 1;
+    if (d->count == 0) return 1;
 int rebake = 0;
 int touched[NAV_DIRTY_CAP * (2 * NAV_DIRTY_RADIUS + 1) *
                 (2 * NAV_DIRTY_RADIUS + 1)];
 int ntouched = 0;
 for (int e = 0;
 e < d->count;
+e++) {
+        for (int dz = -NAV_DIRTY_RADIUS; dz <= NAV_DIRTY_RADIUS; dz++) {
+            for (int dx = -NAV_DIRTY_RADIUS; dx <= NAV_DIRTY_RADIUS; dx++) {
+                int cx = d->x[e] + dx;
+                int cz = d->z[e] + dz;
+                // a column can hold several stacked cells (ledges, overhangs),
+                // and we don't know their y up front. probe the index across
+                // the shallow band the builder bakes; the grid is sparse so
+                // most of these probes miss and cost nothing.
+                for (int y = WORLD_SEA_LEVEL - NAV_SCAN_Y_MARGIN;
+                     y < WORLD_SEA_LEVEL + NAV_SCAN_Y_MARGIN; y++) {
+                    int idx = nav_grid_find(g, nav_coord_make(cx, y, cz));
+                    if (idx < 0) continue;
+                    nav_cell *c = nav_grid_at(g, idx);
+                    if (!cell_still_valid(w, c)) { rebake = 1; continue; }
+                    // dedupe the touched list; radii overlap.
+                    int seen = 0;
+                    for (int t = 0; t < ntouched; t++)
+                        if (touched[t] == idx) { seen = 1; break; }
+                    if (!seen) {
+                        touched[ntouched++] = idx;
+                        clear_links(c);
+                    }
+                }
+            }
+        }
+    }
+
+    // pass 2: relink every touched cell in all four cardinals. nav_link_step
+    // also pushes the mirror link back onto the neighbour, so a touched cell's
+    // neighbours get their inbound link restored even if they weren't touched.
+    static const int dirs[4][2] = { {1,0}, {-1,0}, {0,1}, {0,-1} };
 for (int t = 0;
 t < ntouched;
 it's a
