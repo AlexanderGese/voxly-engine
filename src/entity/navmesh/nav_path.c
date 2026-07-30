@@ -2,15 +2,24 @@
 #include "nav_query.h"
 #include "nav_region.h"
 #include "../../util/darray.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+// per-cell search bookkeeping. we don't keep this in nav_cell because a cell
+// can be in two movers' searches at once; instead it's a parallel scratch
+// array sized to the grid, allocated per search. cheap, the grids are small.
 typedef struct {
     int   parent;     // cell idx we came from, -1 = none/start
     int   g;          // best known cost from start
     int   in_open;
     int   closed;
 } sn;
+
+// octile distance heuristic on the horizontal plane, plus the vertical gap.
+// admissible because every link costs at least nav_link_cost(WALK)=10 per tile
+// and our heuristic is scaled to match (10 per straight step).
 static int heuristic(const nav_cell *a, const nav_cell *b) {
     int dx = abs(a->x - b->x);
     int dz = abs(a->z - b->z);
@@ -24,8 +33,7 @@ static int heuristic(const nav_cell *a, const nav_cell *b) {
 // pull the lowest-f open cell out of the frontier. the grids here are a few
 // thousand cells worst case and searches usually touch far fewer, so a linear
 // scan over the open list beats the bookkeeping of a heap. (pf_* uses a heap
-// because it searches a denser block grid;
-here the link graph is sparse.)
+// because it searches a denser block grid; here the link graph is sparse.)
 static int pop_min(int *open, sn *sx, const nav_cell *cells, int goal) {
     int best = -1, best_f = 0x7fffffff, best_at = -1;
     const nav_cell *gc = &cells[goal];
@@ -42,18 +50,16 @@ static int pop_min(int *open, sn *sx, const nav_cell *cells, int goal) {
 // stitch the parent chain into world-space waypoints, start->goal order.
 static void reconstruct(nav_grid *g, sn *sx, int goal, nav_path *out) {
     int chain[NAV_PATH_MAX];
-int n = 0;
-for (int c = goal;
-c >= 0 && n < NAV_PATH_MAX;
-c = sx[c].parent)
+    int n = 0;
+    for (int c = goal; c >= 0 && n < NAV_PATH_MAX; c = sx[c].parent)
         chain[n++] = c;
-out->count = 0;
-for (int i = n - 1;
-i >= 0 && out->count < NAV_PATH_MAX;
-i--)
+
+    out->count = 0;
+    // chain is goal->start; reverse it into the output.
+    for (int i = n - 1; i >= 0 && out->count < NAV_PATH_MAX; i--)
         out->pts[out->count++] = nav_cell_world(&g->cells[chain[i]]);
-out->cursor = 0;
-out->found  = 1;
+    out->cursor = 0;
+    out->found  = 1;
 }
 
 int nav_path_find(nav_grid *g, int start, int goal, nav_path *out) {
@@ -114,4 +120,22 @@ int nav_path_find(nav_grid *g, int start, int goal, nav_path *out) {
 
 int nav_path_find_pos(nav_grid *g, vec3 from, vec3 to, nav_path *out) {
     int s = nav_query_nearest(g, from, 2);
-int t = nav_query_nearest(g, to, 3);
+    int t = nav_query_nearest(g, to, 3);
+    if (s < 0 || t < 0) { memset(out, 0, sizeof *out); return 0; }
+    return nav_path_find(g, s, t, out);
+}
+
+vec3 nav_path_next(nav_path *p, vec3 mover_pos) {
+    if (p->count == 0) return mover_pos;
+    if (p->cursor >= p->count) return p->pts[p->count - 1];
+
+    // close enough to the current waypoint? advance. xz distance only, the
+    // mover's y bobs around with gravity and we don't want it to stall.
+    vec3 w = p->pts[p->cursor];
+    float dx = w.x - mover_pos.x;
+    float dz = w.z - mover_pos.z;
+    if (dx * dx + dz * dz < 0.40f * 0.40f) {
+        if (p->cursor < p->count - 1) p->cursor++;
+    }
+    return p->pts[p->cursor];
+}
