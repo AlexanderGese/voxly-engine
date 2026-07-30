@@ -1,6 +1,9 @@
 #include "nav_funnel.h"
 #include "nav_cell.h"
+
 #include <math.h>
+
+// floor a float to the block it lives in. negatives round toward -inf.
 static int blk(float v) { return (int)floorf(v); }
 
 // can a `width`-wide agent stand at this world point? we check the column the
@@ -8,14 +11,12 @@ static int blk(float v) { return (int)floorf(v); }
 // poke into. feet are at p.y, so the floor we want is the block below.
 static int point_ok(world *w, vec3 p, float width) {
     float h = width * 0.5f;
-int fy = blk(p.y) - 1;
-const float ox[4] = { -h, h, -h, h }
-;
-const float oz[4] = { -h, -h, h, h }
-;
-for (int i = 0;
-i < 4;
-i++) {
+    int fy = blk(p.y) - 1;
+    // sample the four corners of the agent's footprint. a single centre test
+    // lets mobs clip the inside of a corner; the corners catch it.
+    const float ox[4] = { -h, h, -h, h };
+    const float oz[4] = { -h, -h, h, h };
+    for (int i = 0; i < 4; i++) {
         int x = blk(p.x + ox[i]);
         int z = blk(p.z + oz[i]);
         if (!nav_cell_standable(w, x, fy, z)) return 0;
@@ -41,13 +42,37 @@ int nav_funnel_clear(world *w, vec3 a, vec3 b, float width) {
 
 int nav_funnel_smooth(world *w, const nav_path *in, nav_path *out, float width) {
     int n = in->count;
-int  m = 0;
-tmp[m++] = in->pts[0];
-int i = 0;
-out->cursor = 0;
-out->found  = in->found;
-for (int k = 0;
-k < m;
-k++) out->pts[k] = tmp[k];
-return m;
+    if (n <= 2) {
+        // nothing to pull. copy through if we're not already aliasing.
+        if (out != in) *out = *in;
+        return n;
+    }
+
+    // greedy skip: anchor at i, advance j as far as the line stays clear, then
+    // commit the last visible point and re-anchor there. classic los string
+    // pull. worst case O(n^2) los walks but n is tiny (<=128) so who cares.
+    vec3 tmp[NAV_FUNNEL_MAX];
+    int  m = 0;
+    tmp[m++] = in->pts[0];
+
+    int i = 0;
+    while (i < n - 1) {
+        int furthest = i + 1;
+        for (int j = i + 2; j < n; j++) {
+            if (nav_funnel_clear(w, in->pts[i], in->pts[j], width))
+                furthest = j;
+            else
+                break;   // first blocked target ends the run; corners are convex
+        }
+        if (m < NAV_FUNNEL_MAX) tmp[m++] = in->pts[furthest];
+        i = furthest;
+    }
+
+    // write back. preserve the path's walk state since smoothing only touches
+    // geometry, not whether a route was found.
+    out->count  = m;
+    out->cursor = 0;
+    out->found  = in->found;
+    for (int k = 0; k < m; k++) out->pts[k] = tmp[k];
+    return m;
 }
