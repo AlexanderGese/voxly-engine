@@ -8,4 +8,5 @@ typedef struct {
     hashmap   index;        // nav_coord_key -> cell idx + 1
     int       full;         // hit the cap during build; mesh is partial
 } nav_grid;
+void nav_grid_init(nav_grid *g);
 #endif
