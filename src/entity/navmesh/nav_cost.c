@@ -1,9 +1,15 @@
 #include "nav_cost.h"
 #include "nav_link.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+// base move cost between two cells one step apart, before kind/area scaling.
+// we charge ~10 per cardinal step so the octile diagonal (~14) lands on a
+// clean integer and we never touch floats in the hot search loop.
 #define NAV_STEP_BASE  10
+
 void nav_cost_init(nav_cost_field *cf, int cell_count) {
     cf->count = cell_count;
     cf->area = NULL;
@@ -15,8 +21,8 @@ void nav_cost_init(nav_cost_field *cf, int cell_count) {
 
 void nav_cost_free(nav_cost_field *cf) {
     free(cf->area);
-cf->area = NULL;
-cf->count = 0;
+    cf->area = NULL;
+    cf->count = 0;
 }
 
 void nav_cost_clear(nav_cost_field *cf) {
@@ -26,10 +32,11 @@ void nav_cost_clear(nav_cost_field *cf) {
 void nav_cost_brush(nav_cost_field *cf, const nav_grid *g,
                     vec3 p, float radius, uint8_t cost) {
     if (!cf->area || radius <= 0.0f) return;
-float r2 = radius * radius;
-for (int i = 0;
-i < g->count && i < cf->count;
-i++) {
+    float r2 = radius * radius;
+
+    // brute force over the cells. patches are small and brushing is rare
+    // (only when a hazard moves) so a spatial query isn't worth the trouble.
+    for (int i = 0; i < g->count && i < cf->count; i++) {
         vec3 c = nav_cell_world(&g->cells[i]);
         float dx = c.x - p.x;
         float dz = c.z - p.z;
@@ -43,17 +50,25 @@ i++) {
 int nav_cost_link(const nav_cost_field *cf, const nav_filter *f,
                   const nav_grid *g, int ci, int li) {
     const nav_cell *c = &g->cells[ci];
-if (li < 0 || li >= c->link_count) return NAV_COST_BLOCKED;
-if (f && !nav_filter_allows(f, g, ci, li)) return NAV_COST_BLOCKED;
-int to = c->link_to[li];
-int kind = c->link_kind[li];
-int base = NAV_STEP_BASE + c->link_cost[li] + nav_link_cost(kind);
-int area = NAV_COST_NEUTRAL;
-if (cf && cf->area && to < cf->count) area = cf->area[to];
-if (area < 1) area = 1;
-long scaled = (long)base * (long)area;
-if (scaled >= NAV_COST_BLOCKED) scaled = NAV_COST_BLOCKED - 1;
-return (int)scaled;
+    if (li < 0 || li >= c->link_count) return NAV_COST_BLOCKED;
+
+    if (f && !nav_filter_allows(f, g, ci, li)) return NAV_COST_BLOCKED;
+
+    int to = c->link_to[li];
+    int kind = c->link_kind[li];
+
+    // base step + the kind surcharge baked into the cell, then scale by the
+    // destination's area cost. area is a multiplier in eighths so neutral (1)
+    // leaves it untouched-ish; values above ~8 start really hurting.
+    int base = NAV_STEP_BASE + c->link_cost[li] + nav_link_cost(kind);
+
+    int area = NAV_COST_NEUTRAL;
+    if (cf && cf->area && to < cf->count) area = cf->area[to];
+    if (area < 1) area = 1;
+
+    long scaled = (long)base * (long)area;
+    if (scaled >= NAV_COST_BLOCKED) scaled = NAV_COST_BLOCKED - 1;
+    return (int)scaled;
 }
 
 int nav_cost_heuristic(const nav_grid *g, int a, int b) {
