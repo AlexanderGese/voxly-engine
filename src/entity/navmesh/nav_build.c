@@ -3,8 +3,12 @@
 #include "nav_link.h"
 #include "nav_region.h"
 #include "../../config.h"
+
 // per-column floor scratch. a column rarely has more than a handful of floors
+// (surface + a cave ledge or two) so a small fixed buffer is plenty; if a
+// pathological column has more we just take the lowest few.
 #define NAV_COL_FLOORS 16
+
 int nav_build_patch(nav_grid *g, world *w, int pcx, int pcz,
                     nav_build_stats *stats) {
     nav_grid_reset(g);
