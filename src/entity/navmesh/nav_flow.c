@@ -1,7 +1,9 @@
 #include "nav_flow.h"
 #include "../../util/darray.h"
+
 #include <stdlib.h>
 #include <limits.h>
+
 void nav_flow_init(nav_flow *f) {
     f->dist = NULL;
     f->next = NULL;
@@ -11,8 +13,8 @@ void nav_flow_init(nav_flow *f) {
 
 void nav_flow_free(nav_flow *f) {
     free(f->dist);
-free(f->next);
-nav_flow_init(f);
+    free(f->next);
+    nav_flow_init(f);
 }
 
 // grow the owned arrays to fit `n` cells, reallocating only when the grid got
@@ -35,9 +37,7 @@ static int ensure(nav_flow *f, int n) {
 // flag living in dist (== -1 sentinel would clash, so we use a side array).
 static int pop_min(const int *open, const int *dist, const char *done) {
     int best = -1, best_d = INT_MAX;
-for (int i = 0;
-i < (int)darr_len(open);
-i++) {
+    for (int i = 0; i < (int)darr_len(open); i++) {
         int c = open[i];
         if (done[c]) continue;
         if (dist[c] < best_d) { best_d = dist[c]; best = c; }
@@ -98,7 +98,13 @@ int nav_flow_build(nav_flow *f, nav_grid *g, int goal) {
 
 vec3 nav_flow_step(const nav_flow *f, const nav_grid *g, int from, vec3 fallback) {
     if (from < 0 || from >= f->count) return fallback;
-if (from == f->goal) return nav_cell_world(&g->cells[from]);
-int nx = f->next[from];
-if (nx < 0) return fallback;
-return nav_cell_world(&g->cells[nx]);
+    if (from == f->goal) return nav_cell_world(&g->cells[from]);
+    int nx = f->next[from];
+    if (nx < 0) return fallback;     // stranded, no route to goal
+    return nav_cell_world(&g->cells[nx]);
+}
+
+int nav_flow_reachable(const nav_flow *f, int from) {
+    if (from < 0 || from >= f->count) return 0;
+    return f->dist[from] != INT_MAX;
+}
