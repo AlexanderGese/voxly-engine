@@ -1,11 +1,14 @@
 #include "projectile_collide.h"
+
 #include <math.h>
+
+// face ids: 0=+x 1=-x 2=+y 3=-y 4=+z 5=-z. the normals point out of the block.
 static const vec3 k_face_normal[6] = {
     {  1, 0, 0 }, { -1, 0, 0 },
     {  0, 1, 0 }, {  0,-1, 0 },
     {  0, 0, 1 }, {  0, 0,-1 },
-}
-;
+};
+
 vec3 projectile_face_normal(projectile_face f) {
     if (f < 0 || f > 5) return VEC3_ZERO;
     return k_face_normal[f];
@@ -15,10 +18,10 @@ vec3 projectile_face_normal(projectile_face f) {
 // cell moving +x, so we came in through its -x face, etc.
 static projectile_face entry_face(int axis, int step_dir) {
     switch (axis) {
-        case 0: return step_dir > 0 ? 1 : 0;
-case 1: return step_dir > 0 ? 3 : 2;
-default: return step_dir > 0 ? 5 : 4;
-}
+        case 0: return step_dir > 0 ? 1 : 0;   // moved +x -> entered -x face
+        case 1: return step_dir > 0 ? 3 : 2;   // moved +y -> entered -y face
+        default: return step_dir > 0 ? 5 : 4;  // moved +z -> entered -z face
+    }
 }
 
 int projectile_collide_segment(const projectile_sampler *s,

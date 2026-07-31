@@ -1,5 +1,7 @@
 #include "projectile_adapter.h"
+
 #include <stddef.h>
+
 // sampler shim: hand world_get_block straight through. user is the world*.
 static block_id adapter_block_at(void *user, int wx, int wy, int wz) {
     world *w = (world *)user;
@@ -10,8 +12,7 @@ static block_id adapter_block_at(void *user, int wx, int wy, int wz) {
 }
 
 // damage shim: look the mob up and dock hp + set the hurt flash. we deliberately
-// dont kill here;
-the mob update / combat code owns death so loot + xp fire in
+// dont kill here; the mob update / combat code owns death so loot + xp fire in
 // one place. we just apply the number.
 static void adapter_on_damage(void *user, int entity_id, int dmg, vec3 point) {
     projectile_adapter *pa = (projectile_adapter *)user;
@@ -30,13 +31,13 @@ static void adapter_on_damage(void *user, int entity_id, int dmg, vec3 point) {
 
 void projectile_adapter_init(projectile_adapter *pa, world *w, uint64_t seed) {
     projectile_world_init(&pa->pw, seed);
-pa->w = w;
-pa->mr = NULL;
-pa->target_count = 0;
-projectile_sampler s = { adapter_block_at, w }
-;
-projectile_world_set_sampler(&pa->pw, s);
-projectile_world_set_damage_cb(&pa->pw, adapter_on_damage, pa);
+    pa->w = w;
+    pa->mr = NULL;
+    pa->target_count = 0;
+
+    projectile_sampler s = { adapter_block_at, w };
+    projectile_world_set_sampler(&pa->pw, s);
+    projectile_world_set_damage_cb(&pa->pw, adapter_on_damage, pa);
 }
 
 uint32_t projectile_adapter_fire(projectile_adapter *pa,
@@ -49,9 +50,7 @@ uint32_t projectile_adapter_fire(projectile_adapter *pa,
 // combat uses — no second source of truth for hitboxes.
 static void rebuild_targets(projectile_adapter *pa, mob_registry *mr) {
     int n = 0;
-for (int i = 0;
-i < mr->count && n < MAX_MOBS;
-i++) {
+    for (int i = 0; i < mr->count && n < MAX_MOBS; i++) {
         entity *e = &mr->list[i];
         if (!e->alive || e->id == 0) continue;
         pa->targets[n].id  = (int)e->id;
