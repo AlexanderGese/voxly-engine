@@ -1,8 +1,11 @@
 #include "projectile_hit.h"
+
 #include <math.h>
+
 // has this entity id already been damaged by this projectile? we only track the
 // low 32 ids in a bitmask, which is a cheap dedupe for piercing spears. ids
 // above 31 just never dedupe — acceptable, a spear hitting two high-id mobs in
+// the same line is rare and the worst case is it double-hits. dont over-engineer.
 static int already_hit(uint32_t mask, int id) {
     if (id < 0 || id >= 32) return 0;
     return (mask >> id) & 1u;
@@ -14,16 +17,17 @@ int projectile_hit_targets(projectile_kind kind, int owner_id,
                            const projectile_target *targets, int count,
                            projectile_entity_hit *out) {
     vec3 dir = vec3_sub(to, from);
-float seg = vec3_length(dir);
-if (seg < 1e-6f || count <= 0) return 0;
-vec3 rd = vec3_scale(dir, 1.0f / seg);
-float r = projectile_kind_def(kind)->radius;
-int    best_i = -1;
-float  best_t = seg + 1.0f;
-vec3   best_pt = VEC3_ZERO;
-for (int i = 0;
-i < count;
-i++) {
+    float seg = vec3_length(dir);
+    if (seg < 1e-6f || count <= 0) return 0;
+
+    vec3 rd = vec3_scale(dir, 1.0f / seg);
+    float r = projectile_kind_def(kind)->radius;
+
+    int    best_i = -1;
+    float  best_t = seg + 1.0f;
+    vec3   best_pt = VEC3_ZERO;
+
+    for (int i = 0; i < count; i++) {
         const projectile_target *tg = &targets[i];
         if (tg->id == owner_id) continue;               // no self-damage
         if (already_hit(hit_mask_lo, tg->id)) continue; // pierce dedupe
@@ -44,10 +48,10 @@ i++) {
     }
 
     if (best_i < 0) return 0;
-out->id    = targets[best_i].id;
-out->t     = best_t / seg;
-out->point = best_pt;
-return 1;
+    out->id    = targets[best_i].id;
+    out->t     = best_t / seg;
+    out->point = best_pt;
+    return 1;
 }
 
 int projectile_hit_damage(projectile_kind kind, float speed, float speed0) {
