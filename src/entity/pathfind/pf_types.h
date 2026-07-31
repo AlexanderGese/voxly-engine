@@ -1,25 +1,51 @@
 #ifndef ENTITY_PATHFIND_PF_TYPES_H
 #define ENTITY_PATHFIND_PF_TYPES_H
+
 #include "../../math/vec3.h"
 #include <stdint.h>
+
+// shared types for the pf_* pathfinder. this is the "proper" one with a
+// node pool + heap, as opposed to the little fixed-grid astar.c next door
+// which i keep around because the basic mobs still use it.
+//
+// everything here works in block coords (ints). conversion to/from vec3
+// happens at the edges (pf.c).
+
+// search window. we never plan further than this from the start. keeps the
+// node pool bounded and stops a confused mob from walking to another biome.
 #define PF_WINDOW_RADIUS   24
 #define PF_WINDOW_SIZE     (PF_WINDOW_RADIUS * 2 + 1)
+
+// how far up/down a step may go and still count as walkable. one block up
+// (jump) and a few down (drop) feels right for the mobs we have.
 #define PF_MAX_STEP_UP      1
 #define PF_MAX_STEP_DOWN    3
+
+// node pool size. worst case the whole window plus some slack for the few
+// vertical layers we touch. if we blow this the search just bails.
 #define PF_MAX_NODES       4096
+
+// final waypoint count after smoothing. anything past this we truncate.
 #define PF_MAX_WAYPOINTS    96
+
+// a block-space coordinate. y included because we step up/down.
 typedef struct {
     int16_t x, y, z;
 } pf_coord;
+
+// one waypoint in a finished path, world-space center of the block.
 typedef struct {
     vec3 pos;
 } pf_waypoint;
+
+// the result handed back to the caller.
 typedef struct {
     pf_waypoint pts[PF_MAX_WAYPOINTS];
     int         count;
     int         cursor;    // which waypoint we're walking toward
     int         found;     // 1 = real path, 0 = gave up / no path
 } pf_path;
+
 static inline pf_coord pf_coord_make(int x, int y, int z) {
     pf_coord c = { (int16_t)x, (int16_t)y, (int16_t)z };
     return c;
@@ -36,4 +62,5 @@ static inline uint64_t pf_coord_key(pf_coord c) {
     uint64_t z = (uint64_t)(uint16_t)c.z;
     return x | (y << 16) | (z << 32);
 }
+
 #endif
