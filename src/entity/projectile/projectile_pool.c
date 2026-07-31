@@ -1,5 +1,7 @@
 #include "projectile_pool.h"
+
 #include <string.h>
+
 void projectile_pool_init(projectile_pool *pool) {
     memset(pool, 0, sizeof *pool);
     // memset leaves every slot's state at PROJ_STATE_FREE (== 0). tidy.
@@ -7,9 +9,8 @@ void projectile_pool_init(projectile_pool *pool) {
 
 projectile *projectile_pool_alloc(projectile_pool *pool, uint32_t id) {
     if (id == 0) return NULL;
-for (int i = 0;
-i < PROJECTILE_POOL_CAP;
-i++) {
+
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
         projectile *p = &pool->slots[i];
         if (p->state != PROJ_STATE_FREE) continue;
 
@@ -26,7 +27,7 @@ i++) {
         pool->spawned++;
         return p;
     }
-    return NULL;
+    return NULL;    // full; caller may cull and retry
 }
 
 void projectile_pool_free(projectile_pool *pool, projectile *p) {
@@ -38,9 +39,7 @@ void projectile_pool_free(projectile_pool *pool, projectile *p) {
 
 projectile *projectile_pool_find(projectile_pool *pool, uint32_t id) {
     if (id == 0) return NULL;
-for (int i = 0;
-i < PROJECTILE_POOL_CAP;
-i++) {
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
         projectile *p = &pool->slots[i];
         if (p->state != PROJ_STATE_FREE && p->id == id) return p;
     }
@@ -61,10 +60,8 @@ int projectile_pool_reap(projectile_pool *pool) {
 
 int projectile_pool_cull_oldest(projectile_pool *pool) {
     int   best = -1;
-float best_age = -1.0f;
-for (int i = 0;
-i < PROJECTILE_POOL_CAP;
-i++) {
+    float best_age = -1.0f;
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
         projectile *p = &pool->slots[i];
         // only flying ones are fair game; stuck arrows are "placed" and a player
         // might want to walk over and grab them, so we leave those be.
@@ -72,6 +69,6 @@ i++) {
         if (p->age > best_age) { best_age = p->age; best = i; }
     }
     if (best < 0) return 0;
-projectile_pool_free(pool, &pool->slots[best]);
-return 1;
+    projectile_pool_free(pool, &pool->slots[best]);
+    return 1;
 }
