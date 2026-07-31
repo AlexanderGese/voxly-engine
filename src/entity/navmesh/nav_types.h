@@ -1,7 +1,9 @@
 #ifndef ENTITY_NAVMESH_NAV_TYPES_H
 #define ENTITY_NAVMESH_NAV_TYPES_H
+
 #include "../../math/vec3.h"
 #include <stdint.h>
+
 // shared types for the navmesh. unlike the pf_* pathfinder next door, which
 // re-scans the world every search, this thing is baked once per region of
 // chunks: we walk the walkable surface, drop a cell on every floor, link
@@ -10,27 +12,44 @@
 // the world isn't changing under them.
 //
 // everything lives in block space (ints). vec3 conversion is at the edges.
+
 // area we bake at once, in blocks. a 3x3 chunk patch is 48x48. we keep a one
 // chunk apron so links near the edge still see their neighbour's floor.
 #define NAV_PATCH_CHUNKS   3
 #define NAV_PATCH_W        (NAV_PATCH_CHUNKS * 16)
 #define NAV_APRON          1
 #define NAV_SCAN_W         (NAV_PATCH_W + NAV_APRON * 2)
+
 // vertical agent shape. one floor + this many clear blocks above = a cell.
 // matches the mobs we actually spawn (2 tall).
 #define NAV_AGENT_HEIGHT   2
+
+// link rules. how far a step may climb or drop and still be a walk link.
+// anything past the drop limit needs a jump link (or nothing).
 #define NAV_STEP_UP        1
 #define NAV_STEP_DOWN      3
 #define NAV_JUMP_DOWN      4    // a jump-down link tolerates a bigger fall
+
+// cap on cells per patch. open terrain with a couple of vertical layers fits
+// comfortably; caves can blow this, in which case the build just stops early
+// and the leftover area stays un-navigated. acceptable for now.
 #define NAV_MAX_CELLS      8192
+
+// each cell keeps a little fixed fan of outgoing links. 8 planar neighbours
+// is the worst case; we never link diagonally through a corner so it's less.
 #define NAV_CELL_LINKS     8
+
+// sentinel region id for "not flooded yet".
 #define NAV_REGION_NONE    0
+
+// link flavours. mostly informational for the mover, but jump links cost more.
 enum {
     NAV_LINK_WALK = 0,   // same height-ish, just step across
     NAV_LINK_DROP,       // floor below, controlled fall
     NAV_LINK_JUMP,       // floor above or a gap, needs a hop
-}
-;
+};
+
+// a single walkable cell: one block-column's floor that an agent can stand on.
 typedef struct {
     int16_t x, y, z;     // block coord of the floor the feet rest on
     uint16_t region;     // connected-component id, 0 until flooded
@@ -42,9 +61,12 @@ typedef struct {
     uint8_t  link_kind[NAV_CELL_LINKS];
     uint8_t  link_cost[NAV_CELL_LINKS];
 } nav_cell;
+
+// a coord, used for hashmap keys and the cell-at-position query.
 typedef struct {
     int16_t x, y, z;
 } nav_coord;
+
 static inline nav_coord nav_coord_make(int x, int y, int z) {
     nav_coord c = { (int16_t)x, (int16_t)y, (int16_t)z };
     return c;
@@ -71,4 +93,5 @@ static inline nav_coord nav_cell_coord(const nav_cell *c) {
 static inline vec3 nav_cell_world(const nav_cell *c) {
     return vec3_new(c->x + 0.5f, (float)(c->y + 1), c->z + 0.5f);
 }
+
 #endif
