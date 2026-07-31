@@ -1,5 +1,11 @@
 #include "pf_smooth.h"
+
 #include <stdlib.h>
+
+// walk the supercover of the segment a->b in the xz plane and make sure
+// every cell we touch is standable near the interpolated height. this is the
+// amanatides-woll style grid traversal, minus the t-max bookkeeping we don't
+// need since cells are unit sized.
 int pf_smooth_line_clear(pf_grid *g, pf_coord a, pf_coord b) {
     int x0 = a.x, z0 = a.z;
     int x1 = b.x, z1 = b.z;
@@ -58,11 +64,10 @@ int pf_smooth_line_clear(pf_grid *g, pf_coord a, pf_coord b) {
 
 int pf_smooth_collinear(const pf_rawpath *in, pf_rawpath *out) {
     out->count = 0;
-if (in->count == 0) return 0;
-out->pts[out->count++] = in->pts[0];
-for (int i = 1;
-i + 1 < in->count;
-i++) {
+    if (in->count == 0) return 0;
+
+    out->pts[out->count++] = in->pts[0];
+    for (int i = 1; i + 1 < in->count; i++) {
         pf_coord p = in->pts[i - 1];
         pf_coord c = in->pts[i];
         pf_coord nx = in->pts[i + 1];
@@ -78,7 +83,7 @@ i++) {
         }
     }
     out->pts[out->count++] = in->pts[in->count - 1];
-return out->count;
+    return out->count;
 }
 
 int pf_smooth_string_pull(pf_grid *g, const pf_rawpath *in, pf_rawpath *out) {
