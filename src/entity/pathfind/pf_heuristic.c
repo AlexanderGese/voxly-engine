@@ -1,15 +1,21 @@
 #include "pf_heuristic.h"
 #include "pf_node.h"
+
 #include <stdlib.h>
 #include <math.h>
+
+// vertical term. small weight so height differences nudge but don't dominate
+// the planar estimate. kept admissible: real vertical moves cost at least
+// PF_COST_STEP each.
 static int vert_term(pf_coord a, pf_coord b) {
     return abs(a.y - b.y) * PF_COST_STEP;
 }
 
 int pf_heuristic(pf_heuristic_kind kind, pf_coord a, pf_coord b) {
     int dx = abs(a.x - b.x);
-int dz = abs(a.z - b.z);
-switch (kind) {
+    int dz = abs(a.z - b.z);
+
+    switch (kind) {
     case PF_H_MANHATTAN:
         return (dx + dz) * PF_COST_CARD + vert_term(a, b);
 
