@@ -4,16 +4,21 @@
 #include "pf_openset.h"
 #include "pf_astar.h"
 #include "pf_smooth.h"
+
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+
+// the pool/heap/grid are chunky structs, so the planner keeps one of each
+// and reuses them. a single mob never runs two plans at once, and the AI
+// loop is single-threaded, so sharing is fine.
 struct pf_planner {
     world       *w;
     pf_grid      grid;
     pf_nodepool  pool;
     pf_openset   open;
-}
-;
+};
+
 pf_options pf_options_default(void) {
     pf_options o;
     o.heuristic      = PF_H_OCTILE;
@@ -25,10 +30,10 @@ pf_options pf_options_default(void) {
 
 pf_planner *pf_planner_create(world *w) {
     pf_planner *p = calloc(1, sizeof *p);
-if (!p) return NULL;
-p->w = w;
-pf_nodepool_init(&p->pool);
-return p;
+    if (!p) return NULL;
+    p->w = w;
+    pf_nodepool_init(&p->pool);
+    return p;
 }
 
 void pf_planner_destroy(pf_planner *p) {
@@ -49,26 +54,86 @@ static vec3 center_of(pf_coord c) {
 
 int pf_plan(pf_planner *p, vec3 from, vec3 to, const pf_options *opt, pf_path *out) {
     pf_options o = opt ? *opt : pf_options_default();
-out->count  = 0;
-out->cursor = 0;
-out->found  = 0;
-pf_coord start = block_of(from);
-pf_coord goal  = block_of(to);
-pf_grid_init(&p->grid, p->w, start);
-int glx, glz;
-pf_coord clamped = goal;
-pf_search_setup(&s, &p->grid, &p->pool, &p->open);
-s.heuristic      = o.heuristic;
-s.allow_diagonal = o.allow_diagonal;
-if (o.max_expansions > 0) s.max_expansions = o.max_expansions;
-pf_rawpath raw;
-if (!pf_astar_run(&s, start, clamped, &raw)) return 0;
-if (raw.count == 0) return 0;
-pf_rawpath buf, final;
-const pf_rawpath *result = &raw;
-if (n > PF_MAX_WAYPOINTS) n = PF_MAX_WAYPOINTS;
-for (int i = 0;
-i < n;
-out->found = n > 0;
-return out->found;
+
+    out->count  = 0;
+    out->cursor = 0;
+    out->found  = 0;
+
+    pf_coord start = block_of(from);
+    pf_coord goal  = block_of(to);
+
+    // window centers on the start. if the goal is outside it we still plan
+    // toward the clamped projection and the mob makes partial progress, then
+    // replans next tick from its new spot. cheaper than a giant window.
+    pf_grid_init(&p->grid, p->w, start);
+
+    int glx, glz;
+    pf_coord clamped = goal;
+    if (!pf_grid_to_local(&p->grid, goal, &glx, &glz)) {
+        // pull the goal to the nearest window edge along the line of sight.
+        int rx = goal.x - start.x;
+        int rz = goal.z - start.z;
+        int adx = abs(rx), adz = abs(rz);
+        int span = adx > adz ? adx : adz;
+        if (span == 0) return 0;
+        float t = (float)(PF_WINDOW_RADIUS - 1) / (float)span;
+        clamped.x = (int16_t)(start.x + (int)(rx * t));
+        clamped.z = (int16_t)(start.z + (int)(rz * t));
+        clamped.y = start.y;
+    }
+
+    pf_search s;
+    pf_search_setup(&s, &p->grid, &p->pool, &p->open);
+    s.heuristic      = o.heuristic;
+    s.allow_diagonal = o.allow_diagonal;
+    if (o.max_expansions > 0) s.max_expansions = o.max_expansions;
+
+    pf_rawpath raw;
+    if (!pf_astar_run(&s, start, clamped, &raw)) return 0;
+    if (raw.count == 0) return 0;
+
+    // smoothing passes. collinear first (cheap), then string-pull (does the
+    // line-of-sight skips). both are no-ops on a 1-point path.
+    pf_rawpath buf, final;
+    const pf_rawpath *result = &raw;
+    if (o.smooth) {
+        pf_smooth_collinear(&raw, &buf);
+        pf_smooth_string_pull(&p->grid, &buf, &final);
+        result = &final;
+    }
+
+    int n = result->count;
+    if (n > PF_MAX_WAYPOINTS) n = PF_MAX_WAYPOINTS;
+    for (int i = 0; i < n; i++) {
+        out->pts[i].pos = center_of(result->pts[i]);
+    }
+    out->count = n;
+    out->found = n > 0;
+    return out->found;
+}
+
+vec3 pf_path_step(pf_path *path, vec3 entity_pos, float reach) {
+    if (path->cursor >= path->count) {
+        // path exhausted; just hold position. caller usually replans.
+        return entity_pos;
+    }
+
+    vec3 target = path->pts[path->cursor].pos;
+
+    // only the horizontal distance matters for "did we arrive": the mob may
+    // be mid-fall or mid-jump and we don't want y to stall the cursor.
+    float dx = target.x - entity_pos.x;
+    float dz = target.z - entity_pos.z;
+    float planar = sqrtf(dx * dx + dz * dz);
+
+    if (planar <= reach) {
+        path->cursor++;
+        if (path->cursor >= path->count) return entity_pos;
+        target = path->pts[path->cursor].pos;
+    }
+    return target;
+}
+
+int pf_path_done(const pf_path *path) {
+    return path->cursor >= path->count;
 }
