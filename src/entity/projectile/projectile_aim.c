@@ -1,6 +1,8 @@
 #include "projectile_aim.h"
 #include "projectile_ballistic.h"
+
 #include <math.h>
+
 vec3 projectile_aim_direct(vec3 from, vec3 to) {
     vec3 d = vec3_sub(to, from);
     float l = vec3_length(d);
@@ -10,10 +12,12 @@ vec3 projectile_aim_direct(vec3 from, vec3 to) {
 
 vec3 projectile_aim_lead(vec3 from, vec3 tpos, vec3 tvel, float speed) {
     if (speed < 1e-3f) return tpos;
-vec3 aim = tpos;
-for (int it = 0;
-it < 6;
-it++) {
+
+    // fixed-point iteration on time-of-flight: guess the target stands still,
+    // estimate flight time to its lead position, advance the target, repeat.
+    // converges in a handful of steps for any sane closing speed.
+    vec3 aim = tpos;
+    for (int it = 0; it < 6; it++) {
         float dist = vec3_distance(from, aim);
         float tof  = dist / speed;
         vec3 next  = vec3_add(tpos, vec3_scale(tvel, tof));
