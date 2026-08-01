@@ -65,8 +65,93 @@ static void mark_hit(projectile *p, int id) {
 static int handle_entity_hit(projectile_world *pw, projectile *p,
                              const projectile_entity_hit *eh, float speed) {
     int dmg = projectile_hit_damage(p->kind, speed, p->speed0);
+if (pw->on_damage && dmg > 0) {
+        pw->on_damage(pw->damage_user, eh->id, dmg, eh->point);
+    }
+    mark_hit(p, eh->id);
+if (p->pierce_left > 0) {
+        p->pierce_left--;
+        return 0;       // punch through, keep flying
+    }
+    // a snowball with 0 damage still splats and is spent on contact.
+    p->state = PROJ_STATE_SPENT;
 p->vel = VEC3_ZERO;
 return 1;
+}
+
+// advance one flying projectile by dt, splitting into substeps so fast shots
+// cant tunnel. handles block + entity collision within each substep.
+static void update_flying(projectile_world *pw, projectile *p, float dt,
+                          const projectile_target *targets, int count) {
+    const projectile_def *d = projectile_kind_def(p->kind);
+
+    p->age += dt;
+    p->spin += dt * 12.0f;          // fletching roll, render only
+    if (p->age >= d->max_lifetime) { // outlived its welcome
+        p->state = PROJ_STATE_SPENT;
+        return;
+    }
+
+    // estimate substep count from current speed so the per-step distance stays
+    // under the tunnel threshold. at least one, capped so a glitch cant hang us.
+    float speed = vec3_length(p->vel);
+    int subs = (int)((speed * dt) / PROJ_MAX_STEP_DIST) + 1;
+    if (subs < 1) subs = 1;
+    if (subs > PROJ_MAX_SUBSTEPS) subs = PROJ_MAX_SUBSTEPS;
+    float sub_dt = dt / (float)subs;
+
+    for (int s = 0; s < subs; s++) {
+        vec3 from = p->pos;
+        vec3 next;
+        projectile_ballistic_step(p, sub_dt, &next);
+
+        // entity sweep first: a mob standing right at a wall should take the hit
+        // before the arrow buries in the block behind it.
+        if (count > 0) {
+            projectile_entity_hit eh;
+            if (projectile_hit_targets(p->kind, p->owner_id, p->hit_mask_lo,
+                                       from, next, targets, count, &eh)) {
+                float spd = vec3_length(p->vel);
+                if (handle_entity_hit(pw, p, &eh, spd)) {
+                    // stop at the contact point so render/pickup line up.
+                    p->pos = eh.point;
+                    return;
+                }
+            }
+        }
+
+        // block sweep.
+        projectile_block_hit bh;
+        if (projectile_collide_segment(&pw->sampler, from, next, &bh)) {
+            if (bh.kind == PROJ_HIT_FLUID) {
+                // water doesnt stop it, just bleeds speed hard and keeps going.
+                p->pos = next;
+                p->vel = vec3_scale(p->vel, 0.6f);
+                continue;
+            }
+            projectile_resolve r = projectile_stick_resolve(p, &bh);
+            if (r == PROJ_RESOLVE_BOUNCE) {
+                // pos/vel already updated by the resolver; spend remaining
+                // substeps from the bounce point next iteration.
+                continue;
+            }
+            return; // STICK or STOP: done for this projectile this frame
+        }
+
+        // clear air, commit the proposed position.
+        p->pos = next;
+
+        // fell out of the world?
+        if (p->pos.y < pw->void_y) {
+            p->state = PROJ_STATE_SPENT;
+            return;
+        }
+    }
+}
+
+void projectile_world_update(projectile_world *pw, float dt,
+                             const projectile_target *targets, int count) {
+    if (dt <= 0.0f) return;
 pw->sim_time += dt;
 for (int i = 0;
 i < PROJECTILE_POOL_CAP;
