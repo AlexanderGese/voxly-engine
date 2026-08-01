@@ -19,6 +19,7 @@ typedef struct {
     float linger[MAX_MOBS];   // seconds spent in the soft band
 } mspawn_despawn_state;
 void mspawn_despawn_init(mspawn_despawn_state *st);
+// run one despawn pass. removes mobs past the hard radius outright and rolls
 int  mspawn_despawn_tick(mspawn_despawn_state *st, mob_registry *mr,
                          vec3 player_pos, mspawn_rng *r, float dt);
 #endif
