@@ -1,5 +1,7 @@
 #include "projectile_save.h"
 #include <string.h>
+// little-endian cursor writers. the engine's save_v2 does the same hand-rolled
+// thing; we keep it local so the projectile module has no link dep on the world
 typedef struct { uint8_t *p; size_t cap; size_t off; int ok; } wcur;
 typedef struct { const uint8_t *p; size_t len; size_t off; int ok; } rcur;
 static void w_u32(wcur *c, uint32_t v) {
@@ -52,6 +54,47 @@ i < PROJECTILE_POOL_CAP;
 i++)
         if (is_persisted(&pool->slots[i])) n++;
 return 12 + n * PROJ_REC_BYTES;
+}
+
+size_t projectile_save_write(const projectile_pool *pool,
+                             uint8_t *out, size_t out_cap) {
+    size_t need = projectile_save_size(pool);
+    if (!out || out_cap < need) return 0;
+
+    wcur c = { out, out_cap, 0, 1 };
+
+    uint32_t count = 0;
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++)
+        if (is_persisted(&pool->slots[i])) count++;
+
+    w_u32(&c, PROJECTILE_SAVE_MAGIC);
+    w_u32(&c, PROJECTILE_SAVE_VERSION);
+    w_u32(&c, count);
+
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
+        const projectile *p = &pool->slots[i];
+        if (!is_persisted(p)) continue;
+        w_u8 (&c, (uint8_t)p->kind);
+        w_i32(&c, p->stuck_bx);
+        w_i32(&c, p->stuck_by);
+        w_i32(&c, p->stuck_bz);
+        w_f32(&c, p->stuck_off.x);
+        w_f32(&c, p->stuck_off.y);
+        w_f32(&c, p->stuck_off.z);
+        w_f32(&c, p->forward.x);
+        w_f32(&c, p->forward.y);
+        w_f32(&c, p->forward.z);
+        w_f32(&c, p->age);
+        w_i32(&c, p->owner_id);
+    }
+
+    return c.ok ? c.off : 0;
+}
+
+int projectile_save_read(projectile_pool *pool,
+                         const uint8_t *data, size_t len) {
+    if (!data || len < 12) return -1;
+rcur c = { data, len, 0, 1 }
 ;
 uint32_t magic = r_u32(&c);
 uint32_t ver   = r_u32(&c);
@@ -61,4 +104,35 @@ if (ver != PROJECTILE_SAVE_VERSION) return -1;
 int restored = 0;
 for (uint32_t i = 0;
 i < count;
+i++) {
+        uint8_t  kind    = r_u8(&c);
+        int32_t  bx      = r_i32(&c);
+        int32_t  by      = r_i32(&c);
+        int32_t  bz      = r_i32(&c);
+        float    ox      = r_f32(&c);
+        float    oy      = r_f32(&c);
+        float    oz      = r_f32(&c);
+        float    fx      = r_f32(&c);
+        float    fy      = r_f32(&c);
+        float    fz      = r_f32(&c);
+        float    age     = r_f32(&c);
+        int32_t  owner   = r_i32(&c);
+        if (!c.ok) return -1;          // truncated blob, bail honestly
+
+        // the loaded id is fresh — we never persist ids, they're per-session.
+        // borrow the slot index as a cheap unique-ish seed; +1 so it's never 0.
+        projectile *p = projectile_pool_alloc(pool, (uint32_t)(i + 1));
+        if (!p) break;                 // pool full; drop the rest silently
+
+        p->kind = (projectile_kind)kind;
+        p->state = PROJ_STATE_STUCK;
+        p->stuck_bx = bx; p->stuck_by = by; p->stuck_bz = bz;
+        p->stuck_off = (vec3){ ox, oy, oz };
+        p->forward = (vec3){ fx, fy, fz };
+        p->age = age;
+        p->owner_id = owner;
+        p->pos = (vec3){ (float)bx + ox, (float)by + oy, (float)bz + oz };
+        restored++;
+    }
+    return restored;
 }
