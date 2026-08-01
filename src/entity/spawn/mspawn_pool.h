@@ -2,6 +2,10 @@
 #define ENTITY_SPAWN_MSPAWN_POOL_H
 #include "mspawn_local.h"
 #include "../../world/world.h"
+// a tiny fixed ring of per-chunk spot caches. the driver works within a window
+// around the player, which is a handful of chunks, so we dont need a real
+// hashmap here; an N-slot ring with linear scan is faster than hashing for N
+// this small and never allocates. on a miss we evict the oldest slot and
 #define MSPAWN_POOL_SLOTS 8
 typedef struct {
     mspawn_local cache;

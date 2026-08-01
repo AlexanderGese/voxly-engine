@@ -1,6 +1,7 @@
 #include "mspawn_driver.h"
 #include "mspawn_attempt.h"
 #include "mspawn_query.h"
+
 void mspawn_driver_init(mspawn_driver *dr, unsigned world_seed) {
     // mix a fixed salt so the spawn stream doesnt alias the terrain rng that
     // also seeds straight off world_seed.
@@ -17,7 +18,7 @@ void mspawn_driver_init(mspawn_driver *dr, unsigned world_seed) {
 
 void mspawn_driver_set_difficulty(mspawn_driver *dr, mspawn_difficulty diff) {
     if (diff < 0 || diff >= MSPAWN_DIFF_COUNT) return;
-dr->budget.difficulty = diff;
+    dr->budget.difficulty = diff;
 }
 
 void mspawn_driver_set_moon(mspawn_driver *dr, int moon_phase) {
@@ -29,16 +30,29 @@ void mspawn_driver_tick(mspawn_driver *dr, mob_registry *mr, world *w,
     // density tally and despawn run every frame so caps and culling stay live
     // even between the slower spawn cycles. rebuild is cheap (MAX_MOBS small).
     mspawn_density_rebuild(&dr->density, mr, player_pos);
-dr->last_culled = mspawn_despawn_tick(&dr->despawn, mr, player_pos,
+    dr->last_culled = mspawn_despawn_tick(&dr->despawn, mr, player_pos,
                                           &dr->rng, dt);
-dr->timer += dt;
-if (dr->timer < MSPAWN_INTERVAL) return;
-dr->timer -= MSPAWN_INTERVAL;
-mspawn_density_rebuild(&dr->density, mr, player_pos);
-dr->last_hostile_cap = mspawn_budget_apply(&dr->density, &dr->budget,
+
+    // gate the actual spawning to the interval. accumulate and only fire when
+    // we cross it, carrying the remainder so a slow frame doesnt drop a cycle.
+    dr->timer += dt;
+    if (dr->timer < MSPAWN_INTERVAL) return;
+    dr->timer -= MSPAWN_INTERVAL;
+
+    // re-tally after the despawn pass: removals freed up budget this cycle can
+    // use, so the rebuild above might be stale by a few slots.
+    mspawn_density_rebuild(&dr->density, mr, player_pos);
+
+    // reshape the caps for the current clock/difficulty before we attempt.
+    dr->last_hostile_cap = mspawn_budget_apply(&dr->density, &dr->budget,
                                                day_hour);
-int spawned = 0;
-for (int i = 0;
-i < MSPAWN_ATTEMPTS;
-dr->passes++;
+
+    int spawned = 0;
+    for (int i = 0; i < MSPAWN_ATTEMPTS; i++) {
+        spawned += mspawn_attempt_one(mr, w, &dr->density, &dr->rng,
+                                      player_pos, day_hour);
+    }
+
+    dr->last_spawned = spawned;
+    dr->passes++;
 }
