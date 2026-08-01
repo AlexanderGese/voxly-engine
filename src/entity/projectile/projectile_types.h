@@ -25,6 +25,8 @@ typedef enum {
     PROJ_STATE_STUCK,       // embedded in a block, decaying
     PROJ_STATE_SPENT        // hit something / expired, awaiting reap
 } projectile_state;
+// what a step's collision resolve decided happened this tick. the world loop
+// fans out on this rather than peeking at internal fields.
 typedef enum {
     PROJ_HIT_NONE = 0,      // clear air, keep flying
     PROJ_HIT_BLOCK,         // ran into a solid voxel
@@ -32,6 +34,8 @@ typedef enum {
     PROJ_HIT_FLUID,         // entered water/whatever, slows but no stop
     PROJ_HIT_VOID           // fell out the bottom of the world
 } projectile_hitkind;
+// static per-kind tunables. pure data, see projectile_types.c. a kind table is
+// then just an array of these and nothing branches on the enum.
 typedef struct {
     projectile_kind kind;
     const char *name;
@@ -53,6 +57,7 @@ typedef struct {
 
     int   gravity_immune;   // true => flies dead straight (none do yet, but)
 } projectile_def;
+// the live thing. small and trivially copyable; pool stores these by value.
 typedef struct {
     uint32_t id;            // unique, 0 == invalid
     projectile_kind kind;
@@ -74,5 +79,7 @@ typedef struct {
     uint32_t hit_mask_lo;   // entity ids already damaged (cheap dedupe, low 32)
 } projectile;
 const projectile_def *projectile_kind_def(projectile_kind k);
+// collision half-extents for a kind, as an aabb centered on the origin. used by
+// the sweep test; arrows are basically a point but rocks have girth.
 aabb projectile_kind_bounds(projectile_kind k);
 #endif
