@@ -1,11 +1,19 @@
 #include "projectile_world.h"
+
 #include "projectile_ballistic.h"
 #include "projectile_collide.h"
 #include "projectile_stick.h"
+
 #include <math.h>
 #include <stddef.h>
+
+// sub-stepping: a fast spear at 46 b/s covers ~0.77 blocks at 60fps, which the
+// DDA handles fine, but at low framerates a single step could skip a thin wall.
+// so we cap the distance covered per collision pass and split big steps. this is
+// the classic "dont tunnel" fix and it's cheap because the math is all linear.
 #define PROJ_MAX_STEP_DIST  0.45f
 #define PROJ_MAX_SUBSTEPS   8
+
 void projectile_world_init(projectile_world *pw, uint64_t seed) {
     projectile_pool_init(&pw->pool);
     projectile_rng_init(&pw->rng, seed);
@@ -29,9 +37,10 @@ void projectile_world_set_damage_cb(projectile_world *pw,
 
 uint32_t projectile_world_fire(projectile_world *pw, const projectile_shot *shot) {
     const projectile_def *d = projectile_kind_def(shot->kind);
-uint32_t id = projectile_rng_next_id(&pw->rng);
-projectile *p = projectile_pool_alloc(&pw->pool, id);
-if (!p) {
+
+    uint32_t id = projectile_rng_next_id(&pw->rng);
+    projectile *p = projectile_pool_alloc(&pw->pool, id);
+    if (!p) {
         // pool full: try to make room by dropping the oldest free-flier, retry.
         if (!projectile_pool_cull_oldest(&pw->pool)) return 0;
         p = projectile_pool_alloc(&pw->pool, id);
@@ -39,20 +48,24 @@ if (!p) {
     }
 
     float speed = (shot->speed > 0.0f) ? shot->speed : d->speed;
-vec3 dir = projectile_rng_cone(&pw->rng, shot->dir, shot->spread);
-p->kind = shot->kind;
-p->state = PROJ_STATE_FLYING;
-p->pos = shot->origin;
-p->forward = dir;
-p->vel = vec3_add(vec3_scale(dir, speed),
+    vec3 dir = projectile_rng_cone(&pw->rng, shot->dir, shot->spread);
+
+    p->kind = shot->kind;
+    p->state = PROJ_STATE_FLYING;
+    p->pos = shot->origin;
+    p->forward = dir;
+    p->vel = vec3_add(vec3_scale(dir, speed),
                       projectile_rng_jitter(&pw->rng, speed * 0.01f));
-p->speed0 = vec3_length(p->vel);
-p->owner_id = shot->owner_id;
-p->age = 0.0f;
-p->spin = projectile_rng_frange(&pw->rng, 0.0f, 6.2831853f);
-p->pierce_left = (shot->kind == PROJECTILE_SPEAR) ? 1 : 0;
-p->hit_mask_lo = 0;
-return id;
+    p->speed0 = vec3_length(p->vel);
+    p->owner_id = shot->owner_id;
+    p->age = 0.0f;
+    p->spin = projectile_rng_frange(&pw->rng, 0.0f, 6.2831853f);
+
+    // spears get one pierce so they can skewer two mobs in a line; everything
+    // else stops on the first body it touches.
+    p->pierce_left = (shot->kind == PROJECTILE_SPEAR) ? 1 : 0;
+    p->hit_mask_lo = 0;
+    return id;
 }
 
 // mark an entity id as already-damaged in the dedupe mask (low ids only).
@@ -65,18 +78,19 @@ static void mark_hit(projectile *p, int id) {
 static int handle_entity_hit(projectile_world *pw, projectile *p,
                              const projectile_entity_hit *eh, float speed) {
     int dmg = projectile_hit_damage(p->kind, speed, p->speed0);
-if (pw->on_damage && dmg > 0) {
+    if (pw->on_damage && dmg > 0) {
         pw->on_damage(pw->damage_user, eh->id, dmg, eh->point);
     }
     mark_hit(p, eh->id);
-if (p->pierce_left > 0) {
+
+    if (p->pierce_left > 0) {
         p->pierce_left--;
         return 0;       // punch through, keep flying
     }
     // a snowball with 0 damage still splats and is spent on contact.
     p->state = PROJ_STATE_SPENT;
-p->vel = VEC3_ZERO;
-return 1;
+    p->vel = VEC3_ZERO;
+    return 1;
 }
 
 // advance one flying projectile by dt, splitting into substeps so fast shots
@@ -152,7 +166,23 @@ static void update_flying(projectile_world *pw, projectile *p, float dt,
 void projectile_world_update(projectile_world *pw, float dt,
                              const projectile_target *targets, int count) {
     if (dt <= 0.0f) return;
-pw->sim_time += dt;
-for (int i = 0;
-i < PROJECTILE_POOL_CAP;
+    pw->sim_time += dt;
+
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
+        projectile *p = &pw->pool.slots[i];
+        switch (p->state) {
+            case PROJ_STATE_FLYING:
+                update_flying(pw, p, dt, targets, count);
+                break;
+            case PROJ_STATE_STUCK:
+                if (projectile_stick_decay(p, dt)) p->state = PROJ_STATE_SPENT;
+                break;
+            case PROJ_STATE_FREE:
+            case PROJ_STATE_SPENT:
+            default:
+                break;  // free reaped below, spent reaped below
+        }
+    }
+
+    projectile_pool_reap(&pw->pool);
 }
