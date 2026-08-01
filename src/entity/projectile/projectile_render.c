@@ -96,3 +96,44 @@ default:                  *r = 1.0f;
 *g = 0.0f;
 *b = 1.0f;
 break;
+}
+}
+
+void projectile_renderer_draw(projectile_renderer *pr,
+                              const projectile_pool *pool,
+                              const camera *cam) {
+    if (!pr->ready) return;
+
+    mat4 view = camera_view(cam);
+    mat4 proj = camera_proj(cam);
+
+    glUseProgram(pr->prog);
+    gl_set_uniform_mat4(pr->prog, "u_view", mat4_data(&view));
+    gl_set_uniform_mat4(pr->prog, "u_proj", mat4_data(&proj));
+    glBindVertexArray(pr->vao);
+
+    for (int i = 0; i < PROJECTILE_POOL_CAP; i++) {
+        const projectile *p = &pool->slots[i];
+        if (p->state != PROJ_STATE_FLYING && p->state != PROJ_STATE_STUCK) continue;
+
+        const projectile_def *d = projectile_kind_def(p->kind);
+
+        // long+thin: length scales with the collision radius so a spear looks
+        // longer than an arrow. width is a fixed sliver.
+        float len = 0.6f + d->radius * 2.0f;
+        if (p->kind == PROJECTILE_SPEAR) len += 0.5f;
+        vec3 scale = (vec3){ 0.06f, 0.06f, len };
+
+        // stuck projectiles sit at their embedded tip and dont spin.
+        vec3 pos  = (p->state == PROJ_STATE_STUCK) ? projectile_stick_tip(p) : p->pos;
+        float spin = (p->state == PROJ_STATE_STUCK) ? 0.0f : p->spin;
+
+        mat4 model = projectile_render_orient(p->forward, pos, spin, scale);
+        gl_set_uniform_mat4(pr->prog, "u_model", mat4_data(&model));
+
+        float r, g, b;
+        color_for(p->kind, &r, &g, &b);
+        gl_set_uniform_vec3(pr->prog, "u_color", r, g, b);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+}
