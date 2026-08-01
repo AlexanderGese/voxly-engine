@@ -1,0 +1,1 @@
+#ifndef ENTITY_PROJECTILE_RNG_H
