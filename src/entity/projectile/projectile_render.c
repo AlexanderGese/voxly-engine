@@ -2,7 +2,11 @@
 #include "projectile_stick.h"
 #include "../../math/mat4.h"
 #include "../../util/log.h"
+
 #include <math.h>
+
+// same unit box as entity_render. we just stretch it long+thin and aim it down
+// the heading so an arrow reads as an arrow and not a floating sugar cube.
 static const float cube[] = {
     -.5f,-.5f,-.5f,  .5f,-.5f,-.5f,  .5f, .5f,-.5f,
     -.5f,-.5f,-.5f,  .5f, .5f,-.5f, -.5f, .5f,-.5f,
@@ -16,8 +20,8 @@ static const float cube[] = {
     -.5f,-.5f,-.5f, -.5f, .5f, .5f, -.5f,-.5f, .5f,
      .5f,-.5f,-.5f,  .5f, .5f,-.5f,  .5f, .5f, .5f,
      .5f,-.5f,-.5f,  .5f, .5f, .5f,  .5f,-.5f, .5f,
-}
-;
+};
+
 int projectile_renderer_init(projectile_renderer *pr) {
     pr->ready = 0;
     // reuse the entity shader: positions in, flat color out. no point authoring
@@ -41,9 +45,9 @@ int projectile_renderer_init(projectile_renderer *pr) {
 
 void projectile_renderer_destroy(projectile_renderer *pr) {
     if (pr->vao) glDeleteVertexArrays(1, &pr->vao);
-if (pr->vbo) glDeleteBuffers(1, &pr->vbo);
-gl_delete_shader(pr->prog);
-pr->ready = 0;
+    if (pr->vbo) glDeleteBuffers(1, &pr->vbo);
+    gl_delete_shader(pr->prog);
+    pr->ready = 0;
 }
 
 // orient the box so its +z axis points along forward. we build the basis by hand
@@ -72,31 +76,13 @@ mat4 projectile_render_orient(vec3 forward, vec3 pos, float spin, vec3 scale) {
 // per-kind stick color so you can tell a spear from an arrow at a glance.
 static void color_for(projectile_kind k, float *r, float *g, float *b) {
     switch (k) {
-    case PROJECTILE_ARROW:    *r = 0.85f;
-*g = 0.80f;
-*b = 0.65f;
-break;
-case PROJECTILE_BOLT:     *r = 0.55f;
-*g = 0.55f;
-*b = 0.60f;
-break;
-case PROJECTILE_ROCK:     *r = 0.45f;
-*g = 0.45f;
-*b = 0.45f;
-break;
-case PROJECTILE_SNOWBALL: *r = 0.95f;
-*g = 0.97f;
-*b = 1.00f;
-break;
-case PROJECTILE_SPEAR:    *r = 0.60f;
-*g = 0.40f;
-*b = 0.20f;
-break;
-default:                  *r = 1.0f;
-*g = 0.0f;
-*b = 1.0f;
-break;
-}
+    case PROJECTILE_ARROW:    *r = 0.85f; *g = 0.80f; *b = 0.65f; break; // tan shaft
+    case PROJECTILE_BOLT:     *r = 0.55f; *g = 0.55f; *b = 0.60f; break; // steel
+    case PROJECTILE_ROCK:     *r = 0.45f; *g = 0.45f; *b = 0.45f; break; // grey
+    case PROJECTILE_SNOWBALL: *r = 0.95f; *g = 0.97f; *b = 1.00f; break; // white
+    case PROJECTILE_SPEAR:    *r = 0.60f; *g = 0.40f; *b = 0.20f; break; // wood
+    default:                  *r = 1.0f;  *g = 0.0f;  *b = 1.0f;  break; // ugly == bug
+    }
 }
 
 void projectile_renderer_draw(projectile_renderer *pr,
