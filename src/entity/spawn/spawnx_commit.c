@@ -1,6 +1,7 @@
 #include "spawnx_commit.h"
 #include "../../world/block.h"
 #include <math.h>
+
 // world is only 0..CHUNK_SIZE_Y-1 tall. clamp probes so we never read OOB y.
 static int y_in_range(int y) {
     return y >= 0 && y < CHUNK_SIZE_Y;
@@ -10,8 +11,8 @@ static int y_in_range(int y) {
 // our purposes (water mobs go through a different path), only proper solids do.
 static int solid_at(world *w, int wx, int wy, int wz) {
     if (!y_in_range(wy)) return 0;
-block_id b = world_get_block(w, wx, wy, wz);
-return block_is_solid(b) && b != BLOCK_WATER;
+    block_id b = world_get_block(w, wx, wy, wz);
+    return block_is_solid(b) && b != BLOCK_WATER;
 }
 
 int spawnx_spot_clear(world *w, int wx, int wy, int wz, int needs_floor) {
@@ -31,11 +32,8 @@ int spawnx_spot_clear(world *w, int wx, int wy, int wz, int needs_floor) {
 
 int spawnx_settle_y(world *w, int wx, int y_hint, int wz, int needs_floor) {
     // search a small band around the hint, nearest-first. up to 4 each way is
-    // plenty;
-the hint comes from the generated surface so it's usually dead on.
-    for (int d = 0;
-d <= 4;
-d++) {
+    // plenty; the hint comes from the generated surface so it's usually dead on.
+    for (int d = 0; d <= 4; d++) {
         int yd = y_hint - d;
         if (spawnx_spot_clear(w, wx, yd, wz, needs_floor)) return yd;
         if (d == 0) continue;
@@ -62,28 +60,33 @@ static int voxel_taken(const mob_registry *mr, int wx, int wy, int wz) {
 int spawnx_commit(world *w, mob_registry *mr, const spawnx_request *req,
                   spawnx_result *out) {
     out->placed = 0;
-out->entity_id = 0;
-out->pos = req->pos;
-int wx = (int)floorf(req->pos.x);
-int wz = (int)floorf(req->pos.z);
-int y_hint = (int)floorf(req->pos.y);
-// command spawns trust the caller's y exactly; everything else settles onto
-// the nearest legal floor so a slightly-off request still lands.
-int wy;
-if (req->source == SPAWNX_SRC_COMMAND) {
+    out->entity_id = 0;
+    out->pos = req->pos;
+
+    int wx = (int)floorf(req->pos.x);
+    int wz = (int)floorf(req->pos.z);
+    int y_hint = (int)floorf(req->pos.y);
+
+    // command spawns trust the caller's y exactly; everything else settles onto
+    // the nearest legal floor so a slightly-off request still lands.
+    int wy;
+    if (req->source == SPAWNX_SRC_COMMAND) {
         wy = spawnx_spot_clear(w, wx, y_hint, wz, 1) ? y_hint : -1;
     } else {
         wy = spawnx_settle_y(w, wx, y_hint, wz, 1);
-}
+    }
     if (wy < 0) return 0;
-if (voxel_taken(mr, wx, wy, wz)) return 0;
-// voxel-centered feet. +0.5 in x/z to sit in the middle of the tile.
-vec3 feet = vec3_new(wx + 0.5f, (float)wy, wz + 0.5f);
-int id = mob_spawn(mr, req->type, feet);
-if (id <= 0) return 0;
-// registry full
-out->placed = 1;
-out->entity_id = (uint32_t)id;
-out->pos = feet;
-return 1;
+
+    if (voxel_taken(mr, wx, wy, wz)) return 0;
+
+    // voxel-centered feet. +0.5 in x/z to sit in the middle of the tile.
+    vec3 feet = vec3_new(wx + 0.5f, (float)wy, wz + 0.5f);
+
+    int id = mob_spawn(mr, req->type, feet);
+    if (id <= 0) return 0;            // registry full
+
+    out->placed = 1;
+    out->entity_id = (uint32_t)id;
+    out->pos = feet;
+    return 1;
 }
