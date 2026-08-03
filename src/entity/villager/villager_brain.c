@@ -1,1 +1,2 @@
 #define BRAIN_REPATH_INTERVAL 1.5f
+#define BRAIN_PANIC_RANGE     6.0f

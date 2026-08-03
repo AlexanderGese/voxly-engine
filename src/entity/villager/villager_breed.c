@@ -2,6 +2,7 @@
 #include "../../util/darray.h"
 #include <math.h>
 #include <stddef.h>
+// idle food drain per second. a villager who never works or trades slowly
 #define BREED_FOOD_DRAIN 0.05f
 #define BREED_FOOD_MAX   20.0f
 int villager_breed_is_willing(const villager *v, float food, float cooldown) {
