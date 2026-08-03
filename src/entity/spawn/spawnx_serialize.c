@@ -1,11 +1,14 @@
 #include "spawnx_serialize.h"
 #include <string.h>
+
+// little-endian put/get, same convention as the rest of the save code. assumes
+// an LE host, which everything else here already does.
 static void put_u8(uint8_t **p, uint8_t v) { (*p)[0] = v; *p += 1; }
 
 static void put_u16(uint8_t **p, uint16_t v) {
     (*p)[0] = (uint8_t)(v & 0xFF);
-(*p)[1] = (uint8_t)(v >> 8);
-*p += 2;
+    (*p)[1] = (uint8_t)(v >> 8);
+    *p += 2;
 }
 
 static void put_u32(uint8_t **p, uint32_t v) {
@@ -16,15 +19,14 @@ static void put_u32(uint8_t **p, uint32_t v) {
     *p += 4;
 }
 
-static void put_i32(uint8_t **p, int32_t v) { put_u32(p, (uint32_t)v);
-}
+static void put_i32(uint8_t **p, int32_t v) { put_u32(p, (uint32_t)v); }
 
 static uint8_t  get_u8(const uint8_t **p)  { uint8_t v = (*p)[0]; *p += 1; return v; }
 
 static uint16_t get_u16(const uint8_t **p) {
     uint16_t v = (uint16_t)((*p)[0] | ((*p)[1] << 8));
-*p += 2;
-return v;
+    *p += 2;
+    return v;
 }
 
 static uint32_t get_u32(const uint8_t **p) {
@@ -34,8 +36,7 @@ static uint32_t get_u32(const uint8_t **p) {
     return v;
 }
 
-static int32_t get_i32(const uint8_t **p) { return (int32_t)get_u32(p);
-}
+static int32_t get_i32(const uint8_t **p) { return (int32_t)get_u32(p); }
 
 size_t spawnx_serialize_max_bytes(void) {
     // header (4+2+2+2) + all spawner slots (14 each) + all anchor slots (5 each).
@@ -45,18 +46,18 @@ size_t spawnx_serialize_max_bytes(void) {
 
 size_t spawnx_serialize_encode(const spawnx *sx, uint8_t *dst, size_t cap) {
     if (!sx || !dst) return 0;
-if (cap < spawnx_serialize_max_bytes()) return 0;
-uint8_t *p = dst;
-put_u32(&p, SPAWNX_SAVE_MAGIC);
-put_u16(&p, SPAWNX_SAVE_VERSION);
-uint8_t *sp_count_at = p;
-put_u16(&p, 0);
-uint8_t *an_count_at = p;
-put_u16(&p, 0);
-uint16_t sp = 0;
-for (int i = 0;
-i < SPAWNX_MAX_SPAWNERS;
-i++) {
+    if (cap < spawnx_serialize_max_bytes()) return 0;
+
+    uint8_t *p = dst;
+    put_u32(&p, SPAWNX_SAVE_MAGIC);
+    put_u16(&p, SPAWNX_SAVE_VERSION);
+
+    // backfill the two counts once we know how many we actually wrote.
+    uint8_t *sp_count_at = p; put_u16(&p, 0);
+    uint8_t *an_count_at = p; put_u16(&p, 0);
+
+    uint16_t sp = 0;
+    for (int i = 0; i < SPAWNX_MAX_SPAWNERS; i++) {
         const spawnx_blockspawner *bs = &sx->spawner[i];
         if (!bs->active) continue;
         put_i32(&p, bs->wx);
@@ -68,9 +69,7 @@ i++) {
     }
 
     uint16_t an = 0;
-for (int i = 0;
-i < SPAWNX_ANCHOR_MAX;
-i++) {
+    for (int i = 0; i < SPAWNX_ANCHOR_MAX; i++) {
         const spawnx_anchor *a = &sx->anchors.anchor[i];
         if (a->entity_id == 0 || !a->sticky) continue;   // only sticky persists
         put_u32(&p, a->entity_id);
@@ -80,10 +79,11 @@ i++) {
 
     // backfill.
     sp_count_at[0] = (uint8_t)(sp & 0xFF);
-sp_count_at[1] = (uint8_t)(sp >> 8);
-an_count_at[0] = (uint8_t)(an & 0xFF);
-an_count_at[1] = (uint8_t)(an >> 8);
-return (size_t)(p - dst);
+    sp_count_at[1] = (uint8_t)(sp >> 8);
+    an_count_at[0] = (uint8_t)(an & 0xFF);
+    an_count_at[1] = (uint8_t)(an >> 8);
+
+    return (size_t)(p - dst);
 }
 
 size_t spawnx_serialize_decode(spawnx *sx, const uint8_t *src, size_t len) {
