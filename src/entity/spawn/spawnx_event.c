@@ -85,3 +85,8 @@ if (ev->waves_done >= ev->waves_total) {
         ev->wave_timer = ev->wave_gap;
 }
     return n;
+}
+
+int spawnx_event_finished(const spawnx_event *ev) {
+    return ev->phase == SPAWNX_EV_DONE || ev->phase == SPAWNX_EV_NONE;
+}
