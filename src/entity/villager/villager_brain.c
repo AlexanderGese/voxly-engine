@@ -1,0 +1,1 @@
+#define BRAIN_REPATH_INTERVAL 1.5f
