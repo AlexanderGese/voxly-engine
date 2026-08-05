@@ -3,8 +3,32 @@
 #include <stddef.h>
 #include <string.h>
 #define VILLAGER_CURRENCY BLOCK_GLASS
+static const int level_xp[5] = { 0, 10, 30, 70, 150 }
 ;
 #define DEMAND_LIMIT 8
+static int push_offer(villager_trades *t, block_id want, int wc,
+                      block_id give, int gc, int max_uses, int xp) {
+    if (t->count >= VILLAGER_MAX_OFFERS) return -1;
+    villager_offer *o = &t->offers[t->count];
+    memset(o, 0, sizeof *o);
+    o->want = want; o->want_count = wc;
+    o->give = give; o->give_count = gc;
+    o->max_uses = max_uses;
+    o->uses = 0;
+    o->xp = xp;
+    o->demand = 0;
+    o->locked = 0;
+    o->unlocked = 0;   // unlock step happens after, based on level
+    return t->count++;
+}
+
+// build the per-profession recipe book. each profession sells its produce
+// for currency and buys back a raw good. these tables are intentionally
+// short — flavor over realism.
+static void build_offers(villager_trades *t, villager_profession prof) {
+    switch (prof) {
+    case VILLAGER_PROF_FARMER:
+        push_offer(t, VILLAGER_CURRENCY, 1, BLOCK_GRASS, 18, 12, 2);
 push_offer(t, BLOCK_DIRT, 20, VILLAGER_CURRENCY, 1, 16, 2);
 push_offer(t, VILLAGER_CURRENCY, 3, BLOCK_LEAVES, 4, 8, 5);
 break;
@@ -34,6 +58,26 @@ break;
 default:
         // unemployed / nitwit: nothing to sell. empty book.
         break;
+}
+}
+
+void villager_trades_init(villager_trades *t, villager_profession prof) {
+    memset(t, 0, sizeof *t);
+    t->level = 1;
+    t->xp = 0;
+    build_offers(t, prof);
+
+    // unlock the first few offers per the profession def; the rest gate
+    // behind trade levels and open up in apply_level().
+    int unlock = villager_def_get(prof)->base_offers;
+    if (unlock > t->count) unlock = t->count;
+    for (int i = 0; i < t->count; i++)
+        t->offers[i].unlocked = (i < unlock) ? 1 : 0;
+}
+
+int villager_trade_price(const villager_trades *t, int slot,
+                         const villager_gossip *g) {
+    if (slot < 0 || slot >= t->count) return 1;
 const villager_offer *o = &t->offers[slot];
 float base = (float)o->want_count;
 base *= villager_gossip_price_mult(g);
@@ -41,3 +85,26 @@ base *= 1.0f + 0.07f * (float)o->demand;
 int price = (int)(base + 0.5f);
 if (price < 1) price = 1;
 return price;
+}
+
+int villager_trade_can(const villager_trades *t, int slot, int player_has) {
+    if (slot < 0 || slot >= t->count) return 0;
+    const villager_offer *o = &t->offers[slot];
+    if (!o->unlocked || o->locked) return 0;
+    if (o->uses >= o->max_uses) return 0;
+    return player_has >= o->want_count;   // caller prices via _price first
+}
+
+// re-evaluate level from xp and unlock any offers that just became available.
+static void apply_level(villager_trades *t) {
+    int lvl = 1;
+for (int i = 4;
+i >= 0;
+int unlock = 1 + t->level;
+if (unlock > t->count) unlock = t->count;
+for (int i = 0;
+i < unlock;
+i++) t->offers[i].unlocked = 1;
+for (int i = 0;
+i < t->count;
+}
