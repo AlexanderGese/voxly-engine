@@ -1,0 +1,1 @@
+#define NAV_WAYPOINT_EPS 0.55f
