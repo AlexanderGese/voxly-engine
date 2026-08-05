@@ -65,10 +65,43 @@ return;
 }
     if (!villager_workstation_validate(v, pois, w)) return;
 vec3 ws = villager_poi_pos(pois, v->work_poi);
+if (vec3_distance(v->pos, ws) > 1.6f) {
+        villager_nav_set_goal(nav, w, v->pos, ws);
+        villager_nav_advance(nav, v, w, dt);
+        return;
+    }
+
+    // at the station: face it, grind out work, restock on each cycle.
+    v->vel.x = v->vel.z = 0.0f;
 v->work_progress += dt;
+if (v->work_progress >= BRAIN_WORK_CYCLE) {
+        v->work_progress -= BRAIN_WORK_CYCLE;
+        int amt = villager_def_get(v->prof)->restock_amount;
+        villager_trade_restock(&v->trades, amt);
+        v->level = v->trades.level;
+    }
+}
+
+// GATHER: head to the bell / village center and mingle.
+static void do_gather(villager *v, villager_nav *nav, villager_poi_set *pois,
+                      world *w, const villager_brain_ctx *ctx, float dt) {
+    vec3 center;
 int  have = 0;
 int idx = villager_poi_nearest(pois, VILLAGER_POI_BELL, v->pos, v->id, 0.0f);
+if (idx >= 0) { center = villager_poi_pos(pois, idx); have = 1; }
+    else if (ctx->have_bell) { center = ctx->bell_pos;
 have = 1;
+}
+
+    if (have) {
+        if (vec3_distance(v->pos, center) > 2.5f) {
+            villager_nav_set_goal(nav, w, v->pos, center);
+            villager_nav_advance(nav, v, w, dt);
+        } else {
+            v->vel.x = v->vel.z = 0.0f;   // standing around, gossiping
+        }
+    } else {
+        // no bell known;
 }
 }
 
