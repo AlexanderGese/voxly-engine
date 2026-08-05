@@ -1,12 +1,20 @@
 #include "villager_workstation.h"
 #include "villager_def.h"
 #include "../../world/block.h"
+
 #include <math.h>
 #include <stddef.h>
+
+// the engine has no bed/bell blocks, so we borrow: wood = a bed (you sleep
+// on a wooden frame), torch = the bell (it's the village beacon). good enough
+// for the gather/sleep behaviors to have somewhere to point at.
 #define WS_BED_BLOCK   BLOCK_WOOD
 #define WS_BELL_BLOCK  BLOCK_TORCH
+
+// how far a villager will look for a job / bed from where it's standing.
 #define WS_JOB_RANGE     12.0f
 #define WS_BED_RANGE     16.0f
+
 int villager_workstation_scan(villager_poi_set *pois, world *w,
                               vec3 origin, int radius) {
     int added = 0;
@@ -48,14 +56,20 @@ int villager_workstation_scan(villager_poi_set *pois, world *w,
 int villager_workstation_seek_job(villager *v, villager_poi_set *pois, vec3 from) {
     // nitwits and babies don't take jobs.
     if (v->prof == VILLAGER_PROF_NITWIT) return 0;
-if (v->is_baby) return 0;
-if (v->prof != VILLAGER_PROF_UNEMPLOYED) return 1;
-float r2 = WS_JOB_RANGE * WS_JOB_RANGE;
-int idx = villager_poi_nearest(pois, VILLAGER_POI_WORKSTATION, from, v->id, r2);
-if (idx < 0) return 0;
-if (!villager_poi_claim(pois, idx, v->id)) return 0;
-v->work_poi = idx;
-return 1;
+    if (v->is_baby) return 0;
+    if (v->prof != VILLAGER_PROF_UNEMPLOYED) return 1;  // already employed
+
+    float r2 = WS_JOB_RANGE * WS_JOB_RANGE;
+    int idx = villager_poi_nearest(pois, VILLAGER_POI_WORKSTATION, from, v->id, r2);
+    if (idx < 0) return 0;
+    if (!villager_poi_claim(pois, idx, v->id)) return 0;
+
+    // figure out which profession this station belongs to. we don't have the
+    // block here, so we re-derive from the poi position via the registry; the
+    // brain that has the world will set the real profession. as a safe
+    // default, claim it and let validate() lock in the profession next pass.
+    v->work_poi = idx;
+    return 1;
 }
 
 int villager_workstation_validate(villager *v, villager_poi_set *pois, world *w) {
@@ -84,11 +98,11 @@ int villager_workstation_validate(villager *v, villager_poi_set *pois, world *w)
 }
 
 int villager_workstation_claim_bed(villager *v, villager_poi_set *pois, vec3 from) {
-    if (v->bed_poi >= 0) return 1;
-float r2 = WS_BED_RANGE * WS_BED_RANGE;
-int idx = villager_poi_nearest(pois, VILLAGER_POI_BED, from, v->id, r2);
-if (idx < 0) return 0;
-if (!villager_poi_claim(pois, idx, v->id)) return 0;
-v->bed_poi = idx;
-return 1;
+    if (v->bed_poi >= 0) return 1;   // already have one
+    float r2 = WS_BED_RANGE * WS_BED_RANGE;
+    int idx = villager_poi_nearest(pois, VILLAGER_POI_BED, from, v->id, r2);
+    if (idx < 0) return 0;
+    if (!villager_poi_claim(pois, idx, v->id)) return 0;
+    v->bed_poi = idx;
+    return 1;
 }
