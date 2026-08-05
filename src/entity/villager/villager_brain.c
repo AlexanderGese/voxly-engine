@@ -39,6 +39,27 @@ static void do_sleep(villager *v, villager_nav *nav, villager_poi_set *pois,
                      world *w, float dt) {
     if (v->bed_poi < 0)
         villager_workstation_claim_bed(v, pois, v->pos);
+if (v->bed_poi >= 0) {
+        vec3 bed = villager_poi_pos(pois, v->bed_poi);
+        if (vec3_distance(v->pos, bed) > 1.2f) {
+            villager_nav_set_goal(nav, w, v->pos, bed);
+            villager_nav_advance(nav, v, w, dt);
+        } else {
+            // tucked in. stop moving and heal a hair overnight.
+            v->vel.x = v->vel.z = 0.0f;
+            if (v->hp < v->max_hp && v->act_timer > 4.0f) {
+                v->hp++;
+                v->act_timer = 0.0f;
+            }
+        }
+    }
+}
+
+// WORK: validate the station, walk to it, bank work-progress into restocks.
+static void do_work(villager *v, villager_nav *nav, villager_poi_set *pois,
+                    world *w, float dt) {
+    if (v->work_poi < 0) {
+        villager_workstation_seek_job(v, pois, v->pos);
 villager_workstation_validate(v, pois, w);
 return;
 }
