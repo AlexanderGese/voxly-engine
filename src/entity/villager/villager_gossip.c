@@ -1,0 +1,1 @@
+#define GOSSIP_DAY_SECONDS 1200.0f
