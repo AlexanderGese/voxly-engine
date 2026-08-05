@@ -1,9 +1,11 @@
 #ifndef ENTITY_VILLAGER_TRADE_H
 #define ENTITY_VILLAGER_TRADE_H
+
 #include "villager_types.h"
 #include "villager_gossip.h"
 #include "../../world/block.h"
 #include <stdint.h>
+
 // trade offers. a villager exposes up to MAX_OFFERS slots; each is a "give
 // these in items, get this item out" recipe with a stock counter that
 // depletes as the player buys and refills when the villager works.
@@ -13,7 +15,9 @@
 //
 // prices are nudged by reputation (via gossip) and by demand: heavily-used
 // offers drift more expensive, idle ones drift back down. classic.
+
 #define VILLAGER_MAX_OFFERS 6
+
 typedef struct {
     block_id want;          // item the player pays in
     int      want_count;    // base price in `want`
@@ -26,19 +30,32 @@ typedef struct {
     uint8_t  unlocked;      // visible to the player yet?
     uint8_t  locked;        // depleted: needs restock to re-open
 } villager_offer;
+
 typedef struct {
     villager_offer offers[VILLAGER_MAX_OFFERS];
     int            count;
     int            level;       // 1..5, gates which offers unlock
     int            xp;          // accumulated trade xp
 } villager_trades;
+
 // build the offer table for a profession at level 1. clears everything.
 void villager_trades_init(villager_trades *t, villager_profession prof);
+
 // current price for an offer slot, after reputation + demand. >=1 always.
 int  villager_trade_price(const villager_trades *t, int slot,
                           const villager_gossip *g);
+
+// can the player afford and is the slot open? checks stock + unlocked.
 int  villager_trade_can(const villager_trades *t, int slot, int player_has);
+
+// perform a trade: decrements stock, bumps demand, awards xp, leveling up
+// and unlocking offers as thresholds are crossed. returns the item the
+// player receives count via out params; returns 1 on success, 0 if refused.
 int  villager_trade_do(villager_trades *t, int slot, villager_gossip *g,
                        block_id *out_item, int *out_count, int *paid);
+
+// restock: villager worked, refill `amount` uses across locked offers and
+// relax demand a touch. returns how many offers re-opened.
 int  villager_trade_restock(villager_trades *t, int amount);
+
 #endif
