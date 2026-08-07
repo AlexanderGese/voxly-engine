@@ -1,32 +1,60 @@
 #ifndef PLAYER_BUILDING_SYMMETRY_H
 #define PLAYER_BUILDING_SYMMETRY_H
+
 #include "building_types.h"
 #include "building_history.h"
 #include "../../math/vec3.h"
 #include "../../world/world.h"
+
+// mirror planes. a creative-build toy: place once, have it echoed across one
+// or more reflection planes so towers/temples come out symmetric without hand
+// placing every cell. sits on top of the same place/break ops as everything
+// else, so mirrored cells obey the same validation.
+//
+// a plane is axis-aligned and pinned to a world coordinate. we mirror cell
+// *centers*, so the pivot is stored doubled (in half-block units) to keep the
+// reflection on the integer lattice.
+
 enum {
     BSYM_AXIS_X = 0,   // mirror across a plane of constant x
     BSYM_AXIS_Z,       // ...constant z
     BSYM_AXIS_Y,       // ...constant y (rare, but free to support)
     BSYM_AXIS_COUNT
-}
-;
+};
+
 typedef struct {
     int enabled[BSYM_AXIS_COUNT];
     // doubled pivot per axis: reflection of cell c is (pivot2 - 1 - c). storing
     // 2*p lets the plane sit either on a block face (even) or mid-block (odd).
     int pivot2[BSYM_AXIS_COUNT];
 } building_symmetry;
+
 void building_symmetry_init(building_symmetry *s);
+
+// turn a mirror plane on, anchored so it passes through cell coordinate `at`
+// on that axis (plane sits on the low face of that cell).
 void building_symmetry_set(building_symmetry *s, int axis, int at);
 void building_symmetry_clear(building_symmetry *s, int axis);
+
+// reflect a single cell across one axis' plane. no-op coords back if the axis
+// is disabled. exposed for previews.
 void building_symmetry_reflect(const building_symmetry *s, int axis,
                                int x, int y, int z, int *ox, int *oy, int *oz);
+
+// expand a source cell into every distinct mirror image (including itself)
+// implied by the enabled planes — up to 8 with all three on. writes into
+// out[8][3] and returns the count (deduped). order is stable.
 int building_symmetry_expand(const building_symmetry *s, int x, int y, int z,
                              int out[8][3]);
+
+// place `id` at the cell and every mirror image, each through the normal
+// validation gate. records each as its own history edit. returns #placed.
 int building_symmetry_place(world *w, building_history *hist,
                             const building_symmetry *s, block_id id,
                             int x, int y, int z, int face, vec3 feet);
+
+// break the cell and every mirror image. returns #broken.
 int building_symmetry_break(world *w, building_history *hist,
                             const building_symmetry *s, int x, int y, int z);
+
 #endif
