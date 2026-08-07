@@ -1,5 +1,6 @@
 #include "building_preview.h"
 #include "building_face.h"
+
 void building_preview_init(building_preview *pv) {
     pv->show_outline = 0;
     pv->outline = aabb_make(VEC3_ZERO, VEC3_ZERO);
@@ -13,10 +14,10 @@ void building_preview_init(building_preview *pv) {
 
 aabb building_preview_box(int x, int y, int z, float inflate) {
     vec3 mn = vec3_new((float)x - inflate, (float)y - inflate, (float)z - inflate);
-vec3 mx = vec3_new((float)x + 1.0f + inflate,
+    vec3 mx = vec3_new((float)x + 1.0f + inflate,
                        (float)y + 1.0f + inflate,
                        (float)z + 1.0f + inflate);
-return aabb_make(mn, mx);
+    return aabb_make(mn, mx);
 }
 
 void building_preview_update(building_preview *pv, const building_target *t,
@@ -54,9 +55,20 @@ void building_preview_update(building_preview *pv, const building_target *t,
 
 void building_preview_corners(aabb box, vec3 out[8]) {
     // corner order: bit 0 = x, bit 1 = y, bit 2 = z. min when bit clear.
-    for (int i = 0;
-i < 8;
-for (int i = 0;
-i < 24;
-i++) out[i] = E[i];
+    for (int i = 0; i < 8; i++) {
+        out[i].x = (i & 1) ? box.max.x : box.min.x;
+        out[i].y = (i & 2) ? box.max.y : box.min.y;
+        out[i].z = (i & 4) ? box.max.z : box.min.z;
+    }
+}
+
+void building_preview_edges(int out[24]) {
+    // 12 edges of a cube as corner-index pairs, matching the bit layout above.
+    // x-aligned edges (toggle bit0), y-aligned (bit1), z-aligned (bit2).
+    static const int E[24] = {
+        0,1, 2,3, 4,5, 6,7,   // along x
+        0,2, 1,3, 4,6, 5,7,   // along y
+        0,4, 1,5, 2,6, 3,7,   // along z
+    };
+    for (int i = 0; i < 24; i++) out[i] = E[i];
 }
