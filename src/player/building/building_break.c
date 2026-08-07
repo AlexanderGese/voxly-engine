@@ -1,7 +1,9 @@
 #include "building_break.h"
 #include "building_place.h"   // for building_mark_dirty
+
 #include "../../world/block_ext.h"
 #include "../tools/tools_types.h"   // tool_tier enum (TIER_DIAMOND etc.)
+
 int building_is_breakable(block_id id) {
     if (id == BLOCK_AIR)     return 0;
     if (id == BLOCK_BEDROCK) return 0;
@@ -10,17 +12,24 @@ int building_is_breakable(block_id id) {
 
 float building_break_seconds(block_id id, int tool_tier) {
     const block_ext_info *bi = block_ext_get(id);
-float base = bi ? bi->break_time : 0.5f;
-if (base <= 0.0f) return 0.0f;
-if (tool_tier < 0) tool_tier = 0;
-if (tool_tier > TIER_DIAMOND) tool_tier = TIER_DIAMOND;
-if (bi && bi->tool_required == 0) {
+    float base = bi ? bi->break_time : 0.5f;
+    if (base <= 0.0f) return 0.0f;  // instant-break (plants etc)
+
+    // tool tier shaves time. tier 0 (hand) = full time. each tier up to a cap
+    // multiplies dig speed; roughly the vanilla "tier doubles speed" feel but
+    // gentler so a stone pick isn't 16x a hand.
+    if (tool_tier < 0) tool_tier = 0;
+    if (tool_tier > TIER_DIAMOND) tool_tier = TIER_DIAMOND;
+
+    // only matters if the block actually *wants* a tool; bare-hand-able blocks
+    // (dirt, sand) ignore tier entirely.
+    if (bi && bi->tool_required == 0) {
         return base;
     }
 
     float speed = 1.0f + (float)tool_tier * 0.75f;
-float t = base / speed;
-return t < 0.05f ? 0.05f : t;
+    float t = base / speed;
+    return t < 0.05f ? 0.05f : t;
 }
 
 int building_break_block(world *w, building_history *hist,
