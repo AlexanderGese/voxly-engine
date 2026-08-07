@@ -40,6 +40,15 @@ f++) {
         out[n++] = f;
     }
     while (n < 4) out[n++] = -1;
+}
+
+int building_face_is_vertical(int face) {
+    return face == BFACE_PY || face == BFACE_NY;
+}
+
+void building_face_adjacent(int hx, int hy, int hz, int face,
+                            int *ax, int *ay, int *az) {
+    int dx, dy, dz;
 building_face_normal(face, &dx, &dy, &dz);
 *ax = hx + dx;
 *ay = hy + dy;
