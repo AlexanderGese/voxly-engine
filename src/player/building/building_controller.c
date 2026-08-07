@@ -3,10 +3,13 @@
 #include "building_place.h"
 #include "building_break.h"
 #include "building_validate.h"
+
 #include "../../config.h"
+
 // held-place repeat rate. minecraft-ish: a quick tap places one, holding
 // places ~4/sec. tap (rising edge) always fires immediately.
 #define BUILDING_PLACE_INTERVAL 0.22f
+
 void building_controller_init(building_controller *bc) {
     building_history_init(&bc->hist);
     building_preview_init(&bc->preview);
@@ -23,13 +26,13 @@ static void do_place(building_controller *bc, world *w,
                      const building_input *in, building_event *out) {
     if (in->hand_id == BLOCK_AIR) {
         if (out) out->place_fail = BPLACE_EMPTY_HAND;
-return;
-}
+        return;
+    }
 
     building_edit e;
-int r = building_place_block(w, &bc->hist, in->hand_id, &bc->target,
+    int r = building_place_block(w, &bc->hist, in->hand_id, &bc->target,
                                  in->yaw, in->feet, &e);
-if (r == BPLACE_OK) {
+    if (r == BPLACE_OK) {
         if (out) {
             out->placed = 1;
             out->placed_id = e.after;
@@ -39,7 +42,7 @@ if (r == BPLACE_OK) {
         }
     } else if (out) {
         out->place_fail = r;
-}
+    }
 }
 
 // commit the break once the progress bar has filled. caller guarantees the
@@ -65,15 +68,17 @@ building_target building_controller_update(building_controller *bc, world *w,
                                            float dt, building_event *out) {
     if (out) {
         building_event z = {0};
-*out = z;
-}
-    if (!bc->enabled) return (building_target){0}
-;
-// resolve where we're pointing, surface-clamped to arm length.
-vec3 eye = building_eye_from_feet(in->feet);
-vec3 fwd = building_forward_from_angles(in->yaw, in->pitch);
-bc->target = building_reach_resolve(w, eye, fwd, bc->reach);
-if (in->mining) {
+        *out = z;
+    }
+    if (!bc->enabled) return (building_target){0};
+
+    // resolve where we're pointing, surface-clamped to arm length.
+    vec3 eye = building_eye_from_feet(in->feet);
+    vec3 fwd = building_forward_from_angles(in->yaw, in->pitch);
+    bc->target = building_reach_resolve(w, eye, fwd, bc->reach);
+
+    // --- breaking ----------------------------------------------------------
+    if (in->mining) {
         // drive the real progress with the real dt here (the helper above used
         // a placeholder; this is the authoritative advance).
         if (bc->target.valid) {
@@ -98,12 +103,13 @@ if (in->mining) {
         }
     } else {
         break_progress_cancel(&bc->breaking);
-}
+    }
 
     // --- placing -----------------------------------------------------------
     if (bc->place_cooldown > 0.0f) bc->place_cooldown -= dt;
-int rising = in->placing && !bc->prev_placing;
-if (in->placing) {
+
+    int rising = in->placing && !bc->prev_placing;
+    if (in->placing) {
         if (rising) {
             do_place(bc, w, in, out);          // tap: instant
             bc->place_cooldown = BUILDING_PLACE_INTERVAL;
@@ -113,8 +119,11 @@ if (in->placing) {
         }
     }
     bc->prev_placing = in->placing;
-int verdict = BPLACE_OK;
-if (in->hand_id != BLOCK_AIR && bc->target.valid) {
+
+    // --- preview -----------------------------------------------------------
+    // only validate for the ghost tint when the hand actually holds a block.
+    int verdict = BPLACE_OK;
+    if (in->hand_id != BLOCK_AIR && bc->target.valid) {
         verdict = building_validate_place(w, in->hand_id,
                                           bc->target.place_x,
                                           bc->target.place_y,
@@ -122,7 +131,8 @@ if (in->hand_id != BLOCK_AIR && bc->target.valid) {
                                           bc->target.face, in->feet);
     }
     building_preview_update(&bc->preview, &bc->target, in->hand_id, verdict, 3);
-return bc->target;
+
+    return bc->target;
 }
 
 int building_controller_undo(building_controller *bc, world *w) {
