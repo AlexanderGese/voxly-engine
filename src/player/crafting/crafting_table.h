@@ -1,0 +1,1 @@
+#ifndef PLAYER_CRAFTING_TABLE_H
