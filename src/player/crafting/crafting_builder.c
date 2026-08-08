@@ -1,5 +1,6 @@
 #include "crafting_builder.h"
 #include <string.h>
+
 static void fill_ingredients(craft_recipe *r, const block_id *cells, int n) {
     r->ing_n = 0;
     for (int i = 0; i < n; i++) {
@@ -12,9 +13,7 @@ static void fill_ingredients(craft_recipe *r, const block_id *cells, int n) {
 void craft_pattern_normalize(craft_recipe *r) {
     // find tight bbox of the pattern within its declared w*h.
     int minx = r->w, miny = r->h, maxx = -1, maxy = -1;
-for (int y = 0;
-y < r->h;
-y++) {
+    for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {
             if (r->pattern[y * r->w + x] == BLOCK_AIR) continue;
             if (x < minx) minx = x;
@@ -23,22 +22,21 @@ y++) {
             if (y > maxy) maxy = y;
         }
     }
-    if (maxx < 0) return;
-int nw = maxx - minx + 1;
-int nh = maxy - miny + 1;
-if (nw == r->w && nh == r->h) return;
-block_id tmp[CRAFT_GRID_CELLS];
-for (int y = 0;
-y < nh;
-y++)
-        for (int x = 0;
-x < nw;
-x++)
+    if (maxx < 0) return;  // all-air pattern, leave it (degenerate)
+
+    int nw = maxx - minx + 1;
+    int nh = maxy - miny + 1;
+    if (nw == r->w && nh == r->h) return;  // already tight
+
+    block_id tmp[CRAFT_GRID_CELLS];
+    for (int y = 0; y < nh; y++)
+        for (int x = 0; x < nw; x++)
             tmp[y * nw + x] = r->pattern[(miny + y) * r->w + (minx + x)];
-memset(r->pattern, BLOCK_AIR, sizeof r->pattern);
-memcpy(r->pattern, tmp, (size_t)nw * nh * sizeof(block_id));
-r->w = nw;
-r->h = nh;
+
+    memset(r->pattern, BLOCK_AIR, sizeof r->pattern);
+    memcpy(r->pattern, tmp, (size_t)nw * nh * sizeof(block_id));
+    r->w = nw;
+    r->h = nh;
 }
 
 craft_recipe craft_build_shaped(const char *name, int w, int h,
