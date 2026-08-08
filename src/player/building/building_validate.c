@@ -81,6 +81,55 @@ int building_overlaps_player(block_id id, int x, int y, int z, vec3 feet) {
 static int solid_below(world *w, int x, int y, int z) {
     if (y - 1 < 0) return 0;
 return block_ext_is_solid(world_get_block(w, x, y - 1, z));
+}
+
+int building_has_support(world *w, block_id id, int x, int y, int z, int face) {
+    // plants want soil directly under them.
+    if (block_ext_is_plant(id)) {
+        if (y - 1 < 0) return 0;
+        block_id under = world_get_block(w, x, y - 1, z);
+        if (id == BLOCK_CACTUS) {
+            // cactus is fussy: only on sand.
+            return under == BLOCK_SAND;
+        }
+        return under == BLOCK_GRASS || under == BLOCK_DIRT ||
+               under == BLOCK_SAND;
+    }
+
+    // ladders cling to the wall they were placed against. the clicked face is
+    // the outward normal of that wall, so the wall is in the opposite dir.
+    if (id == BLOCK_LADDER) {
+        if (building_face_is_vertical(face)) return 0; // no floor ladders
+        int back = building_face_opposite(face);
+        int bx, by, bz;
+        building_face_adjacent(x, y, z, back, &bx, &by, &bz);
+        return block_ext_is_solid(world_get_block(w, bx, by, bz));
+    }
+
+    // torches: floor or a side wall, never a ceiling.
+    if (id == BLOCK_TORCH) {
+        if (face == BFACE_NY) return 0; // placed on a ceiling, nope
+        if (face == BFACE_PY) return solid_below(w, x, y, z);
+        int back = building_face_opposite(face);
+        int bx, by, bz;
+        building_face_adjacent(x, y, z, back, &bx, &by, &bz);
+        return block_ext_is_solid(world_get_block(w, bx, by, bz));
+    }
+
+    // sugarcane also wants something solid under it (sand/dirt/grass).
+    if (id == BLOCK_SUGARCANE) {
+        return solid_below(w, x, y, z);
+    }
+
+    // everything else floats fine.
+    return 1;
+}
+
+// --- the gate --------------------------------------------------------------
+
+int building_validate_place(world *w, block_id id, int x, int y, int z,
+                            int face, vec3 feet) {
+    if (!building_is_placeable(id))      return BPLACE_NOT_PLACEABLE;
 if (!building_cell_in_bounds(y))     return BPLACE_WORLD_EDGE;
 if (!building_cell_replaceable(w, x, y, z)) return BPLACE_OCCUPIED;
 if (!building_has_support(w, id, x, y, z, face)) return BPLACE_NO_SUPPORT;
