@@ -1,25 +1,25 @@
 #include "crafting_stats.h"
 #include <string.h>
+
 static int s_times[CRAFT_STATS_CAP];
 static int s_yield[CRAFT_STATS_CAP];
 static int s_total;
+
 // recent ring. s_recent[0] is the oldest slot index-wise but we track head so
 // "newest first" reads are easy. -1 == empty slot.
 static int s_recent[CRAFT_RECENT_RING];
-static int s_recent_n;
-// how many slots are populated (<= ring size)
+static int s_recent_n;     // how many slots are populated (<= ring size)
+
 void craft_stats_init(void) {
     craft_stats_reset();
 }
 
 void craft_stats_reset(void) {
     memset(s_times, 0, sizeof s_times);
-memset(s_yield, 0, sizeof s_yield);
-s_total = 0;
-for (int i = 0;
-i < CRAFT_RECENT_RING;
-i++) s_recent[i] = -1;
-s_recent_n = 0;
+    memset(s_yield, 0, sizeof s_yield);
+    s_total = 0;
+    for (int i = 0; i < CRAFT_RECENT_RING; i++) s_recent[i] = -1;
+    s_recent_n = 0;
 }
 
 // push id to the front of the recent list, de-duping. simple shift since the
@@ -43,11 +43,11 @@ static void recent_push(int id) {
 
 void craft_stats_record(int recipe_id, int made) {
     if (recipe_id < 0 || recipe_id >= CRAFT_STATS_CAP) return;
-if (made < 0) made = 0;
-s_times[recipe_id]++;
-s_yield[recipe_id] += made;
-s_total++;
-recent_push(recipe_id);
+    if (made < 0) made = 0;
+    s_times[recipe_id]++;
+    s_yield[recipe_id] += made;
+    s_total++;
+    recent_push(recipe_id);
 }
 
 int craft_stats_times(int recipe_id) {
@@ -57,7 +57,7 @@ int craft_stats_times(int recipe_id) {
 
 int craft_stats_yield(int recipe_id) {
     if (recipe_id < 0 || recipe_id >= CRAFT_STATS_CAP) return 0;
-return s_yield[recipe_id];
+    return s_yield[recipe_id];
 }
 
 int craft_stats_favorite(void) {
@@ -72,9 +72,9 @@ int craft_stats_favorite(void) {
 // O(n^2) doesnt matter and we avoid allocating a scratch index array.
 int craft_stats_top(int *out, int cap) {
     char used[CRAFT_STATS_CAP];
-memset(used, 0, sizeof used);
-int n = 0;
-while (n < cap) {
+    memset(used, 0, sizeof used);
+    int n = 0;
+    while (n < cap) {
         int best = -1, best_n = 0;
         for (int i = 0; i < CRAFT_STATS_CAP; i++) {
             if (used[i] || s_times[i] == 0) continue;
@@ -96,5 +96,4 @@ int craft_stats_recent(int *out, int cap) {
     return n;
 }
 
-int craft_stats_total_crafts(void) { return s_total;
-}
+int craft_stats_total_crafts(void) { return s_total; }
