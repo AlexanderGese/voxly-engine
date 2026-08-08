@@ -1,8 +1,14 @@
 #include "crafting_equiv.h"
 #include "crafting_grid.h"
 #include <string.h>
+
+// flat 256-entry map: each block id points at its canonical id. by default a
+// block is its own canonical (the identity), so joining is the only thing that
+// changes anything. small and fast, no hashmap needed for 256 ids.
+
 static block_id s_canon[256];
 static int      s_inited;
+
 void craft_equiv_init(void) {
     if (s_inited) return;
     for (int i = 0; i < 256; i++) s_canon[i] = (block_id)i;
@@ -18,9 +24,11 @@ void craft_equiv_init(void) {
 
 void craft_equiv_join(block_id canonical, block_id member) {
     if (member == BLOCK_AIR) return;
-block_id old = s_canon[member];
-s_canon[member] = canonical;
-if (old != member) {
+    // point member (and anything that currently canonicalizes to member) at
+    // the new canonical, so chains collapse rather than dangle.
+    block_id old = s_canon[member];
+    s_canon[member] = canonical;
+    if (old != member) {
         for (int i = 0; i < 256; i++)
             if (s_canon[i] == old) s_canon[i] = canonical;
     }
@@ -36,10 +44,8 @@ int craft_equiv_same(block_id a, block_id b) {
 
 int craft_equiv_normalize(struct craft_grid *gg) {
     craft_grid *g = (craft_grid *)gg;
-int changed = 0;
-for (int i = 0;
-i < CRAFT_GRID_CELLS;
-i++) {
+    int changed = 0;
+    for (int i = 0; i < CRAFT_GRID_CELLS; i++) {
         craft_stack *c = &g->cell[i];
         if (craft_stack_empty(c)) continue;
         block_id cn = s_canon[c->id];
