@@ -1,5 +1,10 @@
 #include "crafting_match.h"
 #include "crafting_grid.h"
+
+// ---- shapeless ----------------------------------------------------------
+// build a (id -> count) histogram of the grid and of the recipe and compare.
+// ids are u8 so a flat 256 bucket array is fine and beats sorting.
+
 static void grid_hist(const craft_grid *g, int hist[256]) {
     for (int i = 0; i < 256; i++) hist[i] = 0;
     for (int i = 0; i < CRAFT_GRID_CELLS; i++) {
@@ -11,25 +16,22 @@ static void grid_hist(const craft_grid *g, int hist[256]) {
 
 int craft_match_shapeless(const craft_grid *g, const craft_recipe *r) {
     int gh[256];
-grid_hist(g, gh);
-int rh[256];
-for (int i = 0;
-i < 256;
-i++) rh[i] = 0;
-for (int i = 0;
-i < r->ing_n;
-i++) rh[r->ing[i]]++;
-for (int i = 0;
-i < 256;
-i++)
+    grid_hist(g, gh);
+
+    int rh[256];
+    for (int i = 0; i < 256; i++) rh[i] = 0;
+    for (int i = 0; i < r->ing_n; i++) rh[r->ing[i]]++;
+
+    // every id count must match exactly. a shapeless recipe consumes one of
+    // each listed ingredient, so the grid must hold exactly that multiset.
+    for (int i = 0; i < 256; i++)
         if (gh[i] != rh[i]) return 0;
-return 1;
+    return 1;
 }
 
 // ---- shaped -------------------------------------------------------------
 // the recipe pattern is its own tight bounding box (w*h). we find the grid's
-// occupied bounding box;
-if the dims dont line up it can't match. otherwise
+// occupied bounding box; if the dims dont line up it can't match. otherwise
 // we overlay pattern[] onto the box cell-for-cell.
 
 static int shaped_cmp(const craft_grid *g, const craft_recipe *r,
@@ -49,11 +51,13 @@ static int shaped_cmp(const craft_grid *g, const craft_recipe *r,
 static int shaped_match_impl(const craft_grid *g, const craft_recipe *r,
                              int mirror) {
     int x0, y0, x1, y1, w, h;
-if (!craft_grid_bounds(g, &x0, &y0, &x1, &y1, &w, &h)) return 0;
-if (w != r->w || h != r->h) return 0;
-(void)x1;
-(void)y1;
-return shaped_cmp(g, r, x0, y0, mirror);
+    if (!craft_grid_bounds(g, &x0, &y0, &x1, &y1, &w, &h)) return 0;
+    // dims must equal the recipe's bounding box exactly. translation is the
+    // only freedom; since we already shrank to the bbox there's nothing to
+    // slide, but keep the offset compare for clarity.
+    if (w != r->w || h != r->h) return 0;
+    (void)x1; (void)y1;
+    return shaped_cmp(g, r, x0, y0, mirror);
 }
 
 int craft_match_shaped(const craft_grid *g, const craft_recipe *r) {
