@@ -18,5 +18,6 @@ craft_recipe craft_build_shapeless(const char *name,
                                    const block_id *ings, int n,
                                    block_id result, int yield);
 // trim a shaped pattern down to its tight bounding box so matching's bbox
+// logic lines up. called internally but exposed for tests.
 void craft_pattern_normalize(craft_recipe *r);
 #endif
