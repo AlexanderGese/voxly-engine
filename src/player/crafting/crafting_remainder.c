@@ -1,9 +1,15 @@
 #include "crafting_remainder.h"
 #include "crafting_grid.h"
 #include "../../util/log.h"
+
+// flat 256 table. index by the ingredient id, value is what it becomes when
+// it gets used in a craft. BLOCK_AIR (0) everywhere means "no remainder", the
+// normal case. this stays tiny so a plain array beats a hashmap.
+
 static block_id s_remainder[256];
 static int      s_count;
 static int      s_inited;
+
 void craft_remainder_init(void) {
     if (s_inited) return;
     for (int i = 0; i < 256; i++) s_remainder[i] = BLOCK_AIR;
@@ -22,9 +28,9 @@ void craft_remainder_init(void) {
 
 void craft_remainder_set(block_id ingredient, block_id leftover) {
     block_id prev = s_remainder[ingredient];
-s_remainder[ingredient] = leftover;
-if (prev == BLOCK_AIR && leftover != BLOCK_AIR) s_count++;
-else if (prev != BLOCK_AIR && leftover == BLOCK_AIR) s_count--;
+    s_remainder[ingredient] = leftover;
+    if (prev == BLOCK_AIR && leftover != BLOCK_AIR) s_count++;
+    else if (prev != BLOCK_AIR && leftover == BLOCK_AIR) s_count--;
 }
 
 block_id craft_remainder_of(block_id ingredient) {
@@ -72,5 +78,4 @@ int craft_remainder_apply(struct craft_grid *g) {
     return left;
 }
 
-int craft_remainder_count(void) { return s_count;
-}
+int craft_remainder_count(void) { return s_count; }
