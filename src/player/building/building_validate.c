@@ -1,7 +1,11 @@
 #include "building_validate.h"
 #include "building_face.h"
+
 #include "../../world/block_ext.h"
 #include "../../config.h"
+
+// --- placeability ----------------------------------------------------------
+
 int building_is_placeable(block_id id) {
     if (id == BLOCK_AIR)   return 0;
     if (id == BLOCK_WATER) return 0;   // can't hand-place fluid
@@ -12,8 +16,8 @@ int building_is_placeable(block_id id) {
 // a handful of blocks get overwritten by a placement instead of blocking it.
 static int is_replaceable_id(block_id id) {
     if (id == BLOCK_AIR)   return 1;
-if (id == BLOCK_WATER) return 1;
-switch (id) {
+    if (id == BLOCK_WATER) return 1;   // you can place into shallow water
+    switch (id) {
         case BLOCK_TALL_GRASS:
         case BLOCK_FLOWER_RED:
         case BLOCK_FLOWER_YELLOW:
@@ -28,8 +32,8 @@ switch (id) {
 
 int building_cell_replaceable(world *w, int x, int y, int z) {
     if (!building_cell_in_bounds(y)) return 0;
-block_id here = world_get_block(w, x, y, z);
-return is_replaceable_id(here);
+    block_id here = world_get_block(w, x, y, z);
+    return is_replaceable_id(here);
 }
 
 int building_cell_in_bounds(int y) {
@@ -43,8 +47,8 @@ aabb building_block_aabb(block_id id, int x, int y, int z) {
     // test treats them as empty space.
     if (block_ext_is_plant(id) || !block_ext_is_solid(id)) {
         vec3 p = vec3_new((float)x, (float)y, (float)z);
-return aabb_make(p, p);
-}
+        return aabb_make(p, p); // zero volume
+    }
 
     // slabs are a half-height box sitting on the floor of the cell.
     if (block_ext_get(id) && block_ext_get(id)->is_slab) {
@@ -54,8 +58,8 @@ return aabb_make(p, p);
     }
 
     vec3 mn = vec3_new((float)x,        (float)y,        (float)z);
-vec3 mx = vec3_new((float)x + 1.0f, (float)y + 1.0f, (float)z + 1.0f);
-return aabb_make(mn, mx);
+    vec3 mx = vec3_new((float)x + 1.0f, (float)y + 1.0f, (float)z + 1.0f);
+    return aabb_make(mn, mx);
 }
 
 int building_overlaps_player(block_id id, int x, int y, int z, vec3 feet) {
@@ -80,7 +84,7 @@ int building_overlaps_player(block_id id, int x, int y, int z, vec3 feet) {
 
 static int solid_below(world *w, int x, int y, int z) {
     if (y - 1 < 0) return 0;
-return block_ext_is_solid(world_get_block(w, x, y - 1, z));
+    return block_ext_is_solid(world_get_block(w, x, y - 1, z));
 }
 
 int building_has_support(world *w, block_id id, int x, int y, int z, int face) {
@@ -130,9 +134,9 @@ int building_has_support(world *w, block_id id, int x, int y, int z, int face) {
 int building_validate_place(world *w, block_id id, int x, int y, int z,
                             int face, vec3 feet) {
     if (!building_is_placeable(id))      return BPLACE_NOT_PLACEABLE;
-if (!building_cell_in_bounds(y))     return BPLACE_WORLD_EDGE;
-if (!building_cell_replaceable(w, x, y, z)) return BPLACE_OCCUPIED;
-if (!building_has_support(w, id, x, y, z, face)) return BPLACE_NO_SUPPORT;
-if (building_overlaps_player(id, x, y, z, feet)) return BPLACE_PLAYER_OVERLAP;
-return BPLACE_OK;
+    if (!building_cell_in_bounds(y))     return BPLACE_WORLD_EDGE;
+    if (!building_cell_replaceable(w, x, y, z)) return BPLACE_OCCUPIED;
+    if (!building_has_support(w, id, x, y, z, face)) return BPLACE_NO_SUPPORT;
+    if (building_overlaps_player(id, x, y, z, feet)) return BPLACE_PLAYER_OVERLAP;
+    return BPLACE_OK;
 }
