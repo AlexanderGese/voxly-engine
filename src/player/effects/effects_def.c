@@ -1,6 +1,14 @@
 #include "effects_def.h"
+
 #include <stddef.h>
 #include <string.h>
+
+// the big table. designated initializers keyed by kind so reordering the enum
+// can't silently shift a row onto the wrong effect. magic numbers everywhere,
+//.h owns the gameplay-critical ones, these are flavour.
+//
+// interval_ticks assumes the caller ticks at 20 hz (the usual game tick), so
+// 25 ticks ~= 1.25s, matching the old combat_dot poison cadence.
 static const effects_def k_def[EFFECT_KIND_COUNT] = {
     [EFFECT_NONE] = {
         "none", "none", EFFECT_CAT_NEUTRAL, EFFECT_STACK_HIGHEST,
@@ -88,9 +96,40 @@ static const effects_def k_def[EFFECT_KIND_COUNT] = {
         "levitation", "levitation", EFFECT_CAT_NEUTRAL, EFFECT_STACK_REFRESH,
         206, 255, 255, true, false, 0, 0.9f, false, false
     },
+};
+
+// returned for bogus kinds so callers never deref NULL.
+static const effects_def k_sentinel = {
+    "?", "?", EFFECT_CAT_NEUTRAL, EFFECT_STACK_HIGHEST,
+    0, 0, 0, false, false, 0, 0.0f, true, false
+};
+
+const effects_def *effects_def_get(effects_kind kind) {
+    if (kind <= EFFECT_NONE || kind >= EFFECT_KIND_COUNT) return &k_sentinel;
+    return &k_def[kind];
 }
-;
-;
-for (int k = 1;
-k < EFFECT_KIND_COUNT;
+
+effects_kind effects_def_from_id(const char *id) {
+    if (!id) return EFFECT_NONE;
+    for (int k = 1; k < EFFECT_KIND_COUNT; k++) {
+        if (strcmp(k_def[k].id, id) == 0) return (effects_kind)k;
+    }
+    return EFFECT_NONE;
+}
+
+int effects_def_interval(effects_kind kind, int amplifier) {
+    const effects_def *d = effects_def_get(kind);
+    if (!d->ticks || d->interval_ticks <= 0) return 0;
+    if (amplifier < 0) amplifier = 0;
+
+    int iv = d->interval_ticks;
+    // each level halves the gap, but never below one tick or the loop in
+    // effects_tick would spin forever draining nothing.
+    for (int i = 0; i < amplifier && iv > 1; i++) iv /= 2;
+    if (iv < 1) iv = 1;
+    return iv;
+}
+
+bool effects_def_is_buff(effects_kind kind) {
+    return effects_def_get(kind)->category == EFFECT_CAT_BENEFICIAL;
 }
