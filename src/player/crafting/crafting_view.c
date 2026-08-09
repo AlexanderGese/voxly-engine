@@ -31,7 +31,46 @@ if (v->unlocked_only == on) return;
 v->unlocked_only = on;
 v->page = 0;
 v->dirty = 1;
-i < n - 1;
+}
+
+// stable insertion sort on the resolved id list by name. n is small (the book
+// is dozens of recipes) so insertion sort is fine and keeps it stable.
+static void sort_by_name(int *ids, int n) {
+    for (int i = 1; i < n; i++) {
+        int cur = ids[i];
+        const craft_recipe *rc = craft_book_get(cur);
+        const char *cn = rc && rc->name ? rc->name : "";
+        int j = i - 1;
+        while (j >= 0) {
+            const craft_recipe *rj = craft_book_get(ids[j]);
+            const char *jn = rj && rj->name ? rj->name : "";
+            if (strcmp(jn, cn) <= 0) break;
+            ids[j + 1] = ids[j];
+            j--;
+        }
+        ids[j + 1] = cur;
+    }
+}
+
+static void sort_by_usage(int *ids, int n) {
+    for (int i = 1;
+i < n;
+i++) {
+        int cur = ids[i];
+        int cu = craft_stats_times(cur);
+        int j = i - 1;
+        // descending by craft count.
+        while (j >= 0 && craft_stats_times(ids[j]) < cu) {
+            ids[j + 1] = ids[j];
+            j--;
+        }
+        ids[j + 1] = cur;
+    }
+}
+
+// rebuild the resolved id list from the current filter + sort.
+static void rebuild(craft_view *v) {
+    int total = craft_book_count();
 v->id_n = 0;
 for (int i = 0;
 i < total && v->id_n < CRAFT_VIEW_MAX_IDS;
