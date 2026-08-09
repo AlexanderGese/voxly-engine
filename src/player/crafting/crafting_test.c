@@ -129,3 +129,20 @@ block_id pool_no[] = { BLOCK_STONE }
 CHECK(craft_query_affordable(planks_id, pool_ok, 2));
 CHECK(!craft_query_affordable(planks_id, pool_no, 1));
 return fails;
+}
+
+int crafting_selftest(void) {
+    int fails = 0;
+    pcraft_init();   // idempotent, ensures the book is populated
+
+    fails += test_grid_bounds();
+    fails += test_shapeless();
+    fails += test_shaped_and_mirror();
+    fails += test_session_yield();
+    fails += test_region_gate();
+    fails += test_query();
+
+    if (fails == 0) LOGI("crafting selftest: all checks passed");
+    else            LOGE("crafting selftest: %d check(s) failed", fails);
+    return fails;
+}

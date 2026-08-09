@@ -1,6 +1,9 @@
 #include "effects_event.h"
+
 #include <stddef.h>
+
 #define MASK (EFFECTS_EVENT_CAP - 1)
+
 void effects_event_log_init(effects_event_log *log) {
     log->head = 0;
     log->serial = 0;
@@ -15,12 +18,13 @@ void effects_event_log_init(effects_event_log *log) {
 void effects_event_push(effects_event_log *log, effects_event_type type,
                         effects_kind kind, int amplifier) {
     effects_event *e = &log->ring[log->head & MASK];
-e->type = type;
-e->kind = kind;
-e->amplifier = amplifier;
-e->tick = log->serial;
-log->head++;
-log->serial++;
+    e->type = type;
+    e->kind = kind;
+    e->amplifier = amplifier;
+    e->tick = log->serial;
+
+    log->head++;
+    log->serial++;
 }
 
 int effects_event_count(const effects_event_log *log) {
@@ -29,9 +33,10 @@ int effects_event_count(const effects_event_log *log) {
 
 const effects_event *effects_event_peek(const effects_event_log *log, int i) {
     int n = effects_event_count(log);
-if (i < 0 || i >= n) return NULL;
-uint32_t idx = (log->head - 1 - (uint32_t)i) & MASK;
-return &log->ring[idx];
+    if (i < 0 || i >= n) return NULL;
+    // head points one past the newest, so newest is head-1, then back from there.
+    uint32_t idx = (log->head - 1 - (uint32_t)i) & MASK;
+    return &log->ring[idx];
 }
 
 const char *effects_event_verb(effects_event_type t) {
