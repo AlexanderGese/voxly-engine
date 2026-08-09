@@ -122,6 +122,7 @@ int ids[16];
 int n = craft_query_by_result(BLOCK_PLANKS, ids, 16);
 CHECK(n >= 1);
 int planks_id = ids[0];
+block_id pool_ok[] = { BLOCK_WOOD, BLOCK_STONE }
 ;
 ;
 CHECK(craft_query_affordable(planks_id, pool_ok, 2));
