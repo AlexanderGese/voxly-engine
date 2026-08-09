@@ -3,6 +3,10 @@
 #include "crafting_remainder.h"
 #include "crafting_stats.h"
 #include <string.h>
+
+// does any occupied cell hold an item with a remainder mapping? if so we have
+// to route consumption through craft_remainder_apply instead of the plain
+// one-off-each decrement the table does.
 static int grid_has_remainder(const craft_grid *g) {
     for (int i = 0; i < CRAFT_GRID_CELLS; i++) {
         const craft_stack *c = &g->cell[i];
@@ -17,14 +21,10 @@ static int grid_has_remainder(const craft_grid *g) {
 static void consume_with_remainder(craft_session *s) {
     if (grid_has_remainder(&s->grid)) {
         craft_remainder_apply(&s->grid);
-return;
-}
-    for (int y = 0;
-y < CRAFT_GRID_MAX;
-y++)
-        for (int x = 0;
-x < CRAFT_GRID_MAX;
-x++)
+        return;
+    }
+    for (int y = 0; y < CRAFT_GRID_MAX; y++)
+        for (int x = 0; x < CRAFT_GRID_MAX; x++)
             craft_grid_take_one(&s->grid, x, y);
 }
 
@@ -43,8 +43,8 @@ int craft_yield_once(craft_session *s, craft_stack *out) {
 
 int craft_yield_all(craft_session *s, block_id *out_id) {
     int total = 0;
-block_id id = BLOCK_AIR;
-while (craft_session_can_craft(s)) {
+    block_id id = BLOCK_AIR;
+    while (craft_session_can_craft(s)) {
         craft_stack r = s->result;
         if (id == BLOCK_AIR) id = r.id;
         else if (r.id != id) break;       // a different recipe slid into place
@@ -53,7 +53,7 @@ while (craft_session_can_craft(s)) {
         total += got.count;
     }
     if (out_id) *out_id = id;
-return total;
+    return total;
 }
 
 int craft_yield_potential(const craft_session *s) {
