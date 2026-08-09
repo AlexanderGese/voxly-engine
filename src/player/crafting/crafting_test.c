@@ -5,9 +5,11 @@
 #include "../../world/block.h"
 #include "../../world/block_ext.h"
 #include "../../util/log.h"
+
 #include <string.h>
+
 #define CHECK(cond) do { \
-if (!(cond)) { fails++; LOGE("crafting selftest FAIL: %s", #cond); } \
+        if (!(cond)) { fails++; LOGE("crafting selftest FAIL: %s", #cond); } \
     } while (0)
 
 // put one item in a grid cell, terse helper for the tests.
@@ -37,21 +39,26 @@ static int test_grid_bounds(void) {
 
 static int test_shapeless(void) {
     int fails = 0;
-block_id ings[] = { BLOCK_WOOD }
-;
-craft_recipe r = craft_build_shapeless("t_planks", ings, 1,
+    block_id ings[] = { BLOCK_WOOD };
+    craft_recipe r = craft_build_shapeless("t_planks", ings, 1,
                                            BLOCK_PLANKS, 4);
-craft_grid g;
-craft_grid_clear(&g);
-put(&g, 2, 2, BLOCK_WOOD);
-CHECK(craft_match(&g, &r));
-CHECK(craft_match_shapeless(&g, &r));
-put(&g, 0, 0, BLOCK_WOOD);
-CHECK(!craft_match(&g, &r));
-craft_grid_clear(&g);
-put(&g, 1, 1, BLOCK_STONE);
-CHECK(!craft_match(&g, &r));
-return fails;
+
+    craft_grid g;
+    craft_grid_clear(&g);
+    // one log anywhere matches, regardless of position.
+    put(&g, 2, 2, BLOCK_WOOD);
+    CHECK(craft_match(&g, &r));
+    CHECK(craft_match_shapeless(&g, &r));
+
+    // two logs is the wrong multiset, must not match.
+    put(&g, 0, 0, BLOCK_WOOD);
+    CHECK(!craft_match(&g, &r));
+
+    // wrong item, no match.
+    craft_grid_clear(&g);
+    put(&g, 1, 1, BLOCK_STONE);
+    CHECK(!craft_match(&g, &r));
+    return fails;
 }
 
 static int test_shaped_and_mirror(void) {
@@ -85,22 +92,27 @@ static int test_shaped_and_mirror(void) {
 
 static int test_session_yield(void) {
     int fails = 0;
-craft_session s;
-craft_session_init(&s, 1);
-CHECK(craft_session_place(&s, 0, 0, BLOCK_WOOD) == 1);
-CHECK(craft_session_can_craft(&s));
-craft_stack out;
-CHECK(craft_session_craft_one(&s, &out));
-CHECK(out.id == BLOCK_PLANKS && out.count == 4);
-CHECK(!craft_session_can_craft(&s));
-craft_session_init(&s, 1);
-craft_grid_set(&s.grid, 0, 0, craft_stack_make(BLOCK_WOOD, 2));
-craft_session_refresh(&s);
-block_id rid;
-int total = craft_session_craft_all(&s, &rid);
-CHECK(rid == BLOCK_PLANKS);
-CHECK(total == 8);
-return fails;
+    // uses the real book. planks recipe yields 4 from 1 log.
+    craft_session s;
+    craft_session_init(&s, 1);
+    CHECK(craft_session_place(&s, 0, 0, BLOCK_WOOD) == 1);
+    CHECK(craft_session_can_craft(&s));
+
+    craft_stack out;
+    CHECK(craft_session_craft_one(&s, &out));
+    CHECK(out.id == BLOCK_PLANKS && out.count == 4);
+    // the log was consumed, nothing left to craft.
+    CHECK(!craft_session_can_craft(&s));
+
+    // craft-all over a 2-high stack of logs (one per cell): two crafts -> 8.
+    craft_session_init(&s, 1);
+    craft_grid_set(&s.grid, 0, 0, craft_stack_make(BLOCK_WOOD, 2));
+    craft_session_refresh(&s);
+    block_id rid;
+    int total = craft_session_craft_all(&s, &rid);
+    CHECK(rid == BLOCK_PLANKS);
+    CHECK(total == 8);
+    return fails;
 }
 
 static int test_region_gate(void) {
@@ -118,17 +130,17 @@ static int test_region_gate(void) {
 
 static int test_query(void) {
     int fails = 0;
-int ids[16];
-int n = craft_query_by_result(BLOCK_PLANKS, ids, 16);
-CHECK(n >= 1);
-int planks_id = ids[0];
-block_id pool_ok[] = { BLOCK_WOOD, BLOCK_STONE }
-;
-block_id pool_no[] = { BLOCK_STONE }
-;
-CHECK(craft_query_affordable(planks_id, pool_ok, 2));
-CHECK(!craft_query_affordable(planks_id, pool_no, 1));
-return fails;
+    int ids[16];
+    int n = craft_query_by_result(BLOCK_PLANKS, ids, 16);
+    CHECK(n >= 1);
+
+    // affordability: planks needs one log; a pool with a log covers it.
+    int planks_id = ids[0];
+    block_id pool_ok[] = { BLOCK_WOOD, BLOCK_STONE };
+    block_id pool_no[] = { BLOCK_STONE };
+    CHECK(craft_query_affordable(planks_id, pool_ok, 2));
+    CHECK(!craft_query_affordable(planks_id, pool_no, 1));
+    return fails;
 }
 
 int crafting_selftest(void) {
