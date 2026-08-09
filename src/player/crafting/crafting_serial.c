@@ -13,6 +13,8 @@
 // u32 recipe_count          // how many ids we wrote stats for
 // then recipe_count records of: u8 unlocked, u32 times, u32 yield
 // the count lets the loader skip ids the current build no longer knows about.
+// little write/read cursor helpers. they bump a byte pointer and bounds-check
+// against the end so a truncated file cant walk off the buffer.
 typedef struct { uint8_t *p; uint8_t *end; } wcur;
 typedef struct { const uint8_t *p; const uint8_t *end; } rcur;
 static void w_u32(wcur *c, uint32_t v) {
