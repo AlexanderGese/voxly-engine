@@ -1,6 +1,7 @@
 #include "crafting_table.h"
 #include "crafting_grid.h"
 #include "crafting_book.h"
+
 void craft_session_init(craft_session *s, int is_3x3) {
     craft_grid_clear(&s->grid);
     s->result = craft_stack_make(BLOCK_AIR, 0);
@@ -13,7 +14,7 @@ void craft_session_init(craft_session *s, int is_3x3) {
 // the player cant cheese a 3x3 recipe from the inventory.
 static int session_in_region(const craft_session *s, int x, int y) {
     if (s->is_3x3) return 1;
-return x < 2 && y < 2;
+    return x < 2 && y < 2;
 }
 
 static int session_region_violated(const craft_session *s) {
@@ -30,18 +31,18 @@ static int session_region_violated(const craft_session *s) {
 int craft_session_refresh(craft_session *s) {
     if (session_region_violated(s)) {
         s->matched_id = -1;
-s->result = craft_stack_make(BLOCK_AIR, 0);
-return -1;
-}
+        s->result = craft_stack_make(BLOCK_AIR, 0);
+        return -1;
+    }
     int id = craft_book_find(&s->grid);
-s->matched_id = id;
-if (id < 0) {
+    s->matched_id = id;
+    if (id < 0) {
         s->result = craft_stack_make(BLOCK_AIR, 0);
         return -1;
     }
     const craft_recipe *r = craft_book_get(id);
-s->result = r->result;
-return id;
+    s->result = r->result;
+    return id;
 }
 
 int craft_session_place(craft_session *s, int x, int y, block_id id) {
@@ -53,8 +54,8 @@ int craft_session_place(craft_session *s, int x, int y, block_id id) {
 
 block_id craft_session_take(craft_session *s, int x, int y) {
     block_id id = craft_grid_take_one(&s->grid, x, y);
-if (id != BLOCK_AIR) craft_session_refresh(s);
-return id;
+    if (id != BLOCK_AIR) craft_session_refresh(s);
+    return id;
 }
 
 int craft_session_can_craft(const craft_session *s) {
@@ -64,12 +65,8 @@ int craft_session_can_craft(const craft_session *s) {
 // consume exactly one item from every occupied grid cell. shaped + shapeless
 // both work this way: a recipe uses one of each placed item per craft.
 static void consume_one_each(craft_session *s) {
-    for (int y = 0;
-y < CRAFT_GRID_MAX;
-y++)
-        for (int x = 0;
-x < CRAFT_GRID_MAX;
-x++)
+    for (int y = 0; y < CRAFT_GRID_MAX; y++)
+        for (int x = 0; x < CRAFT_GRID_MAX; x++)
             craft_grid_take_one(&s->grid, x, y);
 }
 
@@ -83,5 +80,31 @@ int craft_session_craft_one(craft_session *s, craft_stack *out) {
 
 int craft_session_craft_all(craft_session *s, block_id *out_id) {
     int total = 0;
-block_id id = BLOCK_AIR;
-return total;
+    block_id id = BLOCK_AIR;
+    // keep crafting while the same-ish recipe stays satisfied. the result id
+    // can in principle change between iterations (different recipe now fits),
+    // so we lock onto the first result and stop if it drifts.
+    while (craft_session_can_craft(s)) {
+        craft_stack r = s->result;
+        if (id == BLOCK_AIR) id = r.id;
+        else if (r.id != id) break;
+        total += r.count;
+        consume_one_each(s);
+        craft_session_refresh(s);
+    }
+    if (out_id) *out_id = id;
+    return total;
+}
+
+int craft_session_clear(craft_session *s, craft_stack *spill) {
+    int n = 0;
+    for (int y = 0; y < CRAFT_GRID_MAX; y++) {
+        for (int x = 0; x < CRAFT_GRID_MAX; x++) {
+            craft_stack c = craft_grid_get(&s->grid, x, y);
+            if (!craft_stack_empty(&c)) spill[n++] = c;
+        }
+    }
+    craft_grid_clear(&s->grid);
+    craft_session_refresh(s);
+    return n;
+}

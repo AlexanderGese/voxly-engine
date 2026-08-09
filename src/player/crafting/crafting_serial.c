@@ -6,6 +6,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+// blob layout (all little-ish endian via raw memcpy of u32, we never move
+// saves between machines so byte order is moot):
+// u32 magic
+// u32 version
+// u32 recipe_count          // how many ids we wrote stats for
+// then recipe_count records of: u8 unlocked, u32 times, u32 yield
+// the count lets the loader skip ids the current build no longer knows about.
 typedef struct { uint8_t *p; uint8_t *end; } wcur;
 typedef struct { const uint8_t *p; const uint8_t *end; } rcur;
 static void w_u32(wcur *c, uint32_t v) {
@@ -65,7 +72,43 @@ int known = craft_book_count();
 craft_stats_reset();
 for (uint32_t i = 0;
 i < count;
+i++) {
+        uint8_t unlocked = 0;
+        uint32_t times = 0, yield = 0;
+        if (!r_u8(&c, &unlocked)) return -4;
+        if (!r_u32(&c, &times))   return -4;
+        if (!r_u32(&c, &yield))   return -4;
+
+        // ids beyond what this build knows are silently dropped (recipe set
+        // shrank). we still had to read them to stay aligned.
+        if ((int)i >= known) continue;
+        if (unlocked) craft_book_unlock((int)i);
+        // replay the stats. record() also rebuilds the recent ring, but a load
+        // shouldnt pretend these were "just crafted", so poke the counters
+        // through record() once per craft would be wrong; instead we fold them
+        // in as a bulk single record and accept the recent-ring approximation.
+        if (times > 0) {
+            // average yield per craft, rounded, just to give record() a number.
+            int per = yield && times ? (int)(yield / times) : 0;
+            for (uint32_t k = 0; k < times; k++)
+                craft_stats_record((int)i, per);
+        }
+    }
+    LOGI("crafting: loaded progress for %u recipe(s)", count);
 return 0;
+}
+
+int craft_save_to_file(const char *path) {
+    size_t sz = 0;
+    void *buf = craft_save_to_buffer(&sz);
+    if (!buf) return -1;
+    int rc = file_write_all(path, buf, sz);
+    free(buf);
+    return rc;
+}
+
+int craft_load_from_file(const char *path) {
+    size_t sz = 0;
 char *buf = file_read_all(path, &sz);
 if (!buf) return -1;
 int rc = craft_load_from_buffer(buf, sz);
