@@ -1,0 +1,1 @@
+#define CHECK(cond) do { \

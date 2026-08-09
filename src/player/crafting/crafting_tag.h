@@ -25,6 +25,9 @@ int  craft_tag_has(int recipe_id, craft_tag t);
 // registration code so it doesnt have to tag every single recipe by hand.
 unsigned craft_tag_infer(block_id result);
 // fill `out` with recipe ids carrying tag `t`, scanning the whole book. returns
+// count written (capped at `cap`).
 int  craft_tag_filter(craft_tag t, int *out, int cap);
+// human label for a single tag bit, for the tab strip. returns a static string,
+// "?" for an unknown/combined mask.
 const char *craft_tag_name(craft_tag t);
 #endif
