@@ -1,16 +1,25 @@
 #include "effects_potion.h"
 #include "effects_def.h"
+
 #include <stddef.h>
+
+// one effect a potion grants. duration here is the *base* drink duration in
+// ticks at amplifier 0; the brewing toggles and form scale it.
 typedef struct {
     effects_kind kind;
     int amplifier;
     int duration;     // base ticks, or EFFECTS_DURATION_INFINITE never used here
 } potion_effect;
+
+// up to two effects per potion (turtle master is the only two-fer right now but
+// the table's shaped for more). a terminating EFFECT_NONE marks the end.
 typedef struct {
     const char    *name;
     potion_effect  fx[2];
     bool           instant;   // healing/harming: short, can't be extended
 } potion_recipe;
+
+// 20 tps assumed, so 3600 ticks == 3 minutes, the classic potion length.
 static const potion_recipe k_potion[POTION_KIND_COUNT] = {
     [POTION_NONE]    = { "water bottle", {{0}}, false },
     [POTION_AWKWARD] = { "awkward potion", {{0}}, false },
@@ -42,8 +51,8 @@ static const potion_recipe k_potion[POTION_KIND_COUNT] = {
         { { EFFECT_INVISIBILITY, 0, 3600 }, {0} }, false },
     [POTION_TURTLE_MASTER] = { "potion of the turtle master",
         { { EFFECT_SLOWNESS, 3, 400 }, { EFFECT_RESISTANCE, 2, 400 } }, false },
-}
-;
+};
+
 effects_potion effects_potion_make(effects_potion_kind kind) {
     effects_potion p;
     p.kind = (kind > POTION_NONE && kind < POTION_KIND_COUNT) ? kind : POTION_NONE;
@@ -55,7 +64,7 @@ effects_potion effects_potion_make(effects_potion_kind kind) {
 
 const char *effects_potion_name(effects_potion_kind k) {
     if (k <= POTION_NONE || k >= POTION_KIND_COUNT) return "?";
-return k_potion[k].name;
+    return k_potion[k].name;
 }
 
 // resolve a single recipe effect against the brewing toggles + form into the
@@ -95,11 +104,35 @@ static void resolve(const potion_recipe *r, const potion_effect *fx,
 static int drink_at(effects_set *s, const effects_immunity *im,
                     const effects_potion *p, float form_scale, uint32_t source_id) {
     if (!p || p->kind <= POTION_NONE || p->kind >= POTION_KIND_COUNT) return 0;
-const potion_recipe *r = &k_potion[p->kind];
-int took = 0;
-for (int i = 0;
-i < 2;
-if (splash_strength > 1.0f) splash_strength = 1.0f;
-float base = (p && p->form == POTION_FORM_LINGERING) ? 0.25f : 0.75f;
-return drink_at(s, im, p, base * splash_strength, source_id);
+    const potion_recipe *r = &k_potion[p->kind];
+
+    int took = 0;
+    for (int i = 0; i < 2; i++) {
+        const potion_effect *fx = &r->fx[i];
+        if (fx->kind == EFFECT_NONE) continue;
+
+        int amp, dur;
+        resolve(r, fx, p, form_scale, &amp, &dur);
+
+        effects_apply_result res =
+            peffects_apply(s, im, fx->kind, amp, dur, source_id, false);
+        if (effects_apply_took(res.result)) took++;
+    }
+    return took;
+}
+
+int effects_potion_drink(effects_set *s, const effects_immunity *im,
+                         const effects_potion *p, uint32_t source_id) {
+    return drink_at(s, im, p, 1.0f, source_id);
+}
+
+int effects_potion_splash(effects_set *s, const effects_immunity *im,
+                          const effects_potion *p, float splash_strength,
+                          uint32_t source_id) {
+    if (splash_strength < 0.0f) splash_strength = 0.0f;
+    if (splash_strength > 1.0f) splash_strength = 1.0f;
+    // a splash potion tops out at 75% of the drink duration even on a direct
+    // hit, then falls off with distance. lingering re-ups are weaker still.
+    float base = (p && p->form == POTION_FORM_LINGERING) ? 0.25f : 0.75f;
+    return drink_at(s, im, p, base * splash_strength, source_id);
 }
