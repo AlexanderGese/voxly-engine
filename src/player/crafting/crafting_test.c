@@ -37,6 +37,7 @@ static int test_grid_bounds(void) {
 
 static int test_shapeless(void) {
     int fails = 0;
+block_id ings[] = { BLOCK_WOOD }
 ;
 craft_recipe r = craft_build_shapeless("t_planks", ings, 1,
                                            BLOCK_PLANKS, 4);
@@ -51,6 +52,39 @@ craft_grid_clear(&g);
 put(&g, 1, 1, BLOCK_STONE);
 CHECK(!craft_match(&g, &r));
 return fails;
+}
+
+static int test_shaped_and_mirror(void) {
+    int fails = 0;
+    // an L-shape: asymmetric so mirroring is observable.
+    block_id pat[] = { BLOCK_PLANKS, BLOCK_AIR,
+                       BLOCK_PLANKS, BLOCK_PLANKS };
+    craft_recipe r = craft_build_shaped("t_L", 2, 2, pat, BLOCK_FENCE, 1);
+
+    craft_grid g;
+    craft_grid_clear(&g);
+    // place the exact L at an offset; translation invariance must hold.
+    put(&g, 1, 0, BLOCK_PLANKS);
+    put(&g, 1, 1, BLOCK_PLANKS);
+    put(&g, 2, 1, BLOCK_PLANKS);
+    CHECK(craft_match_shaped(&g, &r));
+    CHECK(craft_match(&g, &r));
+
+    // mirror the L horizontally; plain shaped fails, mirror match succeeds,
+    // and craft_match accepts it because we allow mirrored shaped recipes.
+    craft_grid_clear(&g);
+    put(&g, 0, 0, BLOCK_AIR);   // explicit, no-op
+    put(&g, 1, 0, BLOCK_PLANKS);
+    put(&g, 0, 1, BLOCK_PLANKS);
+    put(&g, 1, 1, BLOCK_PLANKS);
+    CHECK(!craft_match_shaped(&g, &r));
+    CHECK(craft_match_shaped_mirrored(&g, &r));
+    CHECK(craft_match(&g, &r));
+    return fails;
+}
+
+static int test_session_yield(void) {
+    int fails = 0;
 craft_session s;
 craft_session_init(&s, 1);
 CHECK(craft_session_place(&s, 0, 0, BLOCK_WOOD) == 1);
@@ -67,6 +101,23 @@ int total = craft_session_craft_all(&s, &rid);
 CHECK(rid == BLOCK_PLANKS);
 CHECK(total == 8);
 return fails;
+}
+
+static int test_region_gate(void) {
+    int fails = 0;
+    // a 2x2 inventory session must refuse a 3x3 chest recipe.
+    craft_session s;
+    craft_session_init(&s, 0);
+    for (int y = 0; y < 3; y++)
+        for (int x = 0; x < 3; x++)
+            if (!(x == 1 && y == 1))
+                craft_session_place(&s, x, y, BLOCK_PLANKS);
+    CHECK(!craft_session_can_craft(&s));   // out of region, gated
+    return fails;
+}
+
+static int test_query(void) {
+    int fails = 0;
 int ids[16];
 int n = craft_query_by_result(BLOCK_PLANKS, ids, 16);
 CHECK(n >= 1);
