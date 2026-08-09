@@ -1,6 +1,9 @@
 #include "effects_modifier.h"
 #include "effects_def.h"
+
 #include <stddef.h>
+
+// level == amplifier + 1, since amplifier 0 reads as "level I" in the ui.
 static int level_of(const effects_set *s, effects_kind kind) {
     const effects_instance *e = effects_set_find_const(s, kind);
     return e ? e->amplifier + 1 : 0;
@@ -8,20 +11,20 @@ static int level_of(const effects_set *s, effects_kind kind) {
 
 effects_modifiers effects_modifier_identity(void) {
     effects_modifiers m;
-m.move_speed_mult = 1.0f;
-m.jump_vel_mult = 1.0f;
-m.dig_speed_mult = 1.0f;
-m.melee_damage_mult = 1.0f;
-m.incoming_damage_mult = 1.0f;
-m.absorption_hp = 0;
-m.gamma_floor = 0.0f;
-m.render_alpha = 1.0f;
-m.fire_immune = false;
-m.water_breathing = false;
-m.glowing = false;
-m.levitating = false;
-m.levitation_accel = 0.0f;
-return m;
+    m.move_speed_mult = 1.0f;
+    m.jump_vel_mult = 1.0f;
+    m.dig_speed_mult = 1.0f;
+    m.melee_damage_mult = 1.0f;
+    m.incoming_damage_mult = 1.0f;
+    m.absorption_hp = 0;
+    m.gamma_floor = 0.0f;
+    m.render_alpha = 1.0f;
+    m.fire_immune = false;
+    m.water_breathing = false;
+    m.glowing = false;
+    m.levitating = false;
+    m.levitation_accel = 0.0f;
+    return m;
 }
 
 effects_modifiers effects_modifier_compute(const effects_set *s) {
@@ -85,3 +88,8 @@ effects_modifiers effects_modifier_compute(const effects_set *s) {
 
 int effects_modifier_haste_level(const effects_set *s) {
     return level_of(s, EFFECT_HASTE);
+}
+
+int effects_modifier_fatigue_level(const effects_set *s) {
+    return level_of(s, EFFECT_FATIGUE);
+}
