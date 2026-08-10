@@ -1,13 +1,20 @@
 #include "enchant_roll.h"
 #include "enchant_registry.h"
 #include "enchant_set.h"
+
 #include <stddef.h>
+
+// scratch space for the weighted pass. one entry per eligible (enchant,level)
+// candidate. we never have more than KINDS*MAX_LEVEL of them and in practice
+// far fewer, so a fixed stack buffer is plenty.
 typedef struct {
     enchant_id id;
     int        level;
     int        weight;
 } roll_cand;
+
 #define ROLL_MAX_CAND (ENCHANT_MAX_KINDS * 4)
+
 int enchant_roll_modified_level(rng *r, int base_level, int enchantability) {
     if (base_level < 1) base_level = 1;
     if (enchantability < 1) enchantability = 1;
@@ -27,8 +34,7 @@ int enchant_roll_modified_level(rng *r, int base_level, int enchantability) {
 }
 
 // the level an enchant rolls at for a given modified level. each enchant has
-// a per-level band [minl, maxl];
-we pick the highest level whose minimum
+// a per-level band [minl, maxl]; we pick the highest level whose minimum
 // requirement the modified level clears. crude but it gives the satisfying
 // "more power -> higher tiers" curve.
 static int level_for(const enchant_def *d, int modified_level) {
@@ -50,10 +56,8 @@ static int level_for(const enchant_def *d, int modified_level) {
 static int gather(int modified_level, enchant_cat cat,
                   roll_cand *out, int max, int *total) {
     int n = 0, sum = 0;
-int kinds = enchant_registry_count();
-for (int i = 0;
-i < kinds && n < max;
-++i) {
+    int kinds = enchant_registry_count();
+    for (int i = 0; i < kinds && n < max; ++i) {
         const enchant_def *d = enchant_registry_at(i);
         if (!d) continue;
         if (!enchant_applies_to(d->id, cat)) continue;
@@ -66,7 +70,7 @@ i < kinds && n < max;
         n++;
     }
     *total = sum;
-return n;
+    return n;
 }
 
 // weighted draw from a candidate list. returns the index, or -1 if empty.
@@ -83,15 +87,15 @@ static int weighted_draw(rng *r, const roll_cand *c, int n, int total) {
 enchant_id enchant_roll_pick_one(rng *r, int modified_level,
                                  enchant_cat item_cat, int *out_level) {
     roll_cand cand[ROLL_MAX_CAND];
-int total = 0;
-int n = gather(modified_level, item_cat, cand, ROLL_MAX_CAND, &total);
-int idx = weighted_draw(r, cand, n, total);
-if (idx < 0) {
+    int total = 0;
+    int n = gather(modified_level, item_cat, cand, ROLL_MAX_CAND, &total);
+    int idx = weighted_draw(r, cand, n, total);
+    if (idx < 0) {
         if (out_level) *out_level = 0;
         return ENCHANT_NONE;
     }
     if (out_level) *out_level = cand[idx].level;
-return cand[idx].id;
+    return cand[idx].id;
 }
 
 int enchant_roll_slot(rng *r, int base_level, int enchantability,
