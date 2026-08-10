@@ -1,7 +1,9 @@
 #include "enchant_anvil.h"
 #include "enchant_set.h"
 #include "enchant_registry.h"
+
 #include <stddef.h>
+
 int enchant_anvil_prior_penalty(int prior_work) {
     if (prior_work < 0) prior_work = 0;
     if (prior_work > 30) prior_work = 30;   // 2^31 would overflow, clamp early
@@ -13,9 +15,10 @@ int enchant_anvil_prior_penalty(int prior_work) {
 // by whether the sacrifice is a book (cheaper) or a full item.
 static int merge_unit_cost(const enchant_def *d, int from_book) {
     int base = d ? d->anvil_cost : 1;
-if (base < 1) base = 1;
-if (from_book) base = (base + 1) / 2;
-return base;
+    if (base < 1) base = 1;
+    // books are half-price (rounded up) since that's their whole purpose.
+    if (from_book) base = (base + 1) / 2;
+    return base;
 }
 
 void enchant_anvil_combine(const enchant_anvil_item *target,
