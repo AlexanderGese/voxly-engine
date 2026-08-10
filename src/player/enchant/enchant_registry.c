@@ -1,9 +1,14 @@
 #include "enchant_registry.h"
 #include <stddef.h>
 #include <string.h>
+// the master list. order doesn't matter to lookups (we index by id) but we
+// keep it roughly id-sorted for sanity when reading. weights are tuned by
+// feel, which is to say i made them up and then nudged them until the table
+// stopped handing out infinity every other roll.
 static enchant_def g_defs[ENCHANT_MAX_KINDS];
 static int         g_count = 0;
 static int         g_ready = 0;
+// little helper so the table below reads like data and not like a wall of
 static void def_row(enchant_id id, const char *name, enchant_cat cats,
                     enchant_rarity rarity, uint8_t max_lvl, uint8_t weight,
                     uint8_t cost, enchant_id c0, enchant_id c1, enchant_id c2) {
@@ -103,3 +108,13 @@ i < ENCHANT_COUNT;
         if (d && d->name && strcmp(d->name, name) == 0) return d;
     }
     return NULL;
+}
+
+int enchant_applies_to(enchant_id id, enchant_cat item_cat) {
+    const enchant_def *d = enchant_registry_get(id);
+    if (!d) return 0;
+    if (item_cat == ENCHANT_CAT_NONE) return 0;
+    // books are the universal donor: anything goes onto a book.
+    if (item_cat & ENCHANT_CAT_BOOK) return 1;
+    return (d->cats & item_cat) != 0;
+}
