@@ -73,7 +73,7 @@ return n;
 static int weighted_draw(rng *r, const roll_cand *c, int n, int total) {
     if (n <= 0 || total <= 0) return -1;
     int roll = rng_range(r, 0, total - 1);
-    for (int i = 0; i < n - 1; ++i) {
+    for (int i = 0; i < n; ++i) {
         roll -= c[i].weight;
         if (roll < 0) return i;
     }
@@ -86,4 +86,45 @@ enchant_id enchant_roll_pick_one(rng *r, int modified_level,
 int total = 0;
 int n = gather(modified_level, item_cat, cand, ROLL_MAX_CAND, &total);
 int idx = weighted_draw(r, cand, n, total);
+if (idx < 0) {
+        if (out_level) *out_level = 0;
+        return ENCHANT_NONE;
+    }
+    if (out_level) *out_level = cand[idx].level;
 return cand[idx].id;
+}
+
+int enchant_roll_slot(rng *r, int base_level, int enchantability,
+                      enchant_cat item_cat, enchant_set *out) {
+    enchant_set_clear(out);
+
+    int modified = enchant_roll_modified_level(r, base_level, enchantability);
+
+    int lvl = 0;
+    enchant_id first = enchant_roll_pick_one(r, modified, item_cat, &lvl);
+    if (first == ENCHANT_NONE) return 0;
+    enchant_set_put(out, first, lvl);
+
+    // extra-enchant odds, decaying as we add more. classic formula: chance is
+    // (modified+1)/50, halving the modified level after each success.
+    int placed = 1;
+    while (placed < ENCHANT_MAX_ON_ITEM) {
+        int chance = (modified + 1);  // out of 50
+        if (rng_range(r, 0, 49) >= chance) break;
+
+        int extra_lvl = 0;
+        enchant_id extra = enchant_roll_pick_one(r, modified, item_cat,
+                                                 &extra_lvl);
+        if (extra == ENCHANT_NONE) break;
+
+        // reject duplicates and anything mutually exclusive with the set so
+        // far. one retry's worth of effort; if it clashes we just stop.
+        if (enchant_set_has(out, extra)) { modified /= 2; continue; }
+        if (enchant_set_conflict(out, extra) != ENCHANT_NONE) break;
+
+        enchant_set_put(out, extra, extra_lvl);
+        placed++;
+        modified /= 2; // each extra is rarer than the last
+    }
+    return placed;
+}
