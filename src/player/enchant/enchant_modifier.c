@@ -1,8 +1,12 @@
 #include "enchant_modifier.h"
+
 #include <stddef.h>
+
+// caps so a fully kitted item doesn't go negative-damage or invincible.
 #define DR_CAP        0.80f   // never soak more than 80% of a hit
 #define FALL_DR_CAP   0.90f
 #define MINE_MULT_CAP 8.0f
+
 void enchant_modifier_clear(enchant_modifier *m) {
     if (!m) return;
     m->melee_bonus      = 0.0f;
@@ -22,9 +26,8 @@ void enchant_modifier_clear(enchant_modifier *m) {
 
 void enchant_modifier_accumulate(enchant_modifier *m, const enchant_set *s) {
     if (!m || !s) return;
-for (int i = 0;
-i < s->count;
-++i) {
+
+    for (int i = 0; i < s->count; ++i) {
         enchant_id id = s->entry[i].id;
         int lvl = s->entry[i].level;
         if (lvl <= 0) continue;
@@ -86,8 +89,25 @@ i < s->count;
 
     // clamp the fractional terms after all contributions are in.
     if (m->damage_reduction > DR_CAP)      m->damage_reduction = DR_CAP;
-if (m->fall_reduction   > FALL_DR_CAP) m->fall_reduction   = FALL_DR_CAP;
-if (m->mine_speed_mult  > MINE_MULT_CAP) m->mine_speed_mult = MINE_MULT_CAP;
-unsigned span = (unsigned)fortune_level + 2u;
-unsigned r = roll % span;
+    if (m->fall_reduction   > FALL_DR_CAP) m->fall_reduction   = FALL_DR_CAP;
+    if (m->mine_speed_mult  > MINE_MULT_CAP) m->mine_speed_mult = MINE_MULT_CAP;
+}
+
+void enchant_modifier_from_set(enchant_modifier *m, const enchant_set *s) {
+    enchant_modifier_clear(m);
+    enchant_modifier_accumulate(m, s);
+}
+
+int enchant_modifier_fortune_drops(int fortune_level, unsigned roll) {
+    if (fortune_level <= 0) return 0;
+    // mc's rule: uniform in 0..level, then add the floor of that to the base.
+    // we fold an extra "bonus or nothing" coin so level 1 still feels worth it.
+    unsigned span = (unsigned)fortune_level + 2u;
+    unsigned r = roll % span;          // 0 .. fortune_level+1
+    // bias slightly toward fewer extras so it isn't a flat distribution.
+    if ((roll >> 16) & 1u) {
+        unsigned r2 = (roll >> 8) % span;
+        if (r2 < r) r = r2;            // take the lower of two draws
+    }
+    return (int)r;
 }
