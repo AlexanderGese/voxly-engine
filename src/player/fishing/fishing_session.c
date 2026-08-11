@@ -4,6 +4,7 @@
 #include "../../config.h"
 #include <math.h>
 #include <stddef.h>
+// how fast the bobber gets dragged back during a reel-in (the REELING phase,
 #define SESSION_REEL_SPEED  6.0f
 void fishing_session_init(fishing_session *s, fishing_rod rod, uint64_t seed) {
     s->state   = CAST_IDLE;
@@ -99,4 +100,103 @@ void fishing_session_update(fishing_session *s, world *w, item_world *iw,
                             vec3 rod_tip, int reeling, float dt) {
     s->rod_tip = rod_tip;
 if (!s->active || dt <= 0.0f) return;
+switch (s->state) {
+    case CAST_FLYING:
+        fishing_bobber_update(&s->bobber, w, dt);
+        if (s->bobber.landed) {
+            if (s->bobber.water == WATER_NONE) {
+                // landed on land. nothing bites; just sit until the player reels.
+                s->state = CAST_WAITING;
+                s->quality = 0.0f;
+                // begin a wait it can never really pay off — quality 0.
+                fishing_bite_begin(&s->bite, &s->rng, &s->rod, 0.0f);
+            } else {
+                int wx = (int)floorf(s->bobber.pos.x);
+                int wz = (int)floorf(s->bobber.pos.z);
+                int found = 0;
+                int sy = fishing_water_surface_y(w, wx, wz, &found);
+                s->quality = found ? fishing_water_quality(w, wx, sy, wz) : 0.1f;
+                fishing_bite_begin(&s->bite, &s->rng, &s->rod, s->quality);
+                fishing_fx_splash(s->fx, &s->rng, s->bobber.pos);
+                s->state = CAST_WAITING;
+            }
+        }
+        break;
+
+    case CAST_WAITING:
+        fishing_bobber_update(&s->bobber, w, dt);
+        fishing_bobber_set_dunk(&s->bobber, 0.0f, dt);
+        if (s->bobber.water != WATER_NONE && fishing_bite_tick_wait(&s->bite, dt))
+            s->state = CAST_LURING;
+        break;
+
+    case CAST_LURING:
+        fishing_bobber_update(&s->bobber, w, dt);
+        // ease the bobber down as the fish approaches.
+        {
+            float prog = fishing_bite_lure_progress(&s->bite);
+            fishing_bobber_set_dunk(&s->bobber, prog * 0.5f, dt);
+            // sparse ripples, denser as the bite nears. roll so we don't emit
+            // every single frame and drown the particle pool.
+            if (fishing_rng_chance(&s->rng, dt * (2.0f + prog * 6.0f)))
+                fishing_fx_lure_ripple(s->fx, &s->rng, s->bobber.pos, prog);
+        }
+        if (fishing_bite_tick_lure(&s->bite, dt)) {
+            fishing_fx_bite(s->fx, &s->rng, s->bobber.pos);
+            s->state = CAST_BITING;
+        }
+        break;
+
+    case CAST_BITING:
+        fishing_bobber_update(&s->bobber, w, dt);
+        // full dunk: the tell that you should strike now.
+        fishing_bobber_set_dunk(&s->bobber, 1.0f, dt);
+        if (fishing_bite_tick_window(&s->bite, dt)) {
+            // missed the window. shrug, re-roll a fresh wait.
+            LOGD("fishing: missed the bite (#%d)", s->bite.misses);
+            if (s->stats) fishing_stats_on_miss(s->stats);
+            fishing_bite_begin(&s->bite, &s->rng, &s->rod, s->quality);
+            s->state = CAST_WAITING;
+        }
+        break;
+
+    case CAST_HOOKED: {
+        // the active fight. tug-of-war between the catch and the reel button.
+        fishing_reel_step_fight(&s->reel, &s->rng, dt);
+        fishing_reel_result rr = fishing_reel_apply(&s->reel, reeling, dt);
+        // drag the bobber in proportion to how much line is left.
+        vec3 d = vec3_sub(s->rod_tip, s->bobber.pos);
+        float dl = vec3_length(d);
+        if (dl > 0.001f) {
+            float want = s->reel.line;            // target distance == line out
+            float move = (dl - want);
+            if (move > 0.0f)
+                s->bobber.pos = vec3_add(s->bobber.pos,
+                                         vec3_scale(d, (move / dl)));
+        }
+        if (rr == REEL_LANDED) {
+            s->state = CAST_REELING;              // final short pull-in, then award
+        } else if (rr == REEL_SNAPPED) {
+            LOGI("fishing: line snapped, lost the %s", fishing_catch_name(&s->pending));
+            if (s->stats) fishing_stats_on_snap(s->stats);
+            s->state = CAST_SNAPPED;
+        }
+        break;
+    }
+
+    case CAST_REELING:
+        // pull the bobber the rest of the way home. award on arrival.
+        if (fishing_bobber_reel_toward(&s->bobber, s->rod_tip, SESSION_REEL_SPEED, dt))
+            land_catch(s, iw);
+        break;
+
+    case CAST_SNAPPED:
+        // line's gone; just reset. the catch was already forfeited.
+        fishing_session_cancel(s);
+        break;
+
+    case CAST_IDLE:
+    default:
+        break;
+    }
 }

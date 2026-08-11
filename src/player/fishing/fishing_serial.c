@@ -1,14 +1,14 @@
 #include "fishing_serial.h"
 #include <string.h>
+
+// --- low level put/get. everything is little-endian so saves are portable. ---
+
 void fishing_writer_init(fishing_writer *w, uint8_t *buf, size_t cap) {
     w->buf = buf; w->cap = cap; w->len = 0; w->overflow = 0;
 }
 
 void fishing_reader_init(fishing_reader *r, const uint8_t *buf, size_t cap) {
-    r->buf = buf;
-r->cap = cap;
-r->pos = 0;
-r->underflow = 0;
+    r->buf = buf; r->cap = cap; r->pos = 0; r->underflow = 0;
 }
 
 static void put_u8(fishing_writer *w, uint8_t v) {
@@ -18,9 +18,9 @@ static void put_u8(fishing_writer *w, uint8_t v) {
 
 static void put_u32(fishing_writer *w, uint32_t v) {
     put_u8(w, (uint8_t)(v));
-put_u8(w, (uint8_t)(v >> 8));
-put_u8(w, (uint8_t)(v >> 16));
-put_u8(w, (uint8_t)(v >> 24));
+    put_u8(w, (uint8_t)(v >> 8));
+    put_u8(w, (uint8_t)(v >> 16));
+    put_u8(w, (uint8_t)(v >> 24));
 }
 
 static void put_i32(fishing_writer *w, int32_t v) {
@@ -29,8 +29,8 @@ static void put_i32(fishing_writer *w, int32_t v) {
 
 static void put_f32(fishing_writer *w, float f) {
     uint32_t bits;
-memcpy(&bits, &f, sizeof bits);
-put_u32(w, bits);
+    memcpy(&bits, &f, sizeof bits);   // type-pun via memcpy, the legal way
+    put_u32(w, bits);
 }
 
 static uint8_t get_u8(fishing_reader *r) {
@@ -40,10 +40,10 @@ static uint8_t get_u8(fishing_reader *r) {
 
 static uint32_t get_u32(fishing_reader *r) {
     uint32_t a = get_u8(r);
-uint32_t b = get_u8(r);
-uint32_t c = get_u8(r);
-uint32_t d = get_u8(r);
-return a | (b << 8) | (c << 16) | (d << 24);
+    uint32_t b = get_u8(r);
+    uint32_t c = get_u8(r);
+    uint32_t d = get_u8(r);
+    return a | (b << 8) | (c << 16) | (d << 24);
 }
 
 static int32_t get_i32(fishing_reader *r) {
@@ -52,9 +52,9 @@ static int32_t get_i32(fishing_reader *r) {
 
 static float get_f32(fishing_reader *r) {
     uint32_t bits = get_u32(r);
-float f;
-memcpy(&f, &bits, sizeof f);
-return f;
+    float f;
+    memcpy(&f, &bits, sizeof f);
+    return f;
 }
 
 // --- the actual blob ---
@@ -93,28 +93,37 @@ size_t fishing_serial_save(fishing_writer *w, const fishing_rod *rod,
 int fishing_serial_load(fishing_reader *r, fishing_rod *rod,
                         fishing_stats *stats) {
     uint32_t magic = get_u32(r);
-uint32_t ver   = get_u32(r);
-if (magic != FISHING_SERIAL_MAGIC) return 1;
-if (ver   != FISHING_SERIAL_VERSION) return 2;
-rod->lure        = get_i32(r);
-rod->luck        = get_i32(r);
-rod->max_tension = get_f32(r);
-rod->cast_power  = get_f32(r);
-stats->casts       = get_i32(r);
-stats->catches     = get_i32(r);
-stats->snaps       = get_i32(r);
-stats->misses      = get_i32(r);
-stats->total_items = get_i32(r);
-for (int i = 0;
-i < CATCH_CATEGORY_COUNT;
-i++)
+    uint32_t ver   = get_u32(r);
+    if (magic != FISHING_SERIAL_MAGIC) return 1;
+    if (ver   != FISHING_SERIAL_VERSION) return 2;
+
+    rod->lure        = get_i32(r);
+    rod->luck        = get_i32(r);
+    rod->max_tension = get_f32(r);
+    rod->cast_power  = get_f32(r);
+
+    stats->casts       = get_i32(r);
+    stats->catches     = get_i32(r);
+    stats->snaps       = get_i32(r);
+    stats->misses      = get_i32(r);
+    stats->total_items = get_i32(r);
+    for (int i = 0; i < CATCH_CATEGORY_COUNT; i++)
         stats->per_category[i] = get_i32(r);
-stats->head   = get_i32(r);
-stats->filled = get_i32(r);
-for (int i = 0;
-i < FISHING_HISTORY_LEN;
-if (stats->head < 0 || stats->head >= FISHING_HISTORY_LEN) stats->head = 0;
-if (stats->filled < 0) stats->filled = 0;
-if (stats->filled > FISHING_HISTORY_LEN) stats->filled = FISHING_HISTORY_LEN;
-return 0;
+
+    stats->head   = get_i32(r);
+    stats->filled = get_i32(r);
+    for (int i = 0; i < FISHING_HISTORY_LEN; i++) {
+        stats->history[i].category = (fishing_catch_category)get_i32(r);
+        stats->history[i].block    = get_u8(r);
+        stats->history[i].count    = get_i32(r);
+    }
+
+    if (r->underflow) return 3;
+
+    // clamp the ring indices so a corrupt-but-not-short save can't make the
+    // readout walk out of bounds later.
+    if (stats->head < 0 || stats->head >= FISHING_HISTORY_LEN) stats->head = 0;
+    if (stats->filled < 0) stats->filled = 0;
+    if (stats->filled > FISHING_HISTORY_LEN) stats->filled = FISHING_HISTORY_LEN;
+    return 0;
 }
