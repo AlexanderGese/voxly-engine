@@ -2,8 +2,12 @@
 #include "enchant_power.h"
 #include "enchant_roll.h"
 #include "enchant_set.h"
+
 #include <stddef.h>
 #include <string.h>
+
+// mix table position into the world seed. cheap splitmix-ish avalanche so two
+// adjacent tables don't share offers. nothing cryptographic, just decorrelated.
 static uint64_t mix_seed(unsigned world_seed, int tx, int ty, int tz) {
     uint64_t h = (uint64_t)world_seed * 0x9E3779B97F4A7C15ull;
     h ^= (uint64_t)(uint32_t)tx * 0xBF58476D1CE4E5B9ull;
@@ -17,8 +21,8 @@ static uint64_t mix_seed(unsigned world_seed, int tx, int ty, int tz) {
 void enchant_table_init(enchant_table *t, unsigned world_seed,
                         int tx, int ty, int tz) {
     if (!t) return;
-memset(t, 0, sizeof *t);
-t->seed = mix_seed(world_seed, tx, ty, tz);
+    memset(t, 0, sizeof *t);
+    t->seed = mix_seed(world_seed, tx, ty, tz);
 }
 
 void enchant_table_refresh(enchant_table *t, world *w, int tx, int ty, int tz,
@@ -72,6 +76,27 @@ void enchant_table_refresh(enchant_table *t, world *w, int tx, int ty, int tz,
 
 int enchant_table_can_take(const enchant_table *t, int slot, int player_level) {
     if (!t || slot < 0 || slot >= ENCHANT_TABLE_SLOTS) return 0;
-const enchant_slot *s = &t->slots[slot];
-if (s->state != ENCHANT_SLOT_OFFER) return 0;
-return player_level >= s->cost_levels;
+    const enchant_slot *s = &t->slots[slot];
+    if (s->state != ENCHANT_SLOT_OFFER) return 0;
+    return player_level >= s->cost_levels;
+}
+
+int enchant_table_take(enchant_table *t, int slot, enchant_set *out, int *cost) {
+    if (!enchant_table_can_take(t, slot, 0x7fffffff)) {
+        // can_take with an infinite budget still checks the slot is a live
+        // offer; affordability is the caller's job before calling take.
+        return 0;
+    }
+    enchant_slot *s = &t->slots[slot];
+    if (out) *out = s->result;
+    if (cost) *cost = s->cost_levels;
+    s->state = ENCHANT_SLOT_TAKEN;
+
+    // taking one offer voids the others this open: the table has to be
+    // re-primed with a new item, which will reseed via refresh.
+    for (int i = 0; i < ENCHANT_TABLE_SLOTS; ++i) {
+        if (i != slot && t->slots[i].state == ENCHANT_SLOT_OFFER)
+            t->slots[i].state = ENCHANT_SLOT_EMPTY;
+    }
+    return 1;
+}
