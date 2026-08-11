@@ -1,7 +1,13 @@
 #include "fishing_bite.h"
+
+// raw wait bounds before quality/lure adjustments, in seconds. these bracket
+// the classic 5..30s feel; we squeeze toward the low end on good water.
 #define BITE_WAIT_MIN   5.0f
 #define BITE_WAIT_MAX  30.0f
+
+// hard floor so even a maxed rod on perfect water still makes you wait a touch.
 #define BITE_WAIT_FLOOR 1.5f
+
 void fishing_bite_begin(fishing_bite *bt, fishing_rng *r,
                         const fishing_rod *rod, float quality) {
     // base roll across the full band.
@@ -29,7 +35,7 @@ void fishing_bite_begin(fishing_bite *bt, fishing_rng *r,
 
 int fishing_bite_tick_wait(fishing_bite *bt, float dt) {
     bt->wait -= dt;
-if (bt->wait <= 0.0f) {
+    if (bt->wait <= 0.0f) {
         bt->wait = 0.0f;
         bt->elapsed = 0.0f;
         return 1;
@@ -48,9 +54,16 @@ int fishing_bite_tick_lure(fishing_bite *bt, float dt) {
 
 int fishing_bite_tick_window(fishing_bite *bt, float dt) {
     bt->elapsed += dt;
-if (bt->elapsed >= bt->bite_window) {
+    if (bt->elapsed >= bt->bite_window) {
         bt->misses++;
         bt->elapsed = 0.0f;
         return 1;   // window closed unclaimed
     }
     return 0;
+}
+
+float fishing_bite_lure_progress(const fishing_bite *bt) {
+    if (bt->lure_time <= 0.0f) return 1.0f;
+    float p = bt->elapsed / bt->lure_time;
+    return p < 0.0f ? 0.0f : (p > 1.0f ? 1.0f : p);
+}
