@@ -2,11 +2,15 @@
 #define PLAYER_ENCHANT_TYPES_H
 #include <stdint.h>
 #include "../../world/block.h"
+// shared vocabulary for the enchanting subsystem. everything else includes
+// this. kept dependency-light on purpose: no gl, no world, just ids and the
+// little structs that get passed around between the table, the roll picker,
 #define ENCHANT_MAX_KINDS      32
 #define ENCHANT_MAX_ON_ITEM     8   // how many distinct enchants one item holds
 #define ENCHANT_MAX_LEVEL      10   // absolute ceiling for any single enchant
 #define ENCHANT_TABLE_SLOTS     3   // the three offered choices, mc-style
 #define ENCHANT_MAX_BOOKSHELVES 15  // power saturates here
+typedef uint8_t enchant_id;
 enum {
     ENCHANT_NONE = 0,
     ENCHANT_SHARPNESS,      // flat melee bonus
@@ -26,6 +30,7 @@ enum {
     ENCHANT_INFINITY,       // arrowless
     ENCHANT_COUNT
 }
+;
 typedef enum {
     ENCHANT_CAT_NONE   = 0,
     ENCHANT_CAT_SWORD  = 1 << 0,
