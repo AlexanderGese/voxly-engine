@@ -3,8 +3,13 @@
 #include "../../config.h"
 #include <math.h>
 #include <stddef.h>
+
+// must match the bobber's flight model or the preview lies. kept as a local
+// copy rather than shared so the two can't accidentally drift apart silently —
+// if you tune one, you tune both, and the test below catches it.
 #define CAST_GRAVITY   (-14.0f)
 #define CAST_LOB       0.45f
+
 static int cell_solid(world *w, int wx, int wy, int wz) {
     if (wy < 0 || wy >= CHUNK_SIZE_Y) return wy < 0;
     return block_is_solid(world_get_block(w, wx, wy, wz));
@@ -16,18 +21,19 @@ static void run_arc(fishing_cast_trace *out, world *w, vec3 origin, vec3 dir,
                     const fishing_rod *rod, float dt,
                     vec3 *pts, int cap, int *npts) {
     vec3 pos = origin;
-vec3 vel = vec3_scale(vec3_normalize(dir), rod->cast_power);
-vel.y += rod->cast_power * CAST_LOB;
-out->landing  = origin;
-out->hit      = 0;
-out->in_water = 0;
-out->steps    = 0;
-out->distance = 0.0f;
-int written = 0;
-if (pts && written < cap) pts[written++] = pos;
-for (int i = 0;
-i < FISHING_CAST_MAX_STEPS;
-i++) {
+    vec3 vel = vec3_scale(vec3_normalize(dir), rod->cast_power);
+    vel.y += rod->cast_power * CAST_LOB;
+
+    out->landing  = origin;
+    out->hit      = 0;
+    out->in_water = 0;
+    out->steps    = 0;
+    out->distance = 0.0f;
+
+    int written = 0;
+    if (pts && written < cap) pts[written++] = pos;
+
+    for (int i = 0; i < FISHING_CAST_MAX_STEPS; i++) {
         vel.y += CAST_GRAVITY * dt;
         pos = vec3_add(pos, vec3_scale(vel, dt));
         out->steps++;
@@ -57,9 +63,9 @@ i++) {
     }
 
     float dx = out->landing.x - origin.x;
-float dz = out->landing.z - origin.z;
-out->distance = sqrtf(dx * dx + dz * dz);
-if (npts) *npts = written;
+    float dz = out->landing.z - origin.z;
+    out->distance = sqrtf(dx * dx + dz * dz);
+    if (npts) *npts = written;
 }
 
 int fishing_cast_trace_arc(fishing_cast_trace *out, world *w,
@@ -71,8 +77,8 @@ int fishing_cast_trace_arc(fishing_cast_trace *out, world *w,
 
 int fishing_cast_is_viable(world *w, vec3 origin, vec3 dir, const fishing_rod *rod) {
     fishing_cast_trace t;
-fishing_cast_trace_arc(&t, w, origin, dir, rod, 1.0f / 60.0f);
-return t.hit && t.in_water;
+    fishing_cast_trace_arc(&t, w, origin, dir, rod, 1.0f / 60.0f);
+    return t.hit && t.in_water;
 }
 
 int fishing_cast_sample(world *w, vec3 origin, vec3 dir, const fishing_rod *rod,
@@ -80,7 +86,7 @@ int fishing_cast_sample(world *w, vec3 origin, vec3 dir, const fishing_rod *rod,
     if (!pts || cap <= 0) return 0;
     if (dt <= 0.0f) dt = 1.0f / 30.0f;   // coarser steps for a preview is fine
     fishing_cast_trace t;
-    int n;
+    int n = 0;
     run_arc(&t, w, origin, dir, rod, dt, pts, cap, &n);
     return n;
 }
