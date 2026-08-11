@@ -4,8 +4,11 @@
 #include "../../config.h"
 #include <math.h>
 #include <stddef.h>
+
 // how fast the bobber gets dragged back during a reel-in (the REELING phase,
+// distinct from the HOOKED fight which is handled by fishing_reel).
 #define SESSION_REEL_SPEED  6.0f
+
 void fishing_session_init(fishing_session *s, fishing_rod rod, uint64_t seed) {
     s->state   = CAST_IDLE;
     s->rod     = rod;
@@ -28,9 +31,8 @@ void fishing_session_set_fx(fishing_session *s, particle_system *fx) {
 
 void fishing_session_cancel(fishing_session *s) {
     s->state   = CAST_IDLE;
-s->active  = 0;
-s->pending = (fishing_catch){ BLOCK_AIR, CATCH_NONE, 0 }
-;
+    s->active  = 0;
+    s->pending = (fishing_catch){ BLOCK_AIR, CATCH_NONE, 0 };
 }
 
 // roll the catch and arm the reel fight. called when the player strikes inside
@@ -54,15 +56,13 @@ static void land_catch(fishing_session *s, item_world *iw) {
         if (iw) {
             // spawn one dropped item per count, fanned upward a touch so they
             // don't all stack on the exact same point.
-            for (int i = 0;
-i < s->pending.count;
-i++)
+            for (int i = 0; i < s->pending.count; i++)
                 item_spawn(iw, s->rod_tip, s->pending.block);
-}
+        }
         LOGI("fishing: landed %s x%d", fishing_catch_name(&s->pending), s->pending.count);
-if (s->stats) fishing_stats_on_catch(s->stats, &s->pending);
-fishing_fx_land(s->fx, &s->rng, s->rod_tip, s->pending.category);
-}
+        if (s->stats) fishing_stats_on_catch(s->stats, &s->pending);
+        fishing_fx_land(s->fx, &s->rng, s->rod_tip, s->pending.category);
+    }
     fishing_session_cancel(s);
 }
 
@@ -99,8 +99,9 @@ fishing_cast_state fishing_session_action(fishing_session *s, vec3 origin, vec3 
 void fishing_session_update(fishing_session *s, world *w, item_world *iw,
                             vec3 rod_tip, int reeling, float dt) {
     s->rod_tip = rod_tip;
-if (!s->active || dt <= 0.0f) return;
-switch (s->state) {
+    if (!s->active || dt <= 0.0f) return;
+
+    switch (s->state) {
     case CAST_FLYING:
         fishing_bobber_update(&s->bobber, w, dt);
         if (s->bobber.landed) {
