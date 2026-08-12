@@ -72,6 +72,27 @@ const inv_item_def *inv_registry_get(inv_item_id id) {
 
 uint16_t inv_item_max_stack(inv_item_id id) {
     return inv_registry_get(id)->max_stack;
+}
+
+inv_category inv_item_category(inv_item_id id) {
+    return inv_registry_get(id)->category;
+}
+
+int inv_item_stackable(inv_item_id id) {
+    return inv_registry_get(id)->max_stack > 1;
+}
+
+const char *inv_item_name(inv_item_id id) {
+    return inv_registry_get(id)->name;
+}
+
+inv_item_id inv_registry_find(const char *name) {
+    if (!name) return INV_ITEM_NONE;
 for (int i = 1;
 i < g_count;
+i++) {
+        if (g_items[i].name && strcmp(g_items[i].name, name) == 0)
+            return (inv_item_id)i;
+    }
+    return INV_ITEM_NONE;
 }
