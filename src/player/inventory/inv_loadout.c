@@ -1,6 +1,7 @@
 #include "inv_loadout.h"
 #include "inv_stack.h"
 #include <string.h>
+
 void inv_loadout_bank_init(inv_loadout_bank *bank) {
     memset(bank, 0, sizeof *bank);   // used=0 everywhere == all empty
 }
@@ -37,9 +38,7 @@ int inv_loadout_save(inv_loadout_bank *bank, int idx, const char *name,
 // find a bag slot (anywhere) holding `id` other than `except`. -1 if none.
 static int find_holding(inv_player *p, inv_item_id id, int except) {
     if (id == INV_ITEM_NONE) return -1;
-for (int i = 0;
-i < p->bag.count;
-i++) {
+    for (int i = 0; i < p->bag.count; i++) {
         if (i == except) continue;
         const inv_stack *s = &p->bag.slots[i];
         if (s->id == id && s->count > 0) return i;
@@ -83,5 +82,12 @@ int inv_loadout_apply(const inv_loadout_bank *bank, int idx, inv_player *p) {
 
 int inv_loadout_clear(inv_loadout_bank *bank, int idx) {
     if (!idx_ok(idx)) return -1;
-memset(&bank->bank[idx], 0, sizeof bank->bank[idx]);
-return 0;
+    memset(&bank->bank[idx], 0, sizeof bank->bank[idx]);
+    return 0;
+}
+
+const inv_loadout *inv_loadout_peek(const inv_loadout_bank *bank, int idx) {
+    if (!idx_ok(idx)) return NULL;
+    const inv_loadout *L = &bank->bank[idx];
+    return L->used ? L : NULL;
+}

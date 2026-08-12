@@ -1,6 +1,7 @@
 #include "inv_journal.h"
 #include "inv_stack.h"
 #include <string.h>
+
 void inv_journal_init(inv_journal *j, inv_grid *g) {
     memset(j, 0, sizeof *j);
     j->grid  = g;
@@ -9,9 +10,9 @@ void inv_journal_init(inv_journal *j, inv_grid *g) {
 
 void inv_journal_reset(inv_journal *j) {
     j->head     = 0;
-j->len      = 0;
-j->in_group = 0;
-j->group    = 1;
+    j->len      = 0;
+    j->in_group = 0;
+    j->group    = 1;
 }
 
 void inv_journal_begin(inv_journal *j) {
@@ -32,24 +33,26 @@ static int tail_index(const inv_journal *j) {
 
 void inv_journal_record(inv_journal *j, int slot, inv_stack before) {
     if (!inv_grid_in_bounds(j->grid, slot)) return;
-// patch the previous entry's `after` from the live grid first. we record
-// `before` up front but only know `after` once the next edit lands or an
-// undo runs; snapshotting the current slot here keeps it honest cheaply.
-if (j->len > 0) {
+
+    // patch the previous entry's `after` from the live grid first. we record
+    // `before` up front but only know `after` once the next edit lands or an
+    // undo runs; snapshotting the current slot here keeps it honest cheaply.
+    if (j->len > 0) {
         int prev = (j->head - 1 + INV_JOURNAL_DEPTH) % INV_JOURNAL_DEPTH;
         inv_journal_entry *pe = &j->ring[prev];
         pe->after = *inv_grid_cat(j->grid, pe->slot);
     }
 
     inv_journal_entry *e = &j->ring[j->head];
-e->slot   = slot;
-e->before = before;
-e->after  = before;
-// provisional, fixed up on the next record/undo
-e->group  = j->in_group ? j->group : ++j->group;
-j->head = (j->head + 1) % INV_JOURNAL_DEPTH;
-if (j->len < INV_JOURNAL_DEPTH) j->len++;
-// if we wrapped, the tail entry just got clobbered; len stays pinned at DEPTH
+    e->slot   = slot;
+    e->before = before;
+    e->after  = before;     // provisional, fixed up on the next record/undo
+    e->group  = j->in_group ? j->group : ++j->group;
+
+    j->head = (j->head + 1) % INV_JOURNAL_DEPTH;
+    if (j->len < INV_JOURNAL_DEPTH) j->len++;
+    // if we wrapped, the tail entry just got clobbered; len stays pinned at DEPTH
+    // and the oldest edit is silently unrecoverable. acceptable for an undo ring.
 }
 
 int inv_journal_can_undo(const inv_journal *j) {
@@ -58,12 +61,19 @@ int inv_journal_can_undo(const inv_journal *j) {
 
 int inv_journal_undo(inv_journal *j) {
     if (j->len == 0) return 0;
-int newest = (j->head - 1 + INV_JOURNAL_DEPTH) % INV_JOURNAL_DEPTH;
-uint32_t g = j->ring[newest].group;
-j->ring[newest].after = *inv_grid_cat(j->grid, j->ring[newest].slot);
-int restored = 0;
-int tail = tail_index(j);
-while (j->len > 0) {
+
+    // the group to undo is whatever the newest entry belongs to.
+    int newest = (j->head - 1 + INV_JOURNAL_DEPTH) % INV_JOURNAL_DEPTH;
+    uint32_t g = j->ring[newest].group;
+
+    // before restoring, make sure the newest entry's `after` reflects the live
+    // grid (it may still be provisional if no edit followed it).
+    j->ring[newest].after = *inv_grid_cat(j->grid, j->ring[newest].slot);
+
+    int restored = 0;
+    int tail = tail_index(j);
+    // pop entries off the head while they share the group, restoring `before`.
+    while (j->len > 0) {
         int i = (j->head - 1 + INV_JOURNAL_DEPTH) % INV_JOURNAL_DEPTH;
         inv_journal_entry *e = &j->ring[i];
         if (e->group != g) break;
