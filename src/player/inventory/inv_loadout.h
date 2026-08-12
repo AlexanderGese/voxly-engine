@@ -21,9 +21,17 @@ typedef struct {
     inv_loadout bank[INV_LOADOUT_MAX];
 } inv_loadout_bank;
 void inv_loadout_bank_init(inv_loadout_bank *bank);
+// capture the player's current hotbar layout into bank slot `idx` under `name`.
+// returns 0 on success, -1 on a bad index.
 int inv_loadout_save(inv_loadout_bank *bank, int idx, const char *name,
                      const inv_player *p);
+// apply a stored loadout to the player: for each desired hotbar item, make sure
+// that item sits in that slot, pulling from the rest of the bag if needed. items
+// already in the right spot stay put. returns the number of slots it managed to
+// satisfy (so the ui can warn "couldn't find your pickaxe").
 int inv_loadout_apply(const inv_loadout_bank *bank, int idx, inv_player *p);
+// drop a stored loadout. returns 0 / -1.
 int inv_loadout_clear(inv_loadout_bank *bank, int idx);
+// borrow a stored entry for the ui to draw its label, NULL if empty/oob.
 const inv_loadout *inv_loadout_peek(const inv_loadout_bank *bank, int idx);
 #endif
