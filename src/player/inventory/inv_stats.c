@@ -2,7 +2,14 @@
 #include "inv_stack.h"
 #include "inv_registry.h"
 #include <string.h>
+
+// default carry cap if the caller passes <=0. tuned so a backpack of cobble
+// gets you into the heavy band but not pinned, leaving room for tools.
 #define INV_WEIGHT_CAP_DEFAULT  600.0f
+
+// per-category base weight. multiplied by stack count. tools weigh more than the
+// table suggests because durability items are single-instance and want to feel
+// heftier than a single block. these are vibes, not physics.
 static const float CAT_WEIGHT[INV_CAT_COUNT] = {
     [INV_CAT_BLOCK]    = 2.0f,
     [INV_CAT_MATERIAL] = 0.5f,
@@ -10,8 +17,8 @@ static const float CAT_WEIGHT[INV_CAT_COUNT] = {
     [INV_CAT_FOOD]     = 0.3f,
     [INV_CAT_ARMOR]    = 6.0f,
     [INV_CAT_MISC]     = 1.0f,
-}
-;
+};
+
 float inv_stats_item_weight(inv_item_id id) {
     if (id == INV_ITEM_NONE) return 0.0f;
     inv_category c = inv_item_category(id);
@@ -21,11 +28,11 @@ float inv_stats_item_weight(inv_item_id id) {
 
 static inv_encumber band_for(float weight, float cap) {
     if (cap <= 0.0f) return INV_ENCUMBER_NONE;
-float r = weight / cap;
-if (r >= 1.0f)  return INV_ENCUMBER_OVERLOADED;
-if (r >= 0.75f) return INV_ENCUMBER_HEAVY;
-if (r >= 0.40f) return INV_ENCUMBER_LIGHT;
-return INV_ENCUMBER_NONE;
+    float r = weight / cap;
+    if (r >= 1.0f)  return INV_ENCUMBER_OVERLOADED;
+    if (r >= 0.75f) return INV_ENCUMBER_HEAVY;
+    if (r >= 0.40f) return INV_ENCUMBER_LIGHT;
+    return INV_ENCUMBER_NONE;
 }
 
 void inv_stats_compute(const inv_grid *g, float weight_cap, inv_stats *out) {
@@ -54,10 +61,10 @@ void inv_stats_compute(const inv_grid *g, float weight_cap, inv_stats *out) {
 float inv_stats_speed_mult(inv_encumber state) {
     switch (state) {
     case INV_ENCUMBER_NONE:       return 1.00f;
-case INV_ENCUMBER_LIGHT:      return 0.92f;
-case INV_ENCUMBER_HEAVY:      return 0.70f;
-case INV_ENCUMBER_OVERLOADED: return 0.40f;
-}
+    case INV_ENCUMBER_LIGHT:      return 0.92f;
+    case INV_ENCUMBER_HEAVY:      return 0.70f;
+    case INV_ENCUMBER_OVERLOADED: return 0.40f;
+    }
     return 1.0f;
 }
 
