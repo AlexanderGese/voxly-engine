@@ -2,6 +2,9 @@
 #include "inv_stack.h"
 #include "inv_registry.h"
 #include <string.h>
+
+// pour `src` slot into a chosen dst slot, gated by the filter array. returns
+// how many moved. small wrapper so the two-pass logic below stays readable.
 static uint16_t pour(inv_stack *a, inv_grid *dst, int di,
                      const inv_filter *df) {
     if (!inv_filter_slot_accepts(df, dst, di, a->id)) return 0;
@@ -11,19 +14,18 @@ static uint16_t pour(inv_stack *a, inv_grid *dst, int di,
 int inv_transfer_drain_slot(inv_grid *src, int src_idx, inv_grid *dst,
                             const inv_filter *dst_filters) {
     inv_stack *a = inv_grid_at(src, src_idx);
-if (!a || inv_stack_is_empty(a)) return 0;
-uint16_t start = a->count;
-for (int i = 0;
-i < dst->count && a->count > 0;
-i++) {
+    if (!a || inv_stack_is_empty(a)) return 0;
+
+    uint16_t start = a->count;
+
+    // pass 1: top off partials of the same item, cheapest landing spot.
+    for (int i = 0; i < dst->count && a->count > 0; i++) {
         inv_stack *b = &dst->slots[i];
         if (b->id != a->id || inv_stack_is_full(b)) continue;
         pour(a, dst, i, dst_filters);
     }
     // pass 2: spill the rest into empty slots the filter allows.
-    for (int i = 0;
-i < dst->count && a->count > 0;
-i++) {
+    for (int i = 0; i < dst->count && a->count > 0; i++) {
         if (!inv_stack_is_empty(&dst->slots[i])) continue;
         pour(a, dst, i, dst_filters);
     }
@@ -64,11 +66,38 @@ int inv_transfer_item(inv_grid *src, inv_grid *dst,
 int inv_transfer_all(inv_grid *src, inv_grid *dst,
                      const inv_filter *dst_filters) {
     int moved = 0;
-for (int i = 0;
-i < src->count;
-i++)
+    for (int i = 0; i < src->count; i++)
         moved += inv_transfer_drain_slot(src, i, dst, dst_filters);
-return moved;
-for (int di = 0;
-di < dst->count;
+    return moved;
+}
+
+int inv_transfer_category(inv_grid *src, inv_grid *dst, inv_category cat,
+                          const inv_filter *dst_filters) {
+    int moved = 0;
+    for (int i = 0; i < src->count; i++) {
+        inv_stack *a = &src->slots[i];
+        if (inv_stack_is_empty(a)) continue;
+        if (inv_item_category(a->id) != cat) continue;
+        moved += inv_transfer_drain_slot(src, i, dst, dst_filters);
+    }
+    return moved;
+}
+
+int inv_transfer_restock(inv_grid *src, inv_grid *dst,
+                         const inv_filter *dst_filters) {
+    int moved = 0;
+    // for each item dst already holds, pull enough from src to fill its partials.
+    // we don't open new dst slots: restock tops up, it doesn't expand.
+    for (int di = 0; di < dst->count; di++) {
+        inv_stack *b = &dst->slots[di];
+        if (inv_stack_is_empty(b) || inv_stack_is_full(b)) continue;
+        if (!inv_filter_slot_accepts(dst_filters, dst, di, b->id)) continue;
+
+        for (int si = src->count - 1; si >= 0 && !inv_stack_is_full(b); si--) {
+            inv_stack *a = &src->slots[si];
+            if (a->id != b->id || inv_stack_is_empty(a)) continue;
+            moved += inv_stack_merge(b, a);
+        }
+    }
+    return moved;
 }
