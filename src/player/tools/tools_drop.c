@@ -30,3 +30,4 @@ tools_drop_set(BLOCK_GRAVEL,      BLOCK_GRAVEL,      1, 1, 0, 0, 0);
 tools_drop_set(BLOCK_CLAY,        BLOCK_CLAY,        1, 4, 0, 0, 0);
 tools_drop_set(BLOCK_OBSIDIAN,    BLOCK_OBSIDIAN,    1, 1, 0, 0, 0);
 for (int i = 0;
+i < out->count;
