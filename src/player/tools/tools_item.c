@@ -26,5 +26,13 @@ t.unbreaking  = 0;
 t.fortune     = 0;
 t.silk_touch  = 0;
 return t;
+}
+
+int tools_item_is_hand(const tool_item *t) {
+    return t->head.kind == TOOL_HAND;
+}
+
+int tools_item_is_broken(const tool_item *t) {
+    if (tools_item_is_hand(t)) return 0;
 return t->durability <= 0;
 }
