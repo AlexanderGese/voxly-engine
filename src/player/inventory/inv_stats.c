@@ -59,3 +59,14 @@ case INV_ENCUMBER_HEAVY:      return 0.70f;
 case INV_ENCUMBER_OVERLOADED: return 0.40f;
 }
     return 1.0f;
+}
+
+const char *inv_stats_encumber_name(inv_encumber state) {
+    switch (state) {
+    case INV_ENCUMBER_NONE:       return "light";
+    case INV_ENCUMBER_LIGHT:      return "laden";
+    case INV_ENCUMBER_HEAVY:      return "heavy";
+    case INV_ENCUMBER_OVERLOADED: return "overloaded";
+    }
+    return "?";
+}
