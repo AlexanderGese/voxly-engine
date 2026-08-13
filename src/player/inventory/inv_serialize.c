@@ -6,6 +6,20 @@
 #include "../../util/log.h"
 #include <stdlib.h>
 #include <string.h>
+// the on-disk layout, in order:
+// u32 magic            INV_SAVE_MAGIC
+// u32 version          INV_SAVE_VERSION
+// u8  selected         hotbar selection 0..INV_HOTBAR_SLOTS-1
+// u16 slot_count       == bag.count, sanity check against the build
+// then slot_count records of:
+// u16 name_len  (0 == empty slot, nothing follows)
+// bytes name    (no terminator on disk)
+// u16 count
+//
+// names not ids: see the header for why. a missing name on load resolves to
+// NONE and the slot reads back empty, which is the least-surprising failure.
+// little tedious cursor-style writer over a growable byte buffer. keeps the
+// pack code readable instead of a forest of memcpy+offset.
 typedef struct {
     uint8_t *buf;
     size_t   len;
@@ -86,6 +100,9 @@ static uint32_t rb_u32(rbuf *r) {
 
 void inv_flush_cursor(inv_player *p) {
     if (inv_stack_is_empty(&p->cursor)) return;
+// shove the held stack back into the bag. pickup handles the stacking and
+// leftover; if the bag is somehow full we just drop it on the floor (well,
+// we log it — there's no entity drop wired up here yet).
 int left = inv_player_pickup(p, p->cursor.id, p->cursor.count);
 if (left > 0)
         LOGW("inv save: lost %d of '%s', bag full on cursor flush",
@@ -151,8 +168,50 @@ if (r.err) return -3;
 char name[256];
 for (uint16_t i = 0;
 i < slots;
+i++) {
+        uint16_t nl = rb_u16(&r);
+        if (r.err) return -3;
+        if (nl == 0) continue;          // empty slot, advance to the next record
+
+        // names longer than our scratch are corrupt; treat as truncation.
+        if (nl >= sizeof name) { r.err = 1; return -3; }
+        for (uint16_t k = 0; k < nl; k++) name[k] = (char)rb_u8(&r);
+        name[nl] = '\0';
+        uint16_t count = rb_u16(&r);
+        if (r.err) return -3;
+
+        inv_item_id id = inv_registry_find(name);
+        if (id == INV_ITEM_NONE) {
+            // unknown item from a newer/modded build. skip it rather than choke.
+            LOGW("inv load: unknown item '%s', dropping %u", name, count);
+            continue;
+        }
+        if (i < p->bag.count && count > 0) {
+            // write straight into the same slot it came from, clamped to the
+            // item's real max in case the def shrank between builds.
+            uint16_t cap = inv_item_max_stack(id);
+            inv_stack *dst = &p->bag.slots[i];
+            dst->id    = id;
+            dst->count = count > cap ? cap : count;
+        }
+    }
+
+    if (selected >= INV_HOTBAR_SLOTS) selected = 0;
 p->selected = selected;
 return 0;
+}
+
+int inv_save_to_file(inv_player *p, const char *path) {
+    size_t n = 0;
+    void *blob = inv_save_to_buffer(p, &n);
+    if (!blob) return -1;
+    int rc = file_write_all(path, blob, n);
+    free(blob);
+    return rc;
+}
+
+int inv_load_from_file(inv_player *p, const char *path) {
+    size_t n = 0;
 char *blob = file_read_all(path, &n);
 if (!blob) return -1;
 int rc = inv_load_from_buffer(p, blob, n);
