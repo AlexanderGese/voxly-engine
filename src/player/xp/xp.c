@@ -96,10 +96,34 @@ static int dispatch_rewards(xp_system *x) {
 int xp_update(xp_system *x, vec3 player_feet, float dt) {
     if (dt <= 0.0f) dt = 0.0f;
 xp_state_tick_begin(&x->state);
+// 0. step in-flight bottles; shattered ones spit orbs into the pool. use
+// the player's feet height as a flat-floor stand-in (good enough; bottles
+// are thrown roughly at the surface the player stands on).
 xp_bottle_update(&x->bottles, x->orbs, player_feet.y, dt);
+// 1. integrate orb motion + magnetism toward the player.
 xp_orb_pool_update(x->orbs, player_feet, dt);
+// 2. periodic merge pass to keep big bursts cheap. quarter-second cadence.
 x->merge_timer += dt;
+if (x->merge_timer >= 0.25f) {
+        x->merge_timer = 0.0f;
+        xp_collect_merge(x->orbs);
+    }
+
+    // 3. pickup pass: absorb close orbs, credit state, flag level-ups.
+    xp_collect_run(&x->collect, x->orbs, player_feet, &x->state, &x->log, dt);
+// 4. fire rewards for any levels gained this frame.
 int heal = dispatch_rewards(x);
+// 5. age out old hud events (popups live ~2s).
 xp_event_tick(&x->log, dt, 2.0f);
 return heal;
+}
+
+float xp_stat_value(const xp_system *x, xp_stat s) {
+    return xp_perk_total(&x->perks, s);
+}
+
+int xp_level(const xp_system *x)      { return x->state.level;
+}
+float xp_progress(const xp_system *x) { return x->state.prog_frac; }
+int xp_live_orbs(const xp_system *x)  { return xp_orb_live_count(x->orbs);
 }
