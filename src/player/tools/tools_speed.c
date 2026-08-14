@@ -2,6 +2,7 @@
 #include "tools_tier.h"
 #include "tools_material.h"
 #include "tools_registry.h"
+
 dig_env tools_env_default(void) {
     dig_env e;
     e.underwater = 0;
@@ -13,9 +14,10 @@ dig_env tools_env_default(void) {
 
 float tools_speed_multiplier(const tool_item *t, block_id block) {
     mat_class cls = tools_registry_class(block);
-// hand digs at 1x. effective tool gets its tier speed, otherwise 1x.
-float mult = 1.0f;
-if (!tools_item_is_hand(t) && tools_material_effective(cls, t->head.kind)) {
+
+    // hand digs at 1x. effective tool gets its tier speed, otherwise 1x.
+    float mult = 1.0f;
+    if (!tools_item_is_hand(t) && tools_material_effective(cls, t->head.kind)) {
         mult = tools_tier_speed(t->head.tier);
     }
 
@@ -24,7 +26,7 @@ if (!tools_item_is_hand(t) && tools_material_effective(cls, t->head.kind)) {
     if (t->efficiency > 0 && tools_material_effective(cls, t->head.kind)
         && !tools_item_is_hand(t)) {
         mult += (float)(t->efficiency * t->efficiency) + 1.0f;
-}
+    }
     return mult;
 }
 
@@ -44,25 +46,28 @@ int tools_speed_can_harvest(const tool_item *t, block_id block) {
 
 float tools_speed_break_time(const tool_item *t, block_id block, const dig_env *env) {
     float hardness = tools_registry_hardness(block);
-if (hardness <= 0.0f) return 0.0f;
-// instant
-float mult = tools_speed_multiplier(t, block);
-// wrong tool / can't-harvest: speed multiplier is forced to 1 and the whole
-// thing gets the classic 5x "this is the hard way" penalty.
-int harvestable = tools_speed_can_harvest(t, block);
-float penalty = harvestable ? 1.0f : 5.0f;
-if (!harvestable) mult = 1.0f;
-// base: hardness * 1.5 if harvestable, * 5 if not. fold penalty in.
-float time = hardness * 1.5f * penalty / mult;
-// environment. each multiplies the time directly.
-dig_env e = env ? *env : tools_env_default();
-if (e.underwater) time *= 5.0f;
-if (!e.on_ground) time *= 5.0f;
-if (e.haste   > 0.0f) time /= e.haste;
-if (e.fatigue > 0.0f) time *= (1.0f / e.fatigue);
-// fatigue<1 => slower
-if (time < 0.0f) time = 0.0f;
-return time;
+    if (hardness <= 0.0f) return 0.0f;        // instant
+
+    float mult = tools_speed_multiplier(t, block);
+
+    // wrong tool / can't-harvest: speed multiplier is forced to 1 and the whole
+    // thing gets the classic 5x "this is the hard way" penalty.
+    int harvestable = tools_speed_can_harvest(t, block);
+    float penalty = harvestable ? 1.0f : 5.0f;
+    if (!harvestable) mult = 1.0f;
+
+    // base: hardness * 1.5 if harvestable, * 5 if not. fold penalty in.
+    float time = hardness * 1.5f * penalty / mult;
+
+    // environment. each multiplies the time directly.
+    dig_env e = env ? *env : tools_env_default();
+    if (e.underwater) time *= 5.0f;
+    if (!e.on_ground) time *= 5.0f;
+    if (e.haste   > 0.0f) time /= e.haste;
+    if (e.fatigue > 0.0f) time *= (1.0f / e.fatigue);  // fatigue<1 => slower
+
+    if (time < 0.0f) time = 0.0f;
+    return time;
 }
 
 float tools_speed_per_second(const tool_item *t, block_id block, const dig_env *env) {
