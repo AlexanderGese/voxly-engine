@@ -1,6 +1,8 @@
 #include "xp_cost.h"
+
 #include "xp_config.h"
 #include "xp_curve.h"
+
 int xp_cost_levels(xp_cost_kind kind, int magnitude) {
     if (magnitude < 0) magnitude = 0;
 
@@ -33,5 +35,24 @@ int xp_cost_levels(xp_cost_kind kind, int magnitude) {
 
 int xp_cost_can_afford(const xp_state *s, int levels) {
     if (levels <= 0) return 1;
-if (levels >= XP_COST_TOO_EXPENSIVE) return 0;
-return s->level >= levels;
+    if (levels >= XP_COST_TOO_EXPENSIVE) return 0; // anvil hard-refuses
+    return s->level >= levels;
+}
+
+int xp_cost_spend(xp_state *s, int levels) {
+    if (levels <= 0) return 1; // nothing to pay, trivially "spent"
+    if (!xp_cost_can_afford(s, levels)) return 0;
+
+    int target = s->level - levels;
+    if (target < 0) target = 0;
+
+    // snap total down to the floor of the target level. this is what forfeits
+    // the partial bar: we move to the exact boundary, not target.total + frac.
+    s->total = xp_curve_total_for(target);
+    xp_state_recompute(s);
+
+    // spending is not a "level up"; make sure we don't leave the flag set.
+    s->pending_levelup = 0;
+    s->levels_up = 0;
+    return 1;
+}
