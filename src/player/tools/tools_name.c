@@ -2,10 +2,13 @@
 #include "tools_tier.h"
 #include <stdio.h>
 #include <string.h>
+
+// rotating scratch buffers so two calls in the same printf don't stomp.
 #define NBUF 4
 #define NLEN 64
 static char g_buf[NBUF][NLEN];
 static int  g_cur;
+
 static char *next_buf(void) {
     char *b = g_buf[g_cur];
     g_cur = (g_cur + 1) % NBUF;
@@ -16,14 +19,14 @@ static char *next_buf(void) {
 const char *tools_name_kind(tool_kind kind) {
     switch (kind) {
         case TOOL_HAND:    return "hand";
-case TOOL_PICKAXE: return "pickaxe";
-case TOOL_AXE:     return "axe";
-case TOOL_SHOVEL:  return "shovel";
-case TOOL_HOE:     return "hoe";
-case TOOL_SHEARS:  return "shears";
-case TOOL_SWORD:   return "sword";
-default:           return "tool";
-}
+        case TOOL_PICKAXE: return "pickaxe";
+        case TOOL_AXE:     return "axe";
+        case TOOL_SHOVEL:  return "shovel";
+        case TOOL_HOE:     return "hoe";
+        case TOOL_SHEARS:  return "shears";
+        case TOOL_SWORD:   return "sword";
+        default:           return "tool";
+    }
 }
 
 const char *tools_name_tier(tool_tier tier) {
@@ -33,19 +36,18 @@ const char *tools_name_tier(tool_tier tier) {
 
 const char *tools_name_full(const tool_item *t) {
     char *b = next_buf();
-if (tools_item_is_hand(t)) {
+    if (tools_item_is_hand(t)) {
         snprintf(b, NLEN, "bare hand");
         return b;
     }
-    // shears don't really have a tier in the fiction;
-print just the kind.
+    // shears don't really have a tier in the fiction; print just the kind.
     if (t->head.kind == TOOL_SHEARS) {
         snprintf(b, NLEN, "shears");
         return b;
     }
     snprintf(b, NLEN, "%s %s", tools_name_tier(t->head.tier),
              tools_name_kind(t->head.kind));
-return b;
+    return b;
 }
 
 const char *tools_name_condition(const tool_item *t) {
@@ -62,9 +64,9 @@ const char *tools_name_condition(const tool_item *t) {
 // roman-ish for small enchant levels. we never go past 5 so this is enough.
 static const char *roman(int n) {
     static const char *r[6] = { "", "I", "II", "III", "IV", "V" };
-if (n < 0) n = 0;
-if (n > 5) n = 5;
-return r[n];
+    if (n < 0) n = 0;
+    if (n > 5) n = 5;
+    return r[n];
 }
 
 const char *tools_name_enchants(const tool_item *t) {
