@@ -1,5 +1,6 @@
 #include "tools_mining.h"
 #include "tools_durability.h"
+
 void tools_mining_init(mining_session *m) {
     m->active   = 0;
     m->x = m->y = m->z = 0;
@@ -12,13 +13,11 @@ void tools_mining_init(mining_session *m) {
 void tools_mining_begin(mining_session *m, const tool_item *t, block_id block,
                         int x, int y, int z, const dig_env *env) {
     m->active   = 1;
-m->x = x;
-m->y = y;
-m->z = z;
-m->block    = block;
-m->progress = 0.0f;
-m->rate     = tools_speed_per_second(t, block, env);
-m->switched = 1;
+    m->x = x; m->y = y; m->z = z;
+    m->block    = block;
+    m->progress = 0.0f;
+    m->rate     = tools_speed_per_second(t, block, env);
+    m->switched = 1;
 }
 
 mine_result tools_mining_tick(mining_session *m, tool_item *t, block_id block,
@@ -63,14 +62,18 @@ mine_result tools_mining_tick(mining_session *m, tool_item *t, block_id block,
 
 int tools_mining_finish(mining_session *m, tool_item *t, rng *r, drop_list *out) {
     block_id block = m->block;
-// drops first (reads the un-worn tool, so silk/fortune still count).
-int xp = tools_drop_resolve(t, block, r, out);
-// then wear the tool. if it snaps here that's fine, the block still broke.
-tools_dura_on_break(t, block, r);
-m->active   = 0;
-m->progress = 0.0f;
-m->switched = 0;
-return xp;
+
+    // drops first (reads the un-worn tool, so silk/fortune still count).
+    int xp = tools_drop_resolve(t, block, r, out);
+
+    // then wear the tool. if it snaps here that's fine, the block still broke.
+    tools_dura_on_break(t, block, r);
+
+    // back to idle.
+    m->active   = 0;
+    m->progress = 0.0f;
+    m->switched = 0;
+    return xp;
 }
 
 int tools_mining_phase(const mining_session *m) {
@@ -83,6 +86,6 @@ int tools_mining_phase(const mining_session *m) {
 
 void tools_mining_cancel(mining_session *m) {
     m->active   = 0;
-m->progress = 0.0f;
-m->switched = 0;
+    m->progress = 0.0f;
+    m->switched = 0;
 }
