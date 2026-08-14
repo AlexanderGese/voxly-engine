@@ -1,0 +1,1 @@
+#ifndef PLAYER_XP_XP_COLLECT_H
