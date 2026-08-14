@@ -1,9 +1,12 @@
 #include "xp_collect.h"
+
 #include <math.h>
 #include <stddef.h>
+
 #include "xp_config.h"
 #include "xp_orb.h"
 #include "xp_tier.h"
+
 void xp_collect_init(xp_collect *c) {
     c->orbs_absorbed = 0;
     c->xp_gained = 0;
@@ -13,16 +16,19 @@ void xp_collect_init(xp_collect *c) {
 int xp_collect_run(xp_collect *c, xp_orb_pool *pool, vec3 feet,
                    xp_state *state, xp_event_log *log, float dt) {
     c->orbs_absorbed = 0;
-c->xp_gained = 0;
-if (c->pickup_cooldown > 0.0f) c->pickup_cooldown -= dt;
-vec3 center = vec3_new(feet.x, feet.y + 1.0f, feet.z);
-float pr = XP_ORB_PICKUP_RANGE;
-float pr2 = pr * pr;
-int cap = xp_orb_capacity(pool);
-int total = 0;
-for (int i = 0;
-i < cap;
-i++) {
+    c->xp_gained = 0;
+    if (c->pickup_cooldown > 0.0f) c->pickup_cooldown -= dt;
+
+    // player capsule center is a bit above the feet; pick orbs against a
+    // squared range so we skip the sqrt in the hot loop.
+    vec3 center = vec3_new(feet.x, feet.y + 1.0f, feet.z);
+    float pr = XP_ORB_PICKUP_RANGE;
+    float pr2 = pr * pr;
+
+    int cap = xp_orb_capacity(pool);
+    int total = 0;
+
+    for (int i = 0; i < cap; i++) {
         xp_orb *o = xp_orb_at(pool, i);
         if (!o || !o->alive) continue;
 
@@ -45,10 +51,10 @@ i++) {
 
     if (total > 0) {
         xp_state_add(state, total);
-c->xp_gained = total;
-if (c->pickup_cooldown <= 0.0f)
+        c->xp_gained = total;
+        if (c->pickup_cooldown <= 0.0f)
             c->pickup_cooldown = 0.06f;
-}
+    }
     return total;
 }
 
