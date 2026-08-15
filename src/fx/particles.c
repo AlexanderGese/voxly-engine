@@ -31,8 +31,62 @@ void particles_destroy(particle_system *ps) {
     if (ps->vao) glDeleteVertexArrays(1, &ps->vao);
 if (ps->vbo) glDeleteBuffers(1, &ps->vbo);
 gl_delete_shader(ps->prog);
+}
+
+static int alloc_slot(particle_system *ps) {
+    for (int i = 0; i < PARTICLE_MAX; i++) {
+        if (!ps->list[i].alive) return i;
+    }
+    return -1;
+}
+
+void particles_spawn_break(particle_system *ps, vec3 center) {
+    for (int i = 0;
 i < 12;
+i++) {
+        int k = alloc_slot(ps);
+        if (k < 0) break;
+        particle *p = &ps->list[k];
+        p->pos = vec3_add(center, (vec3){
+            rng_frange(&prng, -0.2f, 0.2f),
+            rng_frange(&prng, -0.2f, 0.2f),
+            rng_frange(&prng, -0.2f, 0.2f),
+        });
+        p->vel = (vec3){
+            rng_frange(&prng, -1, 1),
+            rng_frange(&prng,  2, 4),
+            rng_frange(&prng, -1, 1),
+        };
+        p->age = 0;
+        p->life = rng_frange(&prng, 0.5f, 1.0f);
+        p->size = rng_frange(&prng, 0.06f, 0.1f);
+        p->r = 0.6f; p->g = 0.4f; p->b = 0.2f;
+        p->alive = 1;
+        ps->count++;
+    }
+}
+
+void particles_update(particle_system *ps, float dt) {
+    for (int i = 0;
 i < PARTICLE_MAX;
+i++) {
+        particle *p = &ps->list[i];
+        if (!p->alive) continue;
+        p->age += dt;
+        if (p->age >= p->life) {
+            p->alive = 0;
+            ps->count--;
+            continue;
+        }
+        p->vel.y += -9.8f * dt;
+        p->pos.x += p->vel.x * dt;
+        p->pos.y += p->vel.y * dt;
+        p->pos.z += p->vel.z * dt;
+    }
+}
+
+void particles_draw(particle_system *ps, const camera *cam) {
+    if (ps->count == 0) return;
 static float verts[PARTICLE_MAX * 7];
 int n = 0;
 for (int i = 0;
