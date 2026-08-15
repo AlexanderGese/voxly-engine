@@ -1,7 +1,11 @@
 #include "xp_hud.h"
+
 #include <stddef.h>
+
 #include "xp_config.h"
 #include "xp_event.h"
+
+// bar sits centered, a little above the bottom edge, minecraft-ish.
 static void layout_bar(const xp_system *x, vec2 vp, xp_hud_layout *out) {
     float bw = vp.x * 0.36f;
     float bh = 7.0f;
@@ -17,12 +21,16 @@ static void layout_bar(const xp_system *x, vec2 vp, xp_hud_layout *out) {
 static int popup_from_event(const xp_event *e, vec2 vp, float life,
                             xp_hud_popup *out) {
     float t = e->age / (life > 0.0f ? life : 1.0f);
-if (t < 0.0f) t = 0.0f;
-if (t > 1.0f) return 0;
-float rise = t * 40.0f;
-float alpha = t < 0.7f ? 1.0f : (1.0f - (t - 0.7f) / 0.3f);
-float scale = t < 0.08f ? 0.6f + t / 0.08f * 0.6f : 1.0f;
-switch (e->kind) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) return 0; // expired, skip
+
+    // popups rise as they age and fade in the last third.
+    float rise = t * 40.0f;
+    float alpha = t < 0.7f ? 1.0f : (1.0f - (t - 0.7f) / 0.3f);
+    // scale pops to 1.2 in the first 80ms-ish then eases to 1.0.
+    float scale = t < 0.08f ? 0.6f + t / 0.08f * 0.6f : 1.0f;
+
+    switch (e->kind) {
     case XP_EV_GAIN:
         out->kind = XP_POPUP_GAIN;
         out->value = e->amount;
@@ -50,8 +58,8 @@ switch (e->kind) {
     }
 
     out->alpha = alpha;
-out->scale = scale;
-return 1;
+    out->scale = scale;
+    return 1;
 }
 
 void xp_hud_build(const xp_system *x, vec2 viewport, float popup_life,
