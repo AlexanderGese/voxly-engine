@@ -1,7 +1,9 @@
 #include "healthbar.h"
 #include "../config.h"
+
 static glid vao, vbo;
 static int  ready = 0;
+
 static void ensure_init(void) {
     if (ready) return;
     glGenVertexArrays(1, &vao);
@@ -16,7 +18,7 @@ static void ensure_init(void) {
 
 static void upload(const float *v, int n) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-glBufferData(GL_ARRAY_BUFFER, n * 2 * sizeof(float), v, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, n * 2 * sizeof(float), v, GL_DYNAMIC_DRAW);
 }
 
 static void draw_bar(glid prog, float x, float y, float w, float h,
@@ -56,29 +58,37 @@ static void draw_bar(glid prog, float x, float y, float w, float h,
 
 void healthbar_draw(glid prog, const survival *s, int sw, int sh) {
     ensure_init();
-glDisable(GL_DEPTH_TEST);
-glDisable(GL_CULL_FACE);
-glEnable(GL_BLEND);
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-glUseProgram(prog);
-gl_set_uniform_float(prog, "u_sw", (float)sw);
-gl_set_uniform_float(prog, "u_sh", (float)sh);
-glBindVertexArray(vao);
-float cx = sw * 0.5f;
-float bar_w = 180.0f;
-float bar_h = 10.0f;
-float bar_gap = 4.0f;
-float base_y = sh - 110.0f;
-float hp_fill = (float)s->health / (float)MAX_HEALTH;
-draw_bar(prog, cx - bar_w - 10, base_y, bar_w, bar_h,
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(prog);
+    gl_set_uniform_float(prog, "u_sw", (float)sw);
+    gl_set_uniform_float(prog, "u_sh", (float)sh);
+    glBindVertexArray(vao);
+
+    float cx = sw * 0.5f;
+    float bar_w = 180.0f;
+    float bar_h = 10.0f;
+    float bar_gap = 4.0f;
+    float base_y = sh - 110.0f;
+
+    // health bar (red)
+    float hp_fill = (float)s->health / (float)MAX_HEALTH;
+    draw_bar(prog, cx - bar_w - 10, base_y, bar_w, bar_h,
              hp_fill, 0.85f, 0.15f, 0.15f, sw, sh);
-float hunger_fill = (float)s->hunger / (float)MAX_HUNGER;
-draw_bar(prog, cx + 10, base_y, bar_w, bar_h,
+
+    // hunger bar (brown/orange)
+    float hunger_fill = (float)s->hunger / (float)MAX_HUNGER;
+    draw_bar(prog, cx + 10, base_y, bar_w, bar_h,
              hunger_fill, 0.75f, 0.55f, 0.15f, sw, sh);
-float stam_fill = s->stamina / (float)MAX_STAMINA;
-draw_bar(prog, cx - bar_w - 10, base_y + bar_h + bar_gap, bar_w * 0.6f, bar_h * 0.6f,
+
+    // stamina bar (green, below health)
+    float stam_fill = s->stamina / (float)MAX_STAMINA;
+    draw_bar(prog, cx - bar_w - 10, base_y + bar_h + bar_gap, bar_w * 0.6f, bar_h * 0.6f,
              stam_fill, 0.2f, 0.75f, 0.3f, sw, sh);
-glDisable(GL_BLEND);
-glEnable(GL_CULL_FACE);
-glEnable(GL_DEPTH_TEST);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
 }
