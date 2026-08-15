@@ -1,6 +1,8 @@
 #include "xp_perk.h"
+
 #include <stddef.h>
 #include <string.h>
+
 int xp_perk_is_mult(xp_stat stat) {
     switch (stat) {
     case XP_STAT_MOVE_SPEED:
@@ -36,18 +38,47 @@ static void recompute(xp_perk_set *set) {
 
 void xp_perk_init(xp_perk_set *set) {
     memset(set, 0, sizeof *set);
-set->count = 0;
-recompute(set);
+    set->count = 0;
+    recompute(set);
 }
 
-// find the weakest stored perk for a given stat;
-set->perks[set->count].amount = amount;
-set->perks[set->count].from_level = from_level;
-set->count++;
-recompute(set);
-return 1;
+// find the weakest stored perk for a given stat; -1 if none present.
+static int weakest_for_stat(const xp_perk_set *set, xp_stat stat) {
+    int best = -1;
+    float lo = 1e30f;
+    for (int i = 0; i < set->count; i++) {
+        if (set->perks[i].stat != stat) continue;
+        if (set->perks[i].amount < lo) {
+            lo = set->perks[i].amount;
+            best = i;
+        }
+    }
+    return best;
 }
+
+int xp_perk_add(xp_perk_set *set, xp_stat stat, float amount, int from_level) {
+    if (set->count < XP_PERK_SLOTS) {
+        set->perks[set->count].stat = stat;
+        set->perks[set->count].amount = amount;
+        set->perks[set->count].from_level = from_level;
+        set->count++;
+        recompute(set);
+        return 1;
+    }
 
     // full: try to evict the weakest perk of the same stat if the newcomer is
     // stronger. otherwise drop the new one (don't churn unrelated stats).
     int w = weakest_for_stat(set, stat);
+    if (w >= 0 && set->perks[w].amount < amount) {
+        set->perks[w].amount = amount;
+        set->perks[w].from_level = from_level;
+        recompute(set);
+        return 1;
+    }
+    return 0;
+}
+
+float xp_perk_total(const xp_perk_set *set, xp_stat stat) {
+    if (stat < 0 || stat >= XP_STAT_COUNT) return 0.0f;
+    return set->totals[stat];
+}
