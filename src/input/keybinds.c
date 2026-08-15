@@ -1,10 +1,12 @@
 #include "keybinds.h"
 #include "../util/log.h"
 #include "../util/file.h"
+
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
 void keybinds_defaults(keybinds *k) {
     k->forward = GLFW_KEY_W;
     k->back    = GLFW_KEY_S;
@@ -30,11 +32,12 @@ void keybinds_defaults(keybinds *k) {
 // super basic "key=value" parser
 int keybinds_load(keybinds *k, const char *path) {
     keybinds_defaults(k);
-size_t sz;
-char *txt = file_read_all(path, &sz);
-if (!txt) return 0;
-char *p = txt;
-while (*p) {
+    size_t sz;
+    char *txt = file_read_all(path, &sz);
+    if (!txt) return 0;
+
+    char *p = txt;
+    while (*p) {
         char *line = p;
         while (*p && *p != '\n') p++;
         if (*p == '\n') { *p = 0; p++; }
@@ -57,5 +60,15 @@ while (*p) {
 
     }
     free(txt);
-LOGI("keybinds loaded from %s", path);
-return 1;
+    LOGI("keybinds loaded from %s", path);
+    return 1;
+}
+
+int keybinds_save(const keybinds *k, const char *path) {
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fprintf(f, "forward=%d\nback=%d\nleft=%d\nright=%d\n", k->forward, k->back, k->left, k->right);
+    fprintf(f, "jump=%d\nsprint=%d\nsneak=%d\nfly=%d\n", k->jump, k->sprint, k->sneak, k->fly);
+    fclose(f);
+    return 0;
+}
