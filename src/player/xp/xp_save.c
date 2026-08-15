@@ -1,7 +1,9 @@
 #include "xp_save.h"
+
 #include "xp_config.h"
 #include "xp_state.h"
 #include "xp_perk.h"
+
 void serialize_xp_write(serialize_writer *w, const xp_system *x) {
     serialize_put_u8(w, XP_SAVE_VERSION);
 
@@ -21,23 +23,25 @@ void serialize_xp_write(serialize_writer *w, const xp_system *x) {
 
 int serialize_xp_read(serialize_reader *r, xp_system *x) {
     uint8_t ver = serialize_get_u8(r);
-if (ver != XP_SAVE_VERSION) {
+    if (ver != XP_SAVE_VERSION) {
         // unknown version: leave x at its constructed defaults and bail.
         return 1;
     }
 
     int64_t total = serialize_get_i64(r);
-int32_t levelups = serialize_get_i32(r);
-xp_state_init(&x->state);
-if (total < 0) total = 0;
-x->state.total = total;
-xp_state_recompute(&x->state);
-x->total_levelups = levelups;
-xp_perk_init(&x->perks);
-uint8_t pcount = serialize_get_u8(r);
-for (uint8_t i = 0;
-i < pcount;
-i++) {
+    int32_t levelups = serialize_get_i32(r);
+
+    // rebuild progression from total.
+    xp_state_init(&x->state);
+    if (total < 0) total = 0;
+    x->state.total = total;
+    xp_state_recompute(&x->state);
+    x->total_levelups = levelups;
+
+    // rebuild perks.
+    xp_perk_init(&x->perks);
+    uint8_t pcount = serialize_get_u8(r);
+    for (uint8_t i = 0; i < pcount; i++) {
         uint8_t stat = serialize_get_u8(r);
         float   amt  = serialize_get_f32(r);
         int32_t from = serialize_get_i32(r);
