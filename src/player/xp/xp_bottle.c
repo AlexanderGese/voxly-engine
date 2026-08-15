@@ -1,9 +1,15 @@
 #include "xp_bottle.h"
+
 #include <math.h>
 #include <stddef.h>
+
 #include "xp_config.h"
 #include "xp_drop.h"
 #include "xp_orb.h"
+
+// inline splitmix64. the bottle throw needs a couple of random numbers and i
+// didn't want to thread the engine rng through the projectile, so here's a
+// self-contained one. same family as the oregen rng elsewhere.
 static uint64_t bottle_rng_next(xp_bottle_set *s) {
     uint64_t z = (s->rng_state += 0x9E3779B97F4A7C15ull);
     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
@@ -13,8 +19,8 @@ static uint64_t bottle_rng_next(xp_bottle_set *s) {
 
 static int bottle_rng_range(xp_bottle_set *s, int lo, int hi) {
     if (hi <= lo) return lo;
-uint64_t span = (uint64_t)(hi - lo + 1);
-return lo + (int)(bottle_rng_next(s) % span);
+    uint64_t span = (uint64_t)(hi - lo + 1);
+    return lo + (int)(bottle_rng_next(s) % span);
 }
 
 void xp_bottle_init(xp_bottle_set *s, uint64_t seed) {
@@ -24,8 +30,7 @@ void xp_bottle_init(xp_bottle_set *s, uint64_t seed) {
     s->rng_state = seed ? seed : 0xB077113Eull;
 }
 
-int xp_bottle_live(const xp_bottle_set *s) { return s->live;
-}
+int xp_bottle_live(const xp_bottle_set *s) { return s->live; }
 
 int xp_bottle_throw(xp_bottle_set *s, vec3 origin, vec3 dir, float power) {
     // find a free slot.
@@ -57,8 +62,8 @@ int xp_bottle_throw(xp_bottle_set *s, vec3 origin, vec3 dir, float power) {
 static void shatter(xp_bottle_set *s, xp_bottle *b, xp_orb_pool *pool) {
     // burst the rolled xp into orbs right where it broke.
     xp_drop_spawn(pool, b->pos, b->xp_value, XP_SRC_BOTTLE);
-b->alive = 0;
-s->live--;
+    b->alive = 0;
+    s->live--;
 }
 
 int xp_bottle_update(xp_bottle_set *s, xp_orb_pool *pool, float ground_y, float dt) {
