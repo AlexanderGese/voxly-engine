@@ -1,12 +1,14 @@
 #include "debug.h"
 #include "../util/log.h"
+
 #include <stdio.h>
+
 static int shown = 0;
 static int frame_counter = 0;
 static double avg_dt = 0.016;
+
 void debug_toggle(void) { shown = !shown; }
-int  debug_visible(void) { return shown;
-}
+int  debug_visible(void) { return shown; }
 
 void debug_frame(const player *p, const world *w, float dt) {
     avg_dt = avg_dt * 0.9 + dt * 0.1;
