@@ -1,7 +1,9 @@
 #include "console.h"
 #include "console_builtins.h"
+
 #include <stdio.h>
 #include <string.h>
+
 void console_t_init(console_t *c) {
     c->open = 0;
     c->want_focus = 0;
@@ -31,7 +33,7 @@ void console_t_init(console_t *c) {
 
 void console_bind(console_t *c, struct world *w, struct player *p) {
     c->world  = w;
-c->player = p;
+    c->player = p;
 }
 
 void console_set_open(console_t *c, int open) {
@@ -56,7 +58,7 @@ int console_is_open(const console_t *c) {
 
 void console_tick(console_t *c, float dt) {
     if (!c->open) return;
-console_input_tick(&c->in, dt);
+    console_input_tick(&c->in, dt);
 }
 
 void console_vprintf(console_t *c, console_severity sev, const char *fmt, va_list ap) {
@@ -77,9 +79,9 @@ void console_vprintf(console_t *c, console_severity sev, const char *fmt, va_lis
 
 void console_printf(console_t *c, console_severity sev, const char *fmt, ...) {
     va_list ap;
-va_start(ap, fmt);
-console_vprintf(c, sev, fmt, ap);
-va_end(ap);
+    va_start(ap, fmt);
+    console_vprintf(c, sev, fmt, ap);
+    va_end(ap);
 }
 
 void console_print(console_t *c, console_severity sev, const char *text) {
@@ -90,12 +92,15 @@ void console_print(console_t *c, console_severity sev, const char *text) {
 void console_submit(console_t *c) {
     // grab the line before we clear, history wants its own copy.
     char line[CONSOLE_LINE_LEN];
-memcpy(line, c->in.buf, (size_t)(c->in.len + 1));
-console_history_add(&c->hist, line);
-console_dispatch(c, line);
-console_input_clear(&c->in);
-c->comp_count = 0;
-console_buffer_scroll_end(&c->buf);
+    memcpy(line, c->in.buf, (size_t)(c->in.len + 1));
+
+    console_history_add(&c->hist, line);
+    console_dispatch(c, line);
+
+    console_input_clear(&c->in);
+    c->comp_count = 0;
+    // any output from the command should have re-pinned the view; make sure.
+    console_buffer_scroll_end(&c->buf);
 }
 
 // pull the word under/just-left-of the cursor. for our purposes thats the
@@ -114,38 +119,38 @@ void console_complete(console_t *c) {
     // if we're mid-cycle, just advance to the next candidate.
     if (c->comp_count > 1) {
         c->comp_index = (c->comp_index + 1) % c->comp_count;
-console_input_set(&c->in, c->comp[c->comp_index]);
-return;
-}
+        console_input_set(&c->in, c->comp[c->comp_index]);
+        return;
+    }
 
     grab_stem(&c->in, c->comp_stem, sizeof c->comp_stem);
-char lcp[CONSOLE_LINE_LEN];
-c->comp_count = console_cmd_complete(&c->cmds, c->comp_stem, c->comp,
+
+    char lcp[CONSOLE_LINE_LEN];
+    c->comp_count = console_cmd_complete(&c->cmds, c->comp_stem, c->comp,
                                          CONSOLE_MAX_COMMANDS, lcp, sizeof lcp);
-c->comp_index = 0;
-if (c->comp_count == 0) {
+    c->comp_index = 0;
+
+    if (c->comp_count == 0) {
         // no joy. nothing to do, dont clobber what the user typed.
         return;
     }
 
     if (c->comp_count == 1) {
         console_input_set(&c->in, c->comp[0]);
-console_input_insert(&c->in, ' ');
-c->comp_count = 0;
-return;
-}
+        console_input_insert(&c->in, ' ');   // single match, ready for args
+        c->comp_count = 0;
+        return;
+    }
 
     // ambiguous: extend to the longest common prefix and list the options.
     if ((int)strlen(lcp) > (int)strlen(c->comp_stem)) {
         console_input_set(&c->in, lcp);
     }
     console_printf(c, CONSOLE_SEV_INFO, "%d matches:", c->comp_count);
-char row[CONSOLE_TEXT_LEN];
-int rl = 0;
-row[0] = 0;
-for (int i = 0;
-i < c->comp_count;
-i++) {
+    char row[CONSOLE_TEXT_LEN];
+    int rl = 0;
+    row[0] = 0;
+    for (int i = 0; i < c->comp_count; i++) {
         int need = (int)strlen(c->comp[i]) + 2;
         if (rl + need >= CONSOLE_TEXT_LEN - 1) {
             console_print(c, CONSOLE_SEV_INFO, row);
@@ -154,4 +159,20 @@ i++) {
         rl += snprintf(row + rl, sizeof row - rl, "%s  ", c->comp[i]);
     }
     if (rl) console_print(c, CONSOLE_SEV_INFO, row);
+}
+
+void console_recall_prev(console_t *c) {
+    char out[CONSOLE_LINE_LEN];
+    if (console_history_prev(&c->hist, c->in.buf, out, sizeof out)) {
+        console_input_set(&c->in, out);
+        c->comp_count = 0;
+    }
+}
+
+void console_recall_next(console_t *c) {
+    char out[CONSOLE_LINE_LEN];
+    if (console_history_next(&c->hist, out, sizeof out)) {
+        console_input_set(&c->in, out);
+        c->comp_count = 0;
+    }
 }
