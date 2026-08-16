@@ -1,21 +1,29 @@
 #include "console_keys.h"
 #include "console_draw.h"   // for console_visible_rows when paging
+
+// any edit key (typing, motion, delete) that mutates or moves the line
+// invalidates an in-progress tab cycle and a history recall. a couple of
+// keys are exempt (tab itself, up/down) and handle their own state.
 static void break_completion(console_t *c) {
     c->comp_count = 0;
 }
 
 int console_char(console_t *c, unsigned codepoint) {
     if (!c->open) return 0;
-if (c->want_focus) {
+
+    // swallow the very first char after opening: thats the toggle key
+    // bouncing through the text callback. one-shot latch.
+    if (c->want_focus) {
         c->want_focus = 0;
         return 1;
     }
 
-    if (codepoint < 32 || codepoint > 126) return 1;
-console_input_insert(&c->in, (char)codepoint);
-break_completion(c);
-console_history_reset(&c->hist);
-return 1;
+    if (codepoint < 32 || codepoint > 126) return 1;   // printable ascii only
+
+    console_input_insert(&c->in, (char)codepoint);
+    break_completion(c);
+    console_history_reset(&c->hist);   // typing leaves recall mode
+    return 1;
 }
 
 int console_key(console_t *c, console_key_t k, int mods, int screen_h) {
