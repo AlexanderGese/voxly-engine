@@ -1,6 +1,15 @@
 #include "console_draw.h"
+
 #include <stdio.h>
 #include <string.h>
+
+// the panel occupies the top CONSOLE_HEIGHT_FRAC of the window. rows are
+// laid out top-down; the edit line is pinned to the bottom of the panel
+// with a separator just above it. we draw text-only (matching the rest of
+// the hud) and fake the backing dim with a row of block glyphs behind each
+// line of text would be overkill, so the integrator is expected to have
+// already drawn a dim quad — we just paint glyphs on top.
+
 int console_visible_rows(int screen_h) {
     int panel_h = (int)(screen_h * CONSOLE_HEIGHT_FRAC);
     // reserve two rows at the bottom: separator + edit line.
@@ -13,13 +22,13 @@ int console_visible_rows(int screen_h) {
 // underscore sitting at the cursor column. blink decides whether it shows.
 static void compose_edit_line(const console_t *c, char *out, int cap) {
     const console_input *in = &c->in;
-int show_caret = console_input_caret_on(in);
-int w = 0;
-out[w++] = ']';
-out[w++] = ' ';
-for (int i = 0;
-i <= in->len && w < cap - 1;
-i++) {
+    int show_caret = console_input_caret_on(in);
+
+    int w = 0;
+    out[w++] = ']';
+    out[w++] = ' ';
+
+    for (int i = 0; i <= in->len && w < cap - 1; i++) {
         if (i == in->cursor && show_caret) {
             // overwrite-style caret: print the underscore in place. if a
             // char lives here we still want to see it, so prefer the glyph
