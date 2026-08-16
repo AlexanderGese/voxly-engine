@@ -1,4 +1,9 @@
 #include "console_types.h"
+
+// one place for the severity palette. tuned by eye against the dark hud
+// background. the warn yellow is intentionally a bit orange so it reads
+// apart from the ok green when you're squinting at it.
+
 console_rgb console_severity_color(console_severity sev) {
     switch (sev) {
         case CONSOLE_SEV_ECHO:  return (console_rgb){ 0.62f, 0.62f, 0.62f };

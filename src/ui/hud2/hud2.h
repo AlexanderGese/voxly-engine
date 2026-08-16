@@ -1,10 +1,12 @@
 #ifndef UI_HUD2_H
 #define UI_HUD2_H
+
 #include "../../render/gl.h"
 #include "../../render/text.h"
 #include "../../player/inventory.h"
 #include "../../game/health.h"
 #include "../../math/vec3.h"
+
 #include "hud2_batch.h"
 #include "hud2_hotbar.h"
 #include "hud2_bars.h"
@@ -13,6 +15,7 @@
 #include "hud2_vignette.h"
 #include "hud2_xpbar.h"
 #include "hud2_cooldown.h"
+
 // hud2: the second-gen heads-up display. owns the shared 2d batcher and all
 // the widgets, drives their animations, and composites them in the right
 // order each frame. the old hud.c is still around for the screens we havent
@@ -20,6 +23,7 @@
 //
 // the engine calls hud2_begin_frame once, then can poke events (damage,
 // pickups, swings) at it, then hud2_render at the end of the frame.
+
 typedef struct {
     hud2_batch       batch;
     text_renderer   *text;      // borrowed, not owned. orchestrator-supplied.
@@ -38,18 +42,30 @@ typedef struct {
     int   inited;
     int   sw, sh;               // last known screen size
 } hud2;
+
 // prog is the compiled hud2 color shader (see hud2.vert/.frag). text may be
 // NULL if you dont want labels; the geometry still draws.
 void hud2_init(hud2 *h, glid prog, text_renderer *text);
 void hud2_destroy(hud2 *h);
+
+// ---- per-frame ----
+// advance all animations. inv + survival are the live game state. targeting is
+// 1 when the player is aimed at a usable block this frame.
 void hud2_update(hud2 *h, const inventory *inv, const survival *s,
                  int targeting, int sw, int sh, float dt);
+
+// feed the player's total xp so the xp bar can derive level + progress.
 void hud2_set_xp(hud2 *h, int total_xp);
+
+// upload + draw everything. call inside your 2d/overlay pass with blending on.
 void hud2_render(hud2 *h, const inventory *inv, const survival *s);
-void hud2_on_swing(hud2 *h);
-void hud2_on_hit_confirm(hud2 *h);
-void hud2_on_pickup(hud2 *h, block_id id, int amount);
+
+// ---- events (fire-and-forget from gameplay code) ----
+void hud2_on_swing(hud2 *h);                              // mining/attack swing
+void hud2_on_hit_confirm(hud2 *h);                        // a hit landed
+void hud2_on_pickup(hud2 *h, block_id id, int amount);    // item picked up
 void hud2_on_damage(hud2 *h, int amount,
-                    vec3 player_pos, float yaw, vec3 source);
+                    vec3 player_pos, float yaw, vec3 source); // hurt + flash
 void hud2_notify(hud2 *h, const char *text, hud2_toast_kind kind);
+
 #endif
