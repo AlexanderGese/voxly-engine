@@ -1,8 +1,10 @@
 #include "hud.h"
 #include "../config.h"
 #include "../world/block.h"
+
 static glid vao, vbo;
 static int  ready = 0;
+
 static void upload_verts(const float *verts, int count) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, count * 2 * sizeof(float), verts, GL_DYNAMIC_DRAW);
@@ -11,71 +13,23 @@ static void upload_verts(const float *verts, int count) {
 // rough color for each block type so the hotbar shows something
 static void block_color(block_id id, float *r, float *g, float *b) {
     switch (id) {
-    case BLOCK_STONE:    *r=0.50f;
-*g=0.50f;
-*b=0.50f;
-break;
-case BLOCK_DIRT:     *r=0.45f;
-*g=0.30f;
-*b=0.15f;
-break;
-case BLOCK_GRASS:    *r=0.30f;
-*g=0.65f;
-*b=0.20f;
-break;
-case BLOCK_SAND:     *r=0.85f;
-*g=0.80f;
-*b=0.55f;
-break;
-case BLOCK_WOOD:     *r=0.50f;
-*g=0.35f;
-*b=0.15f;
-break;
-case BLOCK_LEAVES:   *r=0.15f;
-*g=0.50f;
-*b=0.10f;
-break;
-case BLOCK_PLANKS:   *r=0.70f;
-*g=0.55f;
-*b=0.30f;
-break;
-case BLOCK_COBBLE:   *r=0.40f;
-*g=0.40f;
-*b=0.40f;
-break;
-case BLOCK_BEDROCK:  *r=0.15f;
-*g=0.15f;
-*b=0.15f;
-break;
-case BLOCK_GLASS:    *r=0.75f;
-*g=0.85f;
-*b=0.95f;
-break;
-case BLOCK_WATER:    *r=0.20f;
-*g=0.40f;
-*b=0.80f;
-break;
-case BLOCK_TORCH:    *r=1.00f;
-*g=0.85f;
-*b=0.20f;
-break;
-case BLOCK_BRICK:    *r=0.65f;
-*g=0.30f;
-*b=0.25f;
-break;
-case BLOCK_SNOW:     *r=0.95f;
-*g=0.95f;
-*b=0.95f;
-break;
-case BLOCK_ICE:      *r=0.60f;
-*g=0.80f;
-*b=0.95f;
-break;
-default:             *r=0.80f;
-*g=0.00f;
-*b=0.80f;
-break;
-}
+    case BLOCK_STONE:    *r=0.50f; *g=0.50f; *b=0.50f; break;
+    case BLOCK_DIRT:     *r=0.45f; *g=0.30f; *b=0.15f; break;
+    case BLOCK_GRASS:    *r=0.30f; *g=0.65f; *b=0.20f; break;
+    case BLOCK_SAND:     *r=0.85f; *g=0.80f; *b=0.55f; break;
+    case BLOCK_WOOD:     *r=0.50f; *g=0.35f; *b=0.15f; break;
+    case BLOCK_LEAVES:   *r=0.15f; *g=0.50f; *b=0.10f; break;
+    case BLOCK_PLANKS:   *r=0.70f; *g=0.55f; *b=0.30f; break;
+    case BLOCK_COBBLE:   *r=0.40f; *g=0.40f; *b=0.40f; break;
+    case BLOCK_BEDROCK:  *r=0.15f; *g=0.15f; *b=0.15f; break;
+    case BLOCK_GLASS:    *r=0.75f; *g=0.85f; *b=0.95f; break;
+    case BLOCK_WATER:    *r=0.20f; *g=0.40f; *b=0.80f; break;
+    case BLOCK_TORCH:    *r=1.00f; *g=0.85f; *b=0.20f; break;
+    case BLOCK_BRICK:    *r=0.65f; *g=0.30f; *b=0.25f; break;
+    case BLOCK_SNOW:     *r=0.95f; *g=0.95f; *b=0.95f; break;
+    case BLOCK_ICE:      *r=0.60f; *g=0.80f; *b=0.95f; break;
+    default:             *r=0.80f; *g=0.00f; *b=0.80f; break; // magenta = unknown
+    }
 }
 
 void hud_init(void) {
@@ -91,35 +45,38 @@ void hud_init(void) {
 
 void hud_draw(glid prog, const inventory *inv, int sw, int sh) {
     if (!ready) hud_init();
-glDisable(GL_DEPTH_TEST);
-glDisable(GL_CULL_FACE);
-glEnable(GL_BLEND);
-glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-glUseProgram(prog);
-gl_set_uniform_float(prog, "u_sw", (float)sw);
-gl_set_uniform_float(prog, "u_sh", (float)sh);
-glBindVertexArray(vao);
-float cx = sw * 0.5f;
-float cy = sh * 0.5f;
-float sz = 10.0f;
-float cross[] = {
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(prog);
+    gl_set_uniform_float(prog, "u_sw", (float)sw);
+    gl_set_uniform_float(prog, "u_sh", (float)sh);
+
+    glBindVertexArray(vao);
+
+    // crosshair
+    float cx = sw * 0.5f;
+    float cy = sh * 0.5f;
+    float sz = 10.0f;
+    float cross[] = {
         cx - sz, cy,     cx + sz, cy,
         cx,      cy - sz, cx,     cy + sz,
-    }
-;
-upload_verts(cross, 4);
-gl_set_uniform_vec3(prog, "u_color", 1, 1, 1);
-glDrawArrays(GL_LINES, 0, 4);
-int slots = HOTBAR_SLOTS;
-float slot_w = 44.0f;
-float gap    = 4.0f;
-float pad    = 4.0f;
-float total  = slots * slot_w + (slots - 1) * gap;
-float sx     = cx - total * 0.5f;
-float sy     = sh - 60.0f;
-for (int i = 0;
-i < slots;
-i++) {
+    };
+    upload_verts(cross, 4);
+    gl_set_uniform_vec3(prog, "u_color", 1, 1, 1);
+    glDrawArrays(GL_LINES, 0, 4);
+
+    // hotbar
+    int slots = HOTBAR_SLOTS;
+    float slot_w = 44.0f;
+    float gap    = 4.0f;
+    float pad    = 4.0f;
+    float total  = slots * slot_w + (slots - 1) * gap;
+    float sx     = cx - total * 0.5f;
+    float sy     = sh - 60.0f;
+
+    for (int i = 0; i < slots; i++) {
         float x0 = sx + i * (slot_w + gap);
         float y0 = sy;
         float x1 = x0 + slot_w;
@@ -163,7 +120,7 @@ i++) {
     }
 
     glLineWidth(1.0f);
-glDisable(GL_BLEND);
-glEnable(GL_CULL_FACE);
-glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
 }
