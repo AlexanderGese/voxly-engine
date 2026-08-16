@@ -1,7 +1,14 @@
 #include "console_lexer.h"
+
 #include <string.h>
-enum { ST_GAP, ST_BARE, ST_SINGLE, ST_DOUBLE }
-;
+
+// state machine over the input, writing the unescaped token bytes back
+// into the scratch buffer (always <= input length so it fits). we keep a
+// write head `w` separate from the read head so quotes/escapes can shrink
+// the output.
+
+enum { ST_GAP, ST_BARE, ST_SINGLE, ST_DOUBLE };
+
 int console_lex(console_args *out, const char *line) {
     out->argc = 0;
     out->truncated = 0;
