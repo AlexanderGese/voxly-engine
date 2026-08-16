@@ -1,5 +1,7 @@
 #include "console_history.h"
+
 #include <string.h>
+
 void console_history_init(console_history *h) {
     h->head = 0;
     h->count = 0;
@@ -11,10 +13,10 @@ void console_history_init(console_history *h) {
 // logical index 0 == most recent. maps into the ring.
 static const char *entry_at(const console_history *h, int logical) {
     if (logical < 0 || logical >= h->count) return NULL;
-int idx = h->head - 1 - logical;
-idx %= CONSOLE_HISTORY;
-if (idx < 0) idx += CONSOLE_HISTORY;
-return h->entries[idx];
+    int idx = h->head - 1 - logical;
+    idx %= CONSOLE_HISTORY;
+    if (idx < 0) idx += CONSOLE_HISTORY;
+    return h->entries[idx];
 }
 
 void console_history_add(console_history *h, const char *line) {
@@ -38,7 +40,7 @@ void console_history_add(console_history *h, const char *line) {
 
 static void copy_out(char *out, int cap, const char *src) {
     int n = 0;
-while (src[n] && n < cap - 1) { out[n] = src[n]; n++; }
+    while (src[n] && n < cap - 1) { out[n] = src[n]; n++; }
     out[n] = 0;
 }
 
@@ -63,8 +65,9 @@ int console_history_prev(console_history *h, const char *current, char *out, int
 }
 
 int console_history_next(console_history *h, char *out, int cap) {
-    if (h->cursor < 0) return 0;
-if (h->cursor == 0) {
+    if (h->cursor < 0) return 0;   // not recalling
+
+    if (h->cursor == 0) {
         // step past the newest -> restore the stashed line.
         h->cursor = -1;
         copy_out(out, cap, h->has_stash ? h->stash : "");
@@ -73,8 +76,18 @@ if (h->cursor == 0) {
     }
 
     h->cursor--;
-const char *e = entry_at(h, h->cursor);
-if (!e) return 0;
-copy_out(out, cap, e);
-return 1;
+    const char *e = entry_at(h, h->cursor);
+    if (!e) return 0;
+    copy_out(out, cap, e);
+    return 1;
+}
+
+void console_history_reset(console_history *h) {
+    h->cursor = -1;
+    h->stash[0] = 0;
+    h->has_stash = 0;
+}
+
+int console_history_count(const console_history *h) {
+    return h->count;
 }
