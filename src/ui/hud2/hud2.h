@@ -15,6 +15,11 @@
 #include "hud2_cooldown.h"
 // hud2: the second-gen heads-up display. owns the shared 2d batcher and all
 // the widgets, drives their animations, and composites them in the right
+// order each frame. the old hud.c is still around for the screens we havent
+// ported yet; this only does the in-game overlay.
+//
+// the engine calls hud2_begin_frame once, then can poke events (damage,
+// pickups, swings) at it, then hud2_render at the end of the frame.
 typedef struct {
     hud2_batch       batch;
     text_renderer   *text;      // borrowed, not owned. orchestrator-supplied.
@@ -33,6 +38,8 @@ typedef struct {
     int   inited;
     int   sw, sh;               // last known screen size
 } hud2;
+// prog is the compiled hud2 color shader (see hud2.vert/.frag). text may be
+// NULL if you dont want labels; the geometry still draws.
 void hud2_init(hud2 *h, glid prog, text_renderer *text);
 void hud2_destroy(hud2 *h);
 void hud2_update(hud2 *h, const inventory *inv, const survival *s,
