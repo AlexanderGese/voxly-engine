@@ -96,6 +96,24 @@ console_dispatch(c, line);
 console_input_clear(&c->in);
 c->comp_count = 0;
 console_buffer_scroll_end(&c->buf);
+}
+
+// pull the word under/just-left-of the cursor. for our purposes thats the
+// first token, since we only complete command names (arg completion would
+// need per-command hooks and i havent built that yet).
+static void grab_stem(const console_input *in, char *out, int cap) {
+    int n = 0;
+    while (n < in->len && in->buf[n] != ' ' && n < cap - 1) {
+        out[n] = in->buf[n];
+        n++;
+    }
+    out[n] = 0;
+}
+
+void console_complete(console_t *c) {
+    // if we're mid-cycle, just advance to the next candidate.
+    if (c->comp_count > 1) {
+        c->comp_index = (c->comp_index + 1) % c->comp_count;
 console_input_set(&c->in, c->comp[c->comp_index]);
 return;
 }
@@ -105,12 +123,35 @@ char lcp[CONSOLE_LINE_LEN];
 c->comp_count = console_cmd_complete(&c->cmds, c->comp_stem, c->comp,
                                          CONSOLE_MAX_COMMANDS, lcp, sizeof lcp);
 c->comp_index = 0;
+if (c->comp_count == 0) {
+        // no joy. nothing to do, dont clobber what the user typed.
+        return;
+    }
+
+    if (c->comp_count == 1) {
+        console_input_set(&c->in, c->comp[0]);
 console_input_insert(&c->in, ' ');
 c->comp_count = 0;
 return;
+}
+
+    // ambiguous: extend to the longest common prefix and list the options.
+    if ((int)strlen(lcp) > (int)strlen(c->comp_stem)) {
+        console_input_set(&c->in, lcp);
+    }
+    console_printf(c, CONSOLE_SEV_INFO, "%d matches:", c->comp_count);
 char row[CONSOLE_TEXT_LEN];
 int rl = 0;
 row[0] = 0;
 for (int i = 0;
 i < c->comp_count;
+i++) {
+        int need = (int)strlen(c->comp[i]) + 2;
+        if (rl + need >= CONSOLE_TEXT_LEN - 1) {
+            console_print(c, CONSOLE_SEV_INFO, row);
+            rl = 0; row[0] = 0;
+        }
+        rl += snprintf(row + rl, sizeof row - rl, "%s  ", c->comp[i]);
+    }
+    if (rl) console_print(c, CONSOLE_SEV_INFO, row);
 }
