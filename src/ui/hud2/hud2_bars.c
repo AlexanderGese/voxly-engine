@@ -1,6 +1,7 @@
 #include "hud2_bars.h"
 #include "hud2_anim.h"
 #include "hud2_color.h"
+
 void hud2_bars_init(hud2_bars *bars) {
     bars->hp_disp     = 1.0f;
     bars->hp_ghost    = 1.0f;
@@ -12,17 +13,23 @@ void hud2_bars_init(hud2_bars *bars) {
 
 void hud2_bars_update(hud2_bars *bars, const survival *s, float dt) {
     if (!bars->inited) hud2_bars_init(bars);
-float hp     = hud2_clampf((float)s->health / (float)MAX_HEALTH, 0, 1);
-float hunger = hud2_clampf((float)s->hunger / (float)MAX_HUNGER, 0, 1);
-float stam   = hud2_clampf(s->stamina / (float)MAX_STAMINA, 0, 1);
-bars->hp_disp     = hud2_approach(bars->hp_disp, hp, 10.0f, dt);
-bars->hunger_disp = hud2_approach(bars->hunger_disp, hunger, 8.0f, dt);
-bars->stam_disp   = hud2_approach(bars->stam_disp, stam, 14.0f, dt);
-if (bars->hp_ghost > bars->hp_disp)
+
+    float hp     = hud2_clampf((float)s->health / (float)MAX_HEALTH, 0, 1);
+    float hunger = hud2_clampf((float)s->hunger / (float)MAX_HUNGER, 0, 1);
+    float stam   = hud2_clampf(s->stamina / (float)MAX_STAMINA, 0, 1);
+
+    bars->hp_disp     = hud2_approach(bars->hp_disp, hp, 10.0f, dt);
+    bars->hunger_disp = hud2_approach(bars->hunger_disp, hunger, 8.0f, dt);
+    bars->stam_disp   = hud2_approach(bars->stam_disp, stam, 14.0f, dt);
+
+    // ghost only follows downward, and slowly, so the trail lingers after a
+    // hit. on heal it snaps up to meet the real fill.
+    if (bars->hp_ghost > bars->hp_disp)
         bars->hp_ghost = hud2_approach(bars->hp_ghost, bars->hp_disp, 3.0f, dt);
-else
+    else
         bars->hp_ghost = bars->hp_disp;
-bars->pulse_t += dt;
+
+    bars->pulse_t += dt;
 }
 
 static void draw_bar(hud2_batch *b, float x, float y, float w, float h,
@@ -51,21 +58,36 @@ static void draw_bar(hud2_batch *b, float x, float y, float w, float h,
 void hud2_bars_draw(hud2_bars *bars, hud2_batch *b,
                     int sw, int sh, float base_y) {
     (void)sh;
-float cx     = sw * 0.5f;
-float bar_w  = 170.0f;
-float bar_h  = 11.0f;
-float gap    = 12.0f;
-float vgap   = 4.0f;
-float lo = 1.0f - bars->hp_disp;
-hud2_color hp_col = HUD2_COL_HEALTH;
-float lx = cx - bar_w - gap * 0.5f;
-draw_bar(b, lx, base_y, bar_w, bar_h,
+    float cx     = sw * 0.5f;
+    float bar_w  = 170.0f;
+    float bar_h  = 11.0f;
+    float gap    = 12.0f;       // gap between the two stacked columns
+    float vgap   = 4.0f;
+
+    // when health is low, pulse the color toward orange and brighten it. the
+    // pulse speeds up the closer to death you are. mild panic juice.
+    float lo = 1.0f - bars->hp_disp;
+    hud2_color hp_col = HUD2_COL_HEALTH;
+    if (bars->hp_disp < 0.35f) {
+        float speed = hud2_lerpf(4.0f, 11.0f, hud2_clampf(lo * 1.4f, 0, 1));
+        float p = (hud2_pulse(0.5f + 0.5f * sinf(bars->pulse_t * speed)));
+        hp_col = hud2_color_lerp(HUD2_COL_HEALTH, HUD2_COL_HEALTH_LO, p);
+    }
+
+    hud2_color ghost_col = hud2_rgba(0.95f, 0.95f, 0.95f, 0.55f);
+
+    // left column: health (top), stamina (bottom, shorter)
+    float lx = cx - bar_w - gap * 0.5f;
+    draw_bar(b, lx, base_y, bar_w, bar_h,
              bars->hp_disp, bars->hp_ghost, hp_col, ghost_col);
-hud2_color stam_col = bars->stam_disp < 0.25f
+
+    hud2_color stam_col = bars->stam_disp < 0.25f
                         ? HUD2_COL_STAMINA_LO : HUD2_COL_STAMINA;
-draw_bar(b, lx, base_y + bar_h + vgap, bar_w * 0.6f, bar_h * 0.6f,
+    draw_bar(b, lx, base_y + bar_h + vgap, bar_w * 0.6f, bar_h * 0.6f,
              bars->stam_disp, bars->stam_disp, stam_col, ghost_col);
-float rx = cx + gap * 0.5f;
-draw_bar(b, rx, base_y, bar_w, bar_h,
+
+    // right column: hunger
+    float rx = cx + gap * 0.5f;
+    draw_bar(b, rx, base_y, bar_w, bar_h,
              bars->hunger_disp, bars->hunger_disp, HUD2_COL_HUNGER, ghost_col);
 }
