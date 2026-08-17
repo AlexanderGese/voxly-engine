@@ -22,6 +22,25 @@ return;
 if (n >= HUD2_TOAST_TEXT) n = HUD2_TOAST_TEXT - 1;
 memcpy(t->text, s, n);
 t->text[n] = 0;
+}
+
+// drop the weakest queued toast to make room. returns its index or -1.
+static int evict_weakest(hud2_toast_stack *ts) {
+    if (ts->q_count == 0) return -1;
+    int worst = -1, worst_pri = 1 << 30;
+    for (int k = 0; k < ts->q_count; k++) {
+        int idx = (ts->q_head + k) % HUD2_TOAST_QUEUE;
+        if (ts->queue[idx].priority < worst_pri) {
+            worst_pri = ts->queue[idx].priority;
+            worst = idx;
+        }
+    }
+    return worst;
+}
+
+int hud2_toast_push(hud2_toast_stack *ts, const char *text,
+                    hud2_toast_kind kind, block_id icon, float hold) {
+    hud2_toast t;
 memset(&t, 0, sizeof(t));
 copy_text(&t, text);
 t.kind     = kind;
@@ -30,12 +49,38 @@ t.life     = hold > 0.0f ? hold : 2.5f;
 t.priority = (kind == HUD2_TOAST_BAD) ? 3 :
                  (kind == HUD2_TOAST_WARN) ? 2 :
                  (kind == HUD2_TOAST_GOOD) ? 1 : 0;
+if (ts->q_count >= HUD2_TOAST_QUEUE) {
+        // backlog full. only keep this one if it outranks the weakest pending.
+        int w = evict_weakest(ts);
+        if (w < 0 || ts->queue[w].priority >= t.priority)
+            return 0;
+        ts->queue[w] = t;
+        return 1;
+    }
+
+    ts->queue[ts->q_tail] = t;
 ts->q_tail = (ts->q_tail + 1) % HUD2_TOAST_QUEUE;
 ts->q_count++;
 return 1;
+}
+
+void hud2_toast_pickup(hud2_toast_stack *ts, block_id id, int amount) {
+    const block_info *bi = block_get(id);
+    char buf[HUD2_TOAST_TEXT];
+    snprintf(buf, sizeof(buf), "+%d %s", amount, bi ? bi->name : "?");
+    hud2_toast_push(ts, buf, HUD2_TOAST_GOOD, id, 2.2f);
+}
+
+// pull one queued toast into a free visible slot, if any.
+static void admit_from_queue(hud2_toast_stack *ts) {
+    if (ts->q_count == 0) return;
 int free_slot = -1;
 for (int i = 0;
 i < HUD2_TOAST_MAX;
+i++) {
+        if (ts->slots[i].phase == HUD2_TOAST_FREE) { free_slot = i; break; }
+    }
+    if (free_slot < 0) return;
 hud2_toast t = ts->queue[ts->q_head];
 ts->q_head = (ts->q_head + 1) % HUD2_TOAST_QUEUE;
 ts->q_count--;
@@ -44,16 +89,78 @@ t.t        = 0.0f;
 t.y        = -TOAST_H;
 t.target_y = 0.0f;
 ts->slots[free_slot] = t;
+}
+
+// recompute target y for each live toast by packing them top-down in slot
+// order. freed gaps close up as the survivors slide.
+static void repack(hud2_toast_stack *ts) {
+    float y = 0.0f;
+    for (int i = 0; i < HUD2_TOAST_MAX; i++) {
+        if (ts->slots[i].phase == HUD2_TOAST_FREE) continue;
+        ts->slots[i].target_y = y;
+        y += TOAST_H + TOAST_VGAP;
+    }
+}
+
+void hud2_toast_update(hud2_toast_stack *ts, int sw, int sh, float dt) {
+    ts->sw = sw;
 ts->sh = sh;
 admit_from_queue(ts);
 for (int i = 0;
 i < HUD2_TOAST_MAX;
+i++) {
+        hud2_toast *t = &ts->slots[i];
+        if (t->phase == HUD2_TOAST_FREE) continue;
+
+        t->t += dt;
+        switch (t->phase) {
+        case HUD2_TOAST_RISE:
+            if (t->t >= TOAST_RISE_T) { t->phase = HUD2_TOAST_HOLD; t->t = 0.0f; }
+            break;
+        case HUD2_TOAST_HOLD:
+            if (t->t >= t->life) { t->phase = HUD2_TOAST_FALL; t->t = 0.0f; }
+            break;
+        case HUD2_TOAST_FALL:
+            if (t->t >= TOAST_FALL_T) { t->phase = HUD2_TOAST_FREE; }
+            break;
+        default: break;
+        }
+    }
+
+    repack(ts);
 for (int i = 0;
 i < HUD2_TOAST_MAX;
+i++) {
+        hud2_toast *t = &ts->slots[i];
+        if (t->phase == HUD2_TOAST_FREE) continue;
+        t->y = hud2_approach(t->y, t->target_y, 16.0f, dt);
+    }
+}
+
+// accent color per kind.
+static hud2_color accent_of(hud2_toast_kind k) {
+    switch (k) {
+    case HUD2_TOAST_GOOD: return hud2_rgb(0.32f, 0.78f, 0.36f);
 case HUD2_TOAST_WARN: return hud2_rgb(0.90f, 0.70f, 0.20f);
 case HUD2_TOAST_BAD:  return hud2_rgb(0.86f, 0.24f, 0.20f);
 case HUD2_TOAST_INFO:
     default:              return hud2_rgb(0.55f, 0.60f, 0.70f);
+}
+}
+
+// 0..1 visibility envelope for a toast across its phases.
+static float toast_alpha(const hud2_toast *t) {
+    if (t->phase == HUD2_TOAST_RISE)
+        return hud2_smoothstep(t->t / TOAST_RISE_T);
+    if (t->phase == HUD2_TOAST_FALL)
+        return 1.0f - hud2_smoothstep(t->t / TOAST_FALL_T);
+    return 1.0f;
+}
+
+// top-left of a toast box on screen, factoring its animated y offset.
+static void toast_origin(const hud2_toast_stack *ts, const hud2_toast *t,
+                         float *ox, float *oy) {
+    float base_x = ts->sw - TOAST_W - HUD2_MARGIN;
 float base_y = HUD2_MARGIN;
 float slide = 0.0f;
 if (t->phase == HUD2_TOAST_FALL)
