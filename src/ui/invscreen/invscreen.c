@@ -1,7 +1,9 @@
 #include "invscreen.h"
 #include "invscreen_anim.h"
 #include "invscreen_draw.h"
+
 #include <string.h>
+
 void invscreen_init(invscreen *iv) {
     memset(iv, 0, sizeof *iv);
     invscreen_model_init(&iv->model);
@@ -15,8 +17,7 @@ void invscreen_init(invscreen *iv) {
     invscreen_layout_build(&iv->layout, iv->sw, iv->sh);
 }
 
-int invscreen_is_open(const invscreen *iv) { return iv->open;
-}
+int invscreen_is_open(const invscreen *iv) { return iv->open; }
 
 void invscreen_open(invscreen *iv) {
     iv->open = 1;
@@ -30,7 +31,7 @@ void invscreen_open(invscreen *iv) {
 // host services. called on close.
 static void flush_to_grid(invscreen *iv) {
     invscreen_slot *held = invscreen_model_held(&iv->model);
-if (!invscreen_slot_is_empty(held)) {
+    if (!invscreen_slot_is_empty(held)) {
         int left = invscreen_model_pickup(&iv->model, held->block, held->count);
         if (left > 0) {
             iv->drop_pending = 1;
@@ -41,9 +42,7 @@ if (!invscreen_slot_is_empty(held)) {
     }
 
     int base = invscreen_model_region_base(INVSCR_REGION_CRAFT_IN);
-for (int i = 0;
-i < INVSCR_CRAFT_SLOTS;
-i++) {
+    for (int i = 0; i < INVSCR_CRAFT_SLOTS; i++) {
         invscreen_slot *s = invscreen_model_at(&iv->model, base + i);
         if (invscreen_slot_is_empty(s)) continue;
         int left = invscreen_model_pickup(&iv->model, s->block, s->count);
@@ -63,8 +62,8 @@ i++) {
 
 void invscreen_close(invscreen *iv) {
     if (iv->open) flush_to_grid(iv);
-iv->open = 0;
-invscreen_drag_release(&iv->drag);
+    iv->open = 0;
+    invscreen_drag_release(&iv->drag);
 }
 
 void invscreen_toggle(invscreen *iv) {
@@ -75,8 +74,7 @@ void invscreen_toggle(invscreen *iv) {
 // shift quick-move: yank a whole stack to the opposite half. grid <-> hotbar,
 // and the craft regions push into grid first then hotbar. uses pickup() which
 // already does the stack-then-fill two-pass into grid+hotbar, so for craft
-// sources that's exactly right;
-for grid<->hotbar we steer the target region.
+// sources that's exactly right; for grid<->hotbar we steer the target region.
 static void quick_move(invscreen *iv, int slot) {
     invscreen_slot *s = invscreen_model_at(&iv->model, slot);
     if (!s || invscreen_slot_is_empty(s)) return;
@@ -124,11 +122,9 @@ void invscreen_update(invscreen *iv, int screen_w, int screen_h,
     // always advance the open/close animation so the panel can finish sliding
     // out even after `open` flips to 0.
     float target = iv->open ? 1.0f : 0.0f;
-float step = (INVSCR_ANIM_TIME > 0.0f) ? dt / INVSCR_ANIM_TIME : 1.0f;
-if (iv->anim < target) { iv->anim += step; if (iv->anim > target) iv->anim = target; }
-    if (iv->anim > target) { iv->anim -= step;
-if (iv->anim < target) iv->anim = target;
-}
+    float step = (INVSCR_ANIM_TIME > 0.0f) ? dt / INVSCR_ANIM_TIME : 1.0f;
+    if (iv->anim < target) { iv->anim += step; if (iv->anim > target) iv->anim = target; }
+    if (iv->anim > target) { iv->anim -= step; if (iv->anim < target) iv->anim = target; }
 
     if (screen_w != iv->sw || screen_h != iv->sh) {
         iv->sw = screen_w; iv->sh = screen_h;
@@ -137,14 +133,19 @@ if (iv->anim < target) iv->anim = target;
 
     if (!iv->open) {
         iv->tip.slot = INVSCR_NO_SLOT;
-return;
-}
+        return;
+    }
 
     int slot = invscreen_layout_hit(&iv->layout, mx, my);
-int dragging = invscreen_model_holding(&iv->model) || iv->drag.painting;
-invscreen_tooltip_update(&iv->tip, &iv->model,
+
+    // tooltip only when not actively dragging a stack — a floating stack hides
+    // the tooltip in every game that has this screen.
+    int dragging = invscreen_model_holding(&iv->model) || iv->drag.painting;
+    invscreen_tooltip_update(&iv->tip, &iv->model,
                              dragging ? INVSCR_NO_SLOT : slot, dt);
-if (left_pressed) {
+
+    // left press: grab/drop/swap, with shift quick-move and craft-out consume.
+    if (left_pressed) {
         int before = invscreen_model_holding(&iv->model);
         int res = invscreen_drag_left(&iv->drag, &iv->model, slot, shift);
 
@@ -188,7 +189,46 @@ if (left_pressed) {
     if (left_held && !left_pressed && iv->drag.painting) {
         if (invscreen_drag_paint(&iv->drag, &iv->model, slot) != INVSCR_DRAG_NONE)
             invscreen_craft_touch(&iv->craft);
-}
+    }
     if (left_released) invscreen_drag_release(&iv->drag);
-invscreen_craft_touch(&iv->craft);
-return left;
+
+    // right press: split / drop-one.
+    if (right_pressed) {
+        if (invscreen_drag_right(&iv->drag, &iv->model, slot) != INVSCR_DRAG_NONE)
+            invscreen_craft_touch(&iv->craft);
+    }
+
+    // keep the output cell in sync.
+    invscreen_craft_resolve(&iv->craft, &iv->model);
+}
+
+void invscreen_render(invscreen *iv, wg_draw_list *dl, float mx, float my) {
+    if (iv->anim <= 0.001f) return;
+
+    // raw progress -> eased alpha for the fade. scale/slide live in the layout's
+    // matrix path; here we only need the fade since the draw list is flat.
+    float a = invscreen_anim_alpha(iv->anim);
+    int hover = iv->open ? invscreen_layout_hit(&iv->layout, mx, my)
+                         : INVSCR_NO_SLOT;
+
+    invscreen_draw_panel(dl, &iv->layout, &iv->model, hover, a);
+    invscreen_draw_held(dl, &iv->model, mx, my, a);
+    if (iv->open)
+        invscreen_draw_tooltip(dl, &iv->tip, mx, my, iv->sw, iv->sh);
+}
+
+int invscreen_give(invscreen *iv, block_id id, int amount) {
+    int left = invscreen_model_pickup(&iv->model, id, amount);
+    invscreen_craft_touch(&iv->craft);
+    return left;
+}
+
+int invscreen_take_drop(invscreen *iv, block_id *id, int *amount) {
+    if (!iv->drop_pending) return 0;
+    if (id)     *id = iv->drop_block;
+    if (amount) *amount = iv->drop_count;
+    iv->drop_pending = 0;
+    iv->drop_block   = BLOCK_AIR;
+    iv->drop_count   = 0;
+    return 1;
+}
