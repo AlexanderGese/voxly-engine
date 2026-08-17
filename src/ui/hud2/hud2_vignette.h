@@ -18,6 +18,7 @@ void hud2_vignette_init(hud2_vignette *v);
 // flash from a world-space direction relative to the player's facing. dir is
 // the angle in the screen plane: -pi..pi, 0 = ahead. strength 0..1.
 void hud2_vignette_hurt(hud2_vignette *v, float dir, float strength);
+// feed normalized health each frame; drives the persistent low-hp vignette.
 void hud2_vignette_update(hud2_vignette *v, float health01, float dt);
 void hud2_vignette_draw(hud2_vignette *v, hud2_batch *b, int sw, int sh);
 #endif
