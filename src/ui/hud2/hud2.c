@@ -5,6 +5,7 @@
 #include "hud2_color.h"
 #include "hud2_anim.h"
 #include <stddef.h>
+
 void hud2_init(hud2 *h, glid prog, text_renderer *text) {
     h->prog = prog;
     h->text = text;
@@ -26,8 +27,8 @@ void hud2_init(hud2 *h, glid prog, text_renderer *text) {
 
 void hud2_destroy(hud2 *h) {
     if (!h->inited) return;
-hud2_batch_destroy(&h->batch);
-h->inited = 0;
+    hud2_batch_destroy(&h->batch);
+    h->inited = 0;
 }
 
 void hud2_update(hud2 *h, const inventory *inv, const survival *s,
@@ -142,6 +143,32 @@ void hud2_render(hud2 *h, const inventory *inv, const survival *s) {
 
 void hud2_on_swing(hud2 *h) {
     hud2_crosshair_recoil(&h->crosshair, 7.0f);
-hud2_cooldown_trigger(&h->cooldown);
-hud2_toast_pickup(&h->toasts, id, amount);
+    hud2_cooldown_trigger(&h->cooldown);
+}
+
+void hud2_on_hit_confirm(hud2 *h) {
+    hud2_crosshair_hit(&h->crosshair);
+    // a small extra kick so a confirmed break feels punchier than a whiff.
+    hud2_crosshair_recoil(&h->crosshair, 3.0f);
+}
+
+void hud2_on_pickup(hud2 *h, block_id id, int amount) {
+    if (id == BLOCK_AIR || amount <= 0) return;
+    hud2_toast_pickup(&h->toasts, id, amount);
+}
+
+void hud2_on_damage(hud2 *h, int amount, vec3 player_pos, float yaw,
+                    vec3 source) {
+    if (amount <= 0) return;
+    float dir = hud2_hurt_dir_from_world(player_pos, yaw, source);
+    float str = hud2_hurt_strength(amount);
+    hud2_vignette_hurt(&h->vignette, dir, str);
+
+    // big hits also throw a toast so the reason is legible in the log corner.
+    if (amount >= 4)
+        hud2_notify(h, "ouch", HUD2_TOAST_BAD);
+}
+
+void hud2_notify(hud2 *h, const char *text, hud2_toast_kind kind) {
+    hud2_toast_push(&h->toasts, text, kind, BLOCK_AIR, 2.5f);
 }

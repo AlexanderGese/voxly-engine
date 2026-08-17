@@ -1,0 +1,2 @@
+#ifndef UI_HUD2_CROSSHAIR_H
+#define UI_HUD2_CROSSHAIR_H
