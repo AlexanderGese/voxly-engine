@@ -62,6 +62,14 @@ int invscreen_model_classify(int index, int *out_local) {
 
 invscreen_slot *invscreen_model_held(invscreen_model *m) {
     return &m->slots[m->held_index];
+}
+
+int invscreen_model_holding(const invscreen_model *m) {
+    return !invscreen_slot_is_empty(&m->slots[m->held_index]);
+}
+
+int invscreen_model_pickup(invscreen_model *m, block_id id, int amount) {
+    if (id == BLOCK_AIR || amount <= 0) return amount;
 ;
 for (int pass = 0;
 pass < 2 && amount > 0;
