@@ -1,6 +1,8 @@
 #include "invscreen_draw.h"
 #include <stdio.h>
 #include <string.h>
+// panel tones. dark translucent backing, slightly lighter cells, lighter still
+// border. nudged to sit ok over the game world behind it.
 #define COL_PANEL_FILL   wg_rgba_make(24,  24,  28,  235)
 #define COL_PANEL_BORDER wg_rgba_make(70,  70,  78,  255)
 #define COL_CELL_FILL    wg_rgba_make(48,  48,  54,  255)
@@ -8,6 +10,8 @@
 #define COL_CELL_HOVER   wg_rgba_make(110, 110, 130, 255)
 #define COL_TEXT         WG_WHITE
 #define COL_TOOLTIP_BG   wg_rgba_make(16,  16,  20,  240)
+// rough glyph advance for the bitmap font at scale 1. used to right-align the
+// little stack count in the bottom corner of a cell.
 #define GLYPH_W 6.0f
 #define GLYPH_H 8.0f
 wg_rgba invscreen_block_color(block_id id) {
@@ -61,6 +65,7 @@ void invscreen_draw_panel(wg_draw_list *dl, const invscreen_layout *L,
 wg_draw_border(dl, L->panel, wg_rgba_fade(COL_PANEL_BORDER, alpha), 2.0f);
 wg_draw_text(dl, L->title.x, L->title.y, "inventory", 1.0f,
                  wg_rgba_fade(COL_TEXT, alpha));
+// the little arrow between craft input and output. two stacked lines making
 {
         vec2 c = wg_rect_center(L->craft_arrow);
         float hl = L->craft_arrow.w * 0.35f;
@@ -118,6 +123,13 @@ if (y < 0) y = 0;
 wg_rect box = wg_rect_make(x, y, w, h);
 wg_draw_rect(dl, box, COL_TOOLTIP_BG);
 wg_draw_border(dl, box, COL_PANEL_BORDER, 1.0f);
-for (int i;
+for (int i = 0;
 i < t->nlines;
+i++) {
+        float ty = y + pad + i * lh;
+        // first line full white, rest dimmed a touch like a real tooltip.
+        wg_rgba c = i == 0 ? COL_TEXT : wg_rgba_make(170, 170, 175, 255);
+        wg_draw_text(dl, x + pad + 1, ty + 1, t->line[i], 1.0f, WG_SHADOW);
+        wg_draw_text(dl, x + pad, ty, t->line[i], 1.0f, c);
+    }
 }
