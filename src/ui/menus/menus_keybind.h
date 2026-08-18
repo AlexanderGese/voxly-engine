@@ -37,8 +37,10 @@ const menus_kb_action *menus_kb_actions(void);
 int  menus_kb_get(const keybinds *k, int action);
 void menus_kb_set(keybinds *k, int action, int keycode);
 void menus_kb_init(menus_kb_state *st, keybinds *target);
+// arm capture for `action`. a second arm on the same row cancels it (toggle).
 void menus_kb_arm(menus_kb_state *st, int action);
 void menus_kb_cancel(menus_kb_state *st);
+// host pushes the next raw key code here while armed. assigns it, detects
 #define MENUS_KB_ESCAPE_CODE (-2)
 int  menus_kb_feed_key(menus_kb_state *st, int keycode);
 int  menus_kb_reset(menus_kb_state *st);
