@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "../widgets/widgets_label.h"
+// pull a control color for the current hot/active/focus state. focus (keyboard)
+// reads brighter than plain hot so you can tell which one the arrows will hit.
 static wg_rgba surface_color(const wg_context *ctx, int hovered, int held,
                              int focused, int enabled) {
     const wg_style *s = &ctx->style;
@@ -92,7 +94,9 @@ int hovered = 0, held = 0;
 wg_behavior(ctx, id, r, &hovered, &held);
 float span = hi - lo;
 if (span <= 0.0f) span = 1.0f;
+// guard a bad caller
 float before = *value;
+// the draggable track is the right ~55% of the row; the left holds the label.
 float track_x0 = r.x + r.w * 0.42f;
 float track_x1 = r.x + r.w - ctx->style.pad;
 float track_w  = track_x1 - track_x0;
@@ -106,14 +110,18 @@ if (held) {
     if (intent == MENUS_NAV_INC) *value += step;
 if (intent == MENUS_NAV_DEC) *value -= step;
 *value = clampf(*value, lo, hi);
+// background row + label.
 draw_surface(ctx, r, hovered, held, focused, 1);
 wg_label_in(ctx, r, label, WG_TEXT_LEFT, ctx->style.text);
+// track line, vertically centered in the row.
 float ty = r.y + r.h * 0.5f;
 wg_draw_line(&ctx->draw, track_x0, ty, track_x1, ty,
                  ctx->style.widget_border, 2.0f);
+// filled portion up to the handle.
 float frac = (*value - lo) / span;
 float hx = track_x0 + clampf(frac, 0.0f, 1.0f) * track_w;
 wg_draw_line(&ctx->draw, track_x0, ty, hx, ty, ctx->style.accent, 2.0f);
+// the handle: a small box centered on hx.
 float g = ctx->style.slider_grab;
 wg_rect handle = wg_rect_make(hx - g, ty - g, g * 2.0f, g * 2.0f);
 wg_rgba hc = (held || focused) ? ctx->style.accent : ctx->style.text_dim;
@@ -169,6 +177,7 @@ int menus_ctl_spinner(wg_context *ctx, wg_layout *l, menus_nav *nav,
 
 void menus_ctl_header(wg_context *ctx, wg_layout *l, const char *text) {
     wg_rect r = wg_layout_row(l, ctx, ctx->style.row_height * 0.9f);
+// a faint underline plus the text, no surface — reads as a section break.
 wg_label_in(ctx, r, text, WG_TEXT_LEFT, ctx->style.accent_dim);
 float by = r.y + r.h - 2.0f;
 wg_draw_line(&ctx->draw, r.x, by, r.x + r.w, by,
