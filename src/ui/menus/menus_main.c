@@ -1,7 +1,13 @@
 #include "menus_build.h"
 #include "menus_manager.h"
 #include "menus_controls.h"
+
 #include "../widgets/widgets_label.h"
+
+// the title screen. no per-screen state — every row is rebuilt from the manager's
+// flags each frame, so this whole screen is stateless aside from the nav ring on
+// the menus_screen itself.
+
 static menus_action main_build(struct menus_manager *m, void *state,
                                wg_context *ctx, wg_rect area) {
     (void)state;
@@ -58,3 +64,11 @@ static const menus_screen_vtbl g_main_vtbl = {
     .on_leave = NULL,
     .build    = main_build,
 };
+
+menus_screen menus_make_main(struct menus_manager *m) {
+    (void)m;
+    menus_screen s;
+    menus_screen_init(&s, MENUS_SCREEN_MAIN, &g_main_vtbl,
+                      NULL, 0, "main menu");
+    return s;
+}

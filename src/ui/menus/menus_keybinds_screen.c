@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "../widgets/widgets_label.h"
+// the rebind screen. one row per action: name on the left, current binding on the
+// right inside a button. clicking the button arms capture (handled by the
+// manager's kb state); while armed the row reads "press a key…" and the next key
+// the host feeds lands there. escape cancels capture (not the screen) while armed.
 typedef struct {
     float scroll;
 } keybinds_state;
@@ -21,6 +25,11 @@ static menus_action kb_build(struct menus_manager *m, void *state,
 menus_nav *nav = &menus_stack_top(&m->stack)->nav;
 menus_kb_state *kb = &m->kb;
 menus_action act = MENUS_ACT_NONE;
+// if a capture is armed, eat escape here so it cancels the capture instead of
+// bubbling up to the manager and popping the screen. we set want_keys on the
+// ctx, which the manager honors by skipping its escape->back fold for this
+// frame. one of the few places a screen talks back through the ctx, and it's
+// exactly what want_keys is for.
 if (kb->phase == MENUS_KB_ARMED &&
         wg_input_key_pressed(&ctx->input, WG_KEY_ESCAPE)) {
         menus_kb_cancel(kb);
@@ -103,6 +112,7 @@ i++) {
     }
 
     wg_draw_pop_clip(&ctx->draw);
+// a conflict banner under the list if the last assignment collided.
 if (kb->conflict && kb->conflict_action >= 0) {
         wg_rect warn = wg_rect_make(content.x,
                                     content.y + content.h - WG_GLYPH_H * 1.6f,
@@ -121,6 +131,24 @@ wg_layout_begin_row(&fl, ctx, 2, 0);
 wg_rect c_reset = wg_layout_cell(&fl, ctx);
 wg_rect c_back  = wg_layout_cell(&fl, ctx);
 wg_layout_end_row(&fl);
+{
+        wg_id id = wg_gen_id(ctx, "kb.reset");
+        int focused = menus_nav_item(nav, id, MENUS_NO_ITEM);
+        menus_nav_dir intent = menus_nav_take_intent(nav, id);
+        int hov = 0, held = 0;
+        int hit = wg_behavior(ctx, id, c_reset, &hov, &held);
+        if (intent == MENUS_NAV_ACTIVATE) hit = 1;
+        wg_rgba bg = held ? ctx->style.widget_active
+                   : (hov || focused) ? ctx->style.widget_hover
+                   : ctx->style.widget_bg;
+        wg_draw_rect(&ctx->draw, c_reset, bg);
+        wg_draw_border(&ctx->draw, c_reset, ctx->style.widget_border,
+                       ctx->style.border_thick);
+        wg_label_in(ctx, c_reset, "reset", WG_TEXT_CENTER, ctx->style.text);
+        if (hit) menus_kb_reset(kb);
+    }
+    {
+        wg_id id = wg_gen_id(ctx, "kb.back");
 int focused = menus_nav_item(nav, id, MENUS_NO_ITEM);
 menus_nav_dir intent = menus_nav_take_intent(nav, id);
 int hov = 0, held = 0;
@@ -133,7 +161,33 @@ wg_draw_rect(&ctx->draw, c_back, bg);
 wg_draw_border(&ctx->draw, c_back, ctx->style.widget_border,
                        ctx->style.border_thick);
 wg_label_in(ctx, c_back, "back", WG_TEXT_CENTER, ctx->style.text);
+// if a capture is armed, "back" should cancel the capture first rather
+// than leaving the screen — saves a surprised player from exiting.
+if (hit) {
+            if (kb->phase == MENUS_KB_ARMED) menus_kb_cancel(kb);
+            else act = MENUS_ACT_BACK;
+        }
+    }
+
+    // while armed we swallow the manager's escape-to-back so esc cancels capture
+    // instead. the manager checks act==NONE for its CANCEL fold, so returning a
+    // benign non-none here would be wrong;
 instead we cancel directly and let the
     // manager's escape fold see we're no longer armed next frame. nothing to do.
     return act;
+}
+
+static const menus_screen_vtbl g_kb_vtbl = {
+    .on_enter = kb_enter,
+    .on_leave = NULL,
+    .build    = kb_build,
+}
 ;
+menus_screen menus_make_keybinds(struct menus_manager *m) {
+    (void)m;
+    keybinds_state *ks = calloc(1, sizeof *ks);
+    menus_screen s;
+    menus_screen_init(&s, MENUS_SCREEN_KEYBINDS, &g_kb_vtbl,
+                      ks, 1, "controls");
+    return s;
+}
