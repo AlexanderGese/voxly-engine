@@ -32,6 +32,7 @@ if (slot == INVSCR_NO_SLOT) {
 
     invscreen_slot *s = invscreen_model_at(m, slot);
 if (!s) return INVSCR_DRAG_NONE;
+// shift quick-move: yank the stack to "the other half" of the inventory.
 if (shift) {
         return invscreen_slot_is_empty(s) ? INVSCR_DRAG_NONE : INVSCR_DRAG_PLACED;
     }
