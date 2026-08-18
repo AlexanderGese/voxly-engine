@@ -41,14 +41,70 @@ wg_draw_border(dl, cell, wg_rgba_fade(border, alpha), INVSCR_SLOT_BORDER);
 if (!s || invscreen_slot_is_empty(s)) return;
 wg_rect icon = wg_rect_inset(cell, INVSCR_SLOT_INSET);
 wg_draw_rect(dl, icon, wg_rgba_fade(invscreen_block_color(s->block), alpha));
+if (s->count > 1) {
+        char buf[8];
+        snprintf(buf, sizeof buf, "%d", s->count);
+        // bottom-right, a couple px in. right-align by advancing left per glyph.
+        float w  = (float)strlen(buf) * GLYPH_W;
+        float tx = cell.x + cell.w - w - 2.0f;
+        float ty = cell.y + cell.h - GLYPH_H - 1.0f;
+        // shadow then text, like the rest of the hud.
+        wg_draw_text(dl, tx + 1, ty + 1, buf, 1.0f, wg_rgba_fade(WG_SHADOW, alpha));
+        wg_draw_text(dl, tx, ty, buf, 1.0f, wg_rgba_fade(COL_TEXT, alpha));
+    }
+}
+
+void invscreen_draw_panel(wg_draw_list *dl, const invscreen_layout *L,
+                          const invscreen_model *m, int hover, float alpha) {
+    // chrome.
+    wg_draw_rect(dl, L->panel, wg_rgba_fade(COL_PANEL_FILL, alpha));
 wg_draw_border(dl, L->panel, wg_rgba_fade(COL_PANEL_BORDER, alpha), 2.0f);
 wg_draw_text(dl, L->title.x, L->title.y, "inventory", 1.0f,
                  wg_rgba_fade(COL_TEXT, alpha));
+{
+        vec2 c = wg_rect_center(L->craft_arrow);
+        float hl = L->craft_arrow.w * 0.35f;
+        wg_rgba ac = wg_rgba_fade(COL_CELL_BORDER, alpha);
+        wg_draw_line(dl, c.x - hl, c.y, c.x + hl, c.y, ac, 3.0f);
+        wg_draw_line(dl, c.x + hl - 5, c.y - 5, c.x + hl, c.y, ac, 3.0f);
+        wg_draw_line(dl, c.x + hl - 5, c.y + 5, c.x + hl, c.y, ac, 3.0f);
+    }
+
+    // every addressable cell, region by region.
+    for (int r = 0;
 r < INVSCR_REGION_COUNT;
+r++) {
+        int base = invscreen_model_region_base(r);
+        int cnt  = invscreen_model_region_count(r);
+        for (int i = 0; i < cnt; i++) {
+            int idx = base + i;
+            const invscreen_slot *s = invscreen_model_at_c(m, idx);
+            draw_cell(dl, L->cell[idx], s, idx == hover, alpha);
+        }
+    }
+}
+
+void invscreen_draw_held(wg_draw_list *dl, const invscreen_model *m,
+                         float mx, float my, float alpha) {
+    const invscreen_slot *h = invscreen_model_at_c(m, m->held_index);
 if (!h || invscreen_slot_is_empty(h)) return;
 float s = INVSCR_SLOT_SIZE - INVSCR_SLOT_INSET * 2;
 wg_rect icon = wg_rect_make(mx - s * 0.5f, my - s * 0.5f, s, s);
 wg_draw_rect(dl, icon, wg_rgba_fade(invscreen_block_color(h->block), alpha));
+if (h->count > 1) {
+        char buf[8];
+        snprintf(buf, sizeof buf, "%d", h->count);
+        float w = (float)strlen(buf) * GLYPH_W;
+        float tx = icon.x + icon.w - w;
+        float ty = icon.y + icon.h - GLYPH_H;
+        wg_draw_text(dl, tx + 1, ty + 1, buf, 1.0f, wg_rgba_fade(WG_SHADOW, alpha));
+        wg_draw_text(dl, tx, ty, buf, 1.0f, wg_rgba_fade(COL_TEXT, alpha));
+    }
+}
+
+void invscreen_draw_tooltip(wg_draw_list *dl, const invscreen_tooltip *t,
+                            float mx, float my, int screen_w, int screen_h) {
+    if (!t->visible || t->nlines <= 0) return;
 float pad = 5.0f;
 float lh  = GLYPH_H + 3.0f;
 float w   = invscreen_tooltip_width(t, GLYPH_W) + pad * 2;
@@ -62,6 +118,6 @@ if (y < 0) y = 0;
 wg_rect box = wg_rect_make(x, y, w, h);
 wg_draw_rect(dl, box, COL_TOOLTIP_BG);
 wg_draw_border(dl, box, COL_PANEL_BORDER, 1.0f);
-for (int i = 0;
+for (int i;
 i < t->nlines;
 }
