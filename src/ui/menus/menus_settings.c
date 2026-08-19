@@ -7,6 +7,9 @@
 // APPLY when the user commits. back without applying discards by re-snapshotting
 // from the live struct on the way out.
 //
+// per-screen state is just a scroll offset — the list is short enough that this
+// rarely matters, but render distance / fov / the volume sliders together push
+// past a small panel, so we keep a scroll just in case the host shrinks us.
 typedef struct {
     float scroll;        // pixels scrolled, >= 0
 } settings_state;
@@ -26,9 +29,12 @@ menus_settings *e  = &m->edit;
 menus_nav *nav = &menus_stack_top(&m->stack)->nav;
 menus_action act = MENUS_ACT_NONE;
 int changed = 0;
+// carve a footer strip for the apply/back buttons before laying the list, so
+// the buttons stay pinned even if the content scrolls.
 wg_rect content = area;
 float foot_h = ctx->style.row_height + ctx->style.spacing;
 wg_rect footer = wg_rect_cut(&content, 3 /*bottom*/, foot_h);
+// wheel scroll on the content region.
 if (wg_input_over(&ctx->input, content) && ctx->input.scroll != 0.0f) {
         ss->scroll -= ctx->input.scroll * ctx->style.row_height * 1.5f;
         if (ss->scroll < 0.0f) ss->scroll = 0.0f;
@@ -39,6 +45,7 @@ if (wg_input_over(&ctx->input, content) && ctx->input.scroll != 0.0f) {
 wg_rect laid = content;
 laid.y -= ss->scroll;
 laid.h += ss->scroll;
+// keep the layout cursor space large enough
 wg_layout l;
 wg_layout_begin(&l, ctx, laid);
 menus_ctl_header(ctx, &l, "audio");
@@ -60,6 +67,8 @@ changed |= menus_ctl_slider(ctx, &l, nav, "gamma",
 changed |= menus_ctl_toggle(ctx, &l, nav, "vsync",   &e->vsync);
 changed |= menus_ctl_toggle(ctx, &l, nav, "show fps", &e->show_fps);
 wg_draw_pop_clip(&ctx->draw);
+// any edit re-clamps and refreshes the dirty flag. clamping here means the
+// apply button can trust the working copy is legal.
 if (changed) {
         menus_settings_clamp(e);
         m->dirty_settings = m->settings
@@ -70,9 +79,12 @@ if (changed) {
     wg_layout fl;
 wg_layout_begin(&fl, ctx, footer);
 wg_layout_begin_row(&fl, ctx, 2, 0);
+// reuse the column rects but draw the controls manually so we can disable
+// apply. the button helper takes a full row, so synthesize two from cells.
 wg_rect c_apply = wg_layout_cell(&fl, ctx);
 wg_rect c_back  = wg_layout_cell(&fl, ctx);
 wg_layout_end_row(&fl);
+// apply
 {
         wg_id id = wg_gen_id(ctx, "settings.apply");
         int focused = menus_nav_item(nav, id, MENUS_NO_ITEM);
