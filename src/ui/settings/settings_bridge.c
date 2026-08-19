@@ -69,6 +69,7 @@ gs->view_bobbing     = get_int  (m, SETTINGS_ID_VIEW_BOBBING);
 gs->smooth_lighting  = get_int  (m, SETTINGS_ID_SMOOTH_LIGHTING);
 gs->max_fps          = get_int  (m, SETTINGS_ID_MAX_FPS);
 // collapse the 3-way quality enum back to the engine's bool: fast => off,
+// anything fancier => on. lossy but the engine only has the one bit.
 gs->fancy_graphics   = get_int  (m, SETTINGS_ID_FANCY_GRAPHICS) > 0 ? 1 : 0;
 gs->gui_scale        = get_int  (m, SETTINGS_ID_GUI_SCALE);
 gs->master_volume    = get_float(m, SETTINGS_ID_MASTER_VOLUME);
