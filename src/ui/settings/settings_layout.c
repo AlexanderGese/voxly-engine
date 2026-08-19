@@ -88,6 +88,11 @@ float row_h = st->row_height;
 float step  = row_h + st->spacing;
 float content_h = (float)n * step;
 sl->content_h = content_h;
+if (wg_input_over(&ctx->input, content) && ctx->input.scroll != 0.0f) {
+        sl->scroll -= ctx->input.scroll * row_h * 1.5f;
+    }
+    // clamp scroll so we can't drag the list off either end.
+    float max_scroll = content_h - content.h;
 if (max_scroll < 0.0f) max_scroll = 0.0f;
 if (sl->scroll < 0.0f) sl->scroll = 0.0f;
 if (sl->scroll > max_scroll) sl->scroll = max_scroll;
