@@ -1,5 +1,7 @@
 #ifndef UI_MENUS_NAV_H
 #define UI_MENUS_NAV_H
+// keyboard/gamepad focus ring for a single screen. mouse hover is handled by the
+// widget kernel directly; this layer is the "no mouse" path — up/down move focus
 #include <stdint.h>
 #include "menus_types.h"
 #define MENUS_NAV_MAX 48
@@ -32,4 +34,12 @@ typedef struct {
     // not something a screen should poke.
     menus_nav_dir _pending;
 } menus_nav;
+void menus_nav_init(menus_nav *n);
+void menus_nav_reset(menus_nav *n);
+void menus_nav_begin(menus_nav *n);
+int  menus_nav_item(menus_nav *n, uint32_t key, menus_item slot);
+void menus_nav_apply(menus_nav *n, menus_nav_dir dir);
+int        menus_nav_is_focused(const menus_nav *n, uint32_t key);
+menus_item menus_nav_focused_slot(const menus_nav *n);
+menus_nav_dir menus_nav_take_intent(menus_nav *n, uint32_t key);
 #endif
