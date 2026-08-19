@@ -1,5 +1,6 @@
 #ifndef UI_MENUS_SCREEN_H
 #define UI_MENUS_SCREEN_H
+
 // one screen = one buildable page (main / pause / settings / keybinds). a screen
 // is just a small vtable plus a blob of opaque per-screen state. the manager owns
 // the stack of these and calls build() once per frame for whatever's on top.
@@ -7,11 +8,13 @@
 // screens never poke gl or the game directly. build() walks the widget layer and
 // returns a menus_action; the manager folds that up to the host. this is the same
 // "dependency arrow points one way" rule the rest of ui/ follows.
+
 #include "menus_types.h"
 #include "menus_nav.h"
 #include "../widgets/widgets_context.h"  // wg_context + wg_rect, the im-mode spine
-struct menus_manager;
-// fwd, defined in menus_manager.h
+
+struct menus_manager;          // fwd, defined in menus_manager.h
+
 // per-screen function table. any hook may be NULL; the manager null-checks before
 // calling so a screen only fills in what it needs.
 typedef struct {
@@ -28,6 +31,7 @@ typedef struct {
     menus_action (*build)(struct menus_manager *m, void *state,
                           wg_context *ctx, wg_rect area);
 } menus_screen_vtbl;
+
 // a live screen instance on the stack. state points at one of the concrete
 // per-screen structs (allocated by the screen's make()).
 typedef struct {
@@ -40,14 +44,17 @@ typedef struct {
                                   // restores where you were.
     char               title[48]; // shown in the panel header
 } menus_screen;
+
 // helpers the concrete screens use to wire themselves up. these just fill the
 // struct; the manager does the actual push.
 void menus_screen_init(menus_screen *s, menus_screen_id id,
                        const menus_screen_vtbl *vt, void *state,
                        int owns_state, const char *title);
+
 // dispatch helpers — null-safe wrappers around the vtbl pointers.
 void         menus_screen_enter(struct menus_manager *m, menus_screen *s);
 void         menus_screen_leave(struct menus_manager *m, menus_screen *s, int destroyed);
 menus_action menus_screen_build(struct menus_manager *m, menus_screen *s,
                                 wg_context *ctx, wg_rect area);
+
 #endif
