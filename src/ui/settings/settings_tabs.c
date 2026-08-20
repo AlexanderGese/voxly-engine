@@ -1,5 +1,7 @@
 #include "settings_tabs.h"
+
 #include <string.h>
+
 void settings_tabs_init(settings_tabs *t) {
     memset(t, 0, sizeof *t);
     t->active = SETTINGS_TAB_VIDEO;
@@ -26,10 +28,10 @@ static void retrigger(settings_tabs *t) {
 
 int settings_tabs_set(settings_tabs *t, settings_tab which) {
     if (which < 0 || which >= SETTINGS_TAB_COUNT) return 0;
-if (which == t->active) return 0;
-t->active = which;
-retrigger(t);
-return 1;
+    if (which == t->active) return 0;
+    t->active = which;
+    retrigger(t);
+    return 1;
 }
 
 int settings_tabs_next(settings_tabs *t, int dir) {
@@ -41,12 +43,14 @@ int settings_tabs_next(settings_tabs *t, int dir) {
 
 settings_tab settings_tabs_build(settings_tabs *t, wg_context *ctx, wg_rect bar) {
     const wg_style *st = &ctx->style;
-wg_draw_rect(&ctx->draw, bar, st->title_bg);
-float cell_w = bar.w / (float)SETTINGS_TAB_COUNT;
-t->hovered = SETTINGS_TAB_COUNT;
-for (int i = 0;
-i < SETTINGS_TAB_COUNT;
-i++) {
+
+    // strip backdrop so the tabs read as a header band.
+    wg_draw_rect(&ctx->draw, bar, st->title_bg);
+
+    float cell_w = bar.w / (float)SETTINGS_TAB_COUNT;
+    t->hovered = SETTINGS_TAB_COUNT;
+
+    for (int i = 0; i < SETTINGS_TAB_COUNT; i++) {
         wg_rect cell = wg_rect_make(bar.x + cell_w * i, bar.y, cell_w, bar.h);
         wg_id id = wg_gen_id_n(ctx, "settings.tab", i);
         int hov = 0, held = 0;
@@ -78,16 +82,18 @@ i++) {
     // target by a fraction of the remaining distance per frame.
     if (t->underline_t < 1.0f) {
         float speed = st->anim_speed > 0 ? st->anim_speed : 12.0f;
-t->underline_t += speed * ctx->dt;
-if (t->underline_t > 1.0f) t->underline_t = 1.0f;
-}
+        t->underline_t += speed * ctx->dt;
+        if (t->underline_t > 1.0f) t->underline_t = 1.0f;
+    }
     float ux = t->underline_from +
                (t->underline_to - t->underline_from) * t->underline_t;
-float bar_w = cell_w * 0.5f;
-float cx = bar.x + ux * bar.w;
-wg_rect underline = wg_rect_make(cx - bar_w * 0.5f,
+    // draw a short accent bar under the active-ish position.
+    float bar_w = cell_w * 0.5f;
+    float cx = bar.x + ux * bar.w;
+    wg_rect underline = wg_rect_make(cx - bar_w * 0.5f,
                                      bar.y + bar.h - st->border_thick * 2.0f,
                                      bar_w, st->border_thick * 2.0f);
-wg_draw_rect(&ctx->draw, underline, st->accent);
-return t->active;
+    wg_draw_rect(&ctx->draw, underline, st->accent);
+
+    return t->active;
 }
