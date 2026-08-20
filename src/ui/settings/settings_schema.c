@@ -1,4 +1,7 @@
 #include "settings_schema.h"
+// the one true table. ranges mirror config.h where there's an obvious analogue
+// (render distance caps out a bit past RENDER_DISTANCE so power users can push
+// it). enum choice lists are inline; their index range must match the value def.
 static settings_opt g_schema[SETTINGS_ID_COUNT];
 static int          g_built = 0;
 static const char *g_graphics_choices[] = { "fast", "fancy", "fabulous" }
@@ -98,3 +101,13 @@ i < SETTINGS_ID_COUNT;
 i++)
         if (settings_id_tab((settings_id)i) == tab) n++;
 return n;
+}
+
+int settings_schema_tab_ids(settings_tab tab, settings_id *out, int cap) {
+    int n = 0;
+    for (int i = 0; i < SETTINGS_ID_COUNT && n < cap; i++) {
+        if (settings_id_tab((settings_id)i) == tab)
+            out[n++] = (settings_id)i;
+    }
+    return n;
+}

@@ -1,8 +1,13 @@
 #include "settings_serialize.h"
 #include "settings_schema.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// append one "key=value\n" to a growing offset within out. mirrors snprintf's
+// truncation contract: we always advance the would-be length even past cap so
+// the caller can detect overflow.
 static size_t emit(char *out, size_t cap, size_t off,
                    const char *key, const char *val) {
     int n = snprintf(out + (off < cap ? off : cap),
@@ -14,11 +19,10 @@ static size_t emit(char *out, size_t cap, size_t off,
 
 size_t settings_serialize_write(const settings_model *m, char *out, size_t cap) {
     if (out && cap) out[0] = '\0';
-size_t off = 0;
-char buf[48];
-for (int i = 0;
-i < SETTINGS_ID_COUNT;
-i++) {
+    size_t off = 0;
+    char buf[48];
+
+    for (int i = 0; i < SETTINGS_ID_COUNT; i++) {
         const settings_value *v = settings_model_live(m, (settings_id)i);
         const char *key = settings_id_key((settings_id)i);
 
@@ -58,23 +62,27 @@ static char *trim(char *s) {
 
 int settings_serialize_line(settings_model *m, const char *line) {
     if (!line) return 0;
-char tmp[128];
-size_t len = strlen(line);
-if (len >= sizeof tmp) len = sizeof tmp - 1;
-memcpy(tmp, line, len);
-tmp[len] = '\0';
-char *s = trim(tmp);
-if (s[0] == '\0' || s[0] == '#' || s[0] == ';
-') return 0;
-char *eq = strchr(s, '=');
-if (!eq) return 0;
-*eq = '\0';
-char *key = trim(s);
-char *val = trim(eq + 1);
-settings_id id = settings_id_from_key(key);
-if (id >= SETTINGS_ID_COUNT) return 0;
-settings_value *v = settings_model_work(m, id);
-switch (v->kind) {
+    // copy so we can trim/split without touching the caller's buffer.
+    char tmp[128];
+    size_t len = strlen(line);
+    if (len >= sizeof tmp) len = sizeof tmp - 1;
+    memcpy(tmp, line, len);
+    tmp[len] = '\0';
+
+    char *s = trim(tmp);
+    if (s[0] == '\0' || s[0] == '#' || s[0] == ';') return 0;  // blank / comment
+
+    char *eq = strchr(s, '=');
+    if (!eq) return 0;
+    *eq = '\0';
+    char *key = trim(s);
+    char *val = trim(eq + 1);
+
+    settings_id id = settings_id_from_key(key);
+    if (id >= SETTINGS_ID_COUNT) return 0;   // unknown key, ignore
+
+    settings_value *v = settings_model_work(m, id);
+    switch (v->kind) {
     case SETTINGS_OPT_FLOAT:
         v->f = (float)atof(val);
         break;
@@ -95,13 +103,13 @@ switch (v->kind) {
     default:
         return 0;
     }
-    settings_value_clamp(v);
-return 1;
+    settings_value_clamp(v);   // a hand-edited file can't drag fov to 9000
+    return 1;
 }
 
 int settings_serialize_read(settings_model *m, const char *text) {
     if (!text) return 0;
-    int applied;
+    int applied = 0;
     const char *p = text;
 
     // walk line by line without mutating the source: find each newline, hand the

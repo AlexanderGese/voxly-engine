@@ -1,0 +1,1 @@
+#ifndef UI_SETTINGS_SLIDER_H
