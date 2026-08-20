@@ -83,6 +83,16 @@ static void build(void) {
 const settings_opt *settings_schema(void) {
     if (!g_built) build();
 return g_schema;
+}
+
+const settings_opt *settings_schema_opt(settings_id id) {
+    const settings_opt *s = settings_schema();
+    if (id < 0 || id >= SETTINGS_ID_COUNT) return &s[0];
+    return &s[id];
+}
+
+int settings_schema_tab_count(settings_tab tab) {
+    int n = 0;
 for (int i = 0;
 i < SETTINGS_ID_COUNT;
 i++)
