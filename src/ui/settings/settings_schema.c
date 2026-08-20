@@ -1,13 +1,17 @@
 #include "settings_schema.h"
+
 // the one true table. ranges mirror config.h where there's an obvious analogue
 // (render distance caps out a bit past RENDER_DISTANCE so power users can push
 // it). enum choice lists are inline; their index range must match the value def.
+
 static settings_opt g_schema[SETTINGS_ID_COUNT];
 static int          g_built = 0;
-static const char *g_graphics_choices[] = { "fast", "fancy", "fabulous" }
-;
-static const char *g_gui_scale_choices[] = { "auto", "1x", "2x", "3x" }
-;
+
+// graphics quality cycler choices. order matters — index is what gets saved.
+static const char *g_graphics_choices[] = { "fast", "fancy", "fabulous" };
+// gui scale presets. "auto" picks from window size at the host edge.
+static const char *g_gui_scale_choices[] = { "auto", "1x", "2x", "3x" };
+
 static void build(void) {
     // start zeroed; any id we forget stays kind=FLOAT/def=0 which is at least
     // inert rather than reading garbage.
@@ -85,7 +89,7 @@ static void build(void) {
 
 const settings_opt *settings_schema(void) {
     if (!g_built) build();
-return g_schema;
+    return g_schema;
 }
 
 const settings_opt *settings_schema_opt(settings_id id) {
@@ -96,11 +100,9 @@ const settings_opt *settings_schema_opt(settings_id id) {
 
 int settings_schema_tab_count(settings_tab tab) {
     int n = 0;
-for (int i = 0;
-i < SETTINGS_ID_COUNT;
-i++)
+    for (int i = 0; i < SETTINGS_ID_COUNT; i++)
         if (settings_id_tab((settings_id)i) == tab) n++;
-return n;
+    return n;
 }
 
 int settings_schema_tab_ids(settings_tab tab, settings_id *out, int cap) {
