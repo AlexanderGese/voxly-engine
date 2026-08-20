@@ -42,8 +42,35 @@ void settings_value_clamp(settings_value *v) {
         if (v->f < v->lo) v->f = v->lo;
 if (v->f > v->hi) v->f = v->hi;
 break;
+case SETTINGS_OPT_INT:
+    case SETTINGS_OPT_ENUM: {
+        int lo = (int)v->lo, hi = (int)v->hi;
+        if (v->i < lo) v->i = lo;
+        if (v->i > hi) v->i = hi;
+        v->f = (float)v->i;     // keep the float mirror honest for slider math
+        break;
+    }
+    case SETTINGS_OPT_BOOL:
+        v->i = v->i ? 1 : 0;
 v->f = (float)v->i;
 break;
+}
+}
+
+float settings_value_norm(const settings_value *v) {
+    float span = v->hi - v->lo;
+    if (span <= 0.0f) return 0.0f;
+    float cur = (v->kind == SETTINGS_OPT_FLOAT) ? v->f : (float)v->i;
+    float t = (cur - v->lo) / span;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t;
+}
+
+// snap a raw value to the nearest multiple of `step` anchored at lo. continuous
+// floats (step==0) pass through untouched.
+static float snap(float val, float lo, float step) {
+    if (step <= 0.0f) return val;
 float n = floorf((val - lo) / step + 0.5f);
 return lo + n * step;
 int nv = v->i + (dir > 0 ? step : -step);
