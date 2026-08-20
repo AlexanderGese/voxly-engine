@@ -1,6 +1,9 @@
 #include "widgets_button.h"
 #include "widgets_label.h"
+
 // pick the right surface color for a button given its interaction state. we
+// don't tween here (the draw list is rebuilt every frame anyway); the hover/
+// press pop is instant, which for buttons actually feels crisper than a fade.
 static wg_rgba surface_for(const wg_style *s, int hovered, int held) {
     if (held)    return s->widget_active;
     if (hovered) return s->widget_hover;
@@ -9,16 +12,22 @@ static wg_rgba surface_for(const wg_style *s, int hovered, int held) {
 
 int wg_button_rect(wg_context *ctx, wg_id id, wg_rect r, const char *label) {
     int hovered = 0, held = 0;
-int clicked = wg_behavior(ctx, id, r, &hovered, &held);
-wg_rgba bg = surface_for(&ctx->style, hovered, held);
-wg_draw_rect(&ctx->draw, r, bg);
-wg_draw_border(&ctx->draw, r, ctx->style.widget_border, ctx->style.border_thick);
-wg_rect tr = r;
-if (held) tr.y += 1.0f;
-wg_label_in(ctx, tr, label, WG_TEXT_CENTER, ctx->style.text);
-if (ctx->focus == id)
+    int clicked = wg_behavior(ctx, id, r, &hovered, &held);
+
+    wg_rgba bg = surface_for(&ctx->style, hovered, held);
+    wg_draw_rect(&ctx->draw, r, bg);
+    wg_draw_border(&ctx->draw, r, ctx->style.widget_border, ctx->style.border_thick);
+
+    // nudge the caption down 1px while held so it reads as physically pressed.
+    wg_rect tr = r;
+    if (held) tr.y += 1.0f;
+    wg_label_in(ctx, tr, label, WG_TEXT_CENTER, ctx->style.text);
+
+    // focus ring, if keyboard focus landed here (tab navigation).
+    if (ctx->focus == id)
         wg_draw_border(&ctx->draw, wg_rect_inset(r, -1.0f), ctx->style.accent, 1.0f);
-return clicked;
+
+    return clicked;
 }
 
 int wg_button(wg_context *ctx, wg_layout *l, const char *label) {
@@ -29,8 +38,8 @@ int wg_button(wg_context *ctx, wg_layout *l, const char *label) {
 
 int wg_button_frac(wg_context *ctx, wg_layout *l, float frac, const char *label) {
     wg_rect r = wg_layout_row_frac(l, ctx, frac, 0);
-wg_id id = wg_gen_id(ctx, label);
-return wg_button_rect(ctx, id, r, label);
+    wg_id id = wg_gen_id(ctx, label);
+    return wg_button_rect(ctx, id, r, label);
 }
 
 int wg_toggle(wg_context *ctx, wg_layout *l, const char *label, int *on) {
@@ -64,16 +73,22 @@ int wg_toggle(wg_context *ctx, wg_layout *l, const char *label, int *on) {
 
 int wg_stepper(wg_context *ctx, wg_layout *l, const char *label) {
     wg_rect r = wg_layout_row(l, ctx, 0);
-float aw = r.h;
-wg_rect left  = wg_rect_make(r.x, r.y, aw, r.h);
-wg_rect right = wg_rect_make(r.x + r.w - aw, r.y, aw, r.h);
-wg_rect mid   = wg_rect_make(r.x + aw, r.y, r.w - aw * 2.0f, r.h);
-wg_draw_rect(&ctx->draw, mid, ctx->style.widget_bg);
-wg_id idl = wg_gen_id_n(ctx, label, 1);
-wg_id idr = wg_gen_id_n(ctx, label, 2);
-int dir = 0;
-if (wg_button_rect(ctx, idl, left,  "<")) dir = -1;
-if (wg_button_rect(ctx, idr, right, ">")) dir = +1;
-wg_label_in(ctx, mid, label, WG_TEXT_CENTER, ctx->style.text);
-return dir;
+
+    // carve the two arrow buttons off the ends, label fills the middle.
+    float aw = r.h;   // square arrow pads
+    wg_rect left  = wg_rect_make(r.x, r.y, aw, r.h);
+    wg_rect right = wg_rect_make(r.x + r.w - aw, r.y, aw, r.h);
+    wg_rect mid   = wg_rect_make(r.x + aw, r.y, r.w - aw * 2.0f, r.h);
+
+    // backplate for the value area.
+    wg_draw_rect(&ctx->draw, mid, ctx->style.widget_bg);
+
+    wg_id idl = wg_gen_id_n(ctx, label, 1);
+    wg_id idr = wg_gen_id_n(ctx, label, 2);
+    int dir = 0;
+    if (wg_button_rect(ctx, idl, left,  "<")) dir = -1;
+    if (wg_button_rect(ctx, idr, right, ">")) dir = +1;
+
+    wg_label_in(ctx, mid, label, WG_TEXT_CENTER, ctx->style.text);
+    return dir;
 }
