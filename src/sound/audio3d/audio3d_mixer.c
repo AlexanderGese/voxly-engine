@@ -28,13 +28,18 @@ float dist = vec3_distance(l->pos, v->pos);
 float atten = audio3d_atten_gain(cfg->atten, dist,
                                      cfg->ref_dist, cfg->max_dist, cfg->rolloff);
 float base = v->gain * atten * l->gain * AUDIO3D_VOICE_HEADROOM;
+// occlusion knocks down the high end and a little of the overall level.
 base *= (1.0f - 0.4f * occlusion);
+// directional sources lose gain off-axis. omni voices return 1.0 here.
 base *= audio3d_cone_gain(v, l->pos);
 audio3d_pan pan = audio3d_pan_spatial(l, v->pos, base, cfg->pan_width);
 v->tgt_gain_l = pan.left;
 v->tgt_gain_r = pan.right;
+// cutoff slides from nyquist (clear) down toward the occlusion cutoff.
 float nyq = (float)AUDIO3D_SAMPLE_RATE * 0.5f;
 v->tgt_cutoff = nyq + (AUDIO3D_OCCLUSION_CUTOFF_HZ - nyq) * occlusion;
+// recompute the live resample step from the static base ratio so doppler
+// never accumulates drift. step = base * pitch * doppler.
 float shift = 1.0f;
 if (cfg->doppler)
         shift = audio3d_doppler_shift(l->pos, l->vel, v->pos, v->vel);
@@ -79,11 +84,14 @@ int audio3d_mixer_render(const audio3d_mixer_cfg *cfg,
                          const audio3d_listener *l,
                          int16_t *out, uint32_t frames) {
     if (!cfg || !pool || !bank || !out || frames == 0) return 0;
+// scratch accumulators on the stack. block sizes are small (a few hundred
+// frames) so this is fine; if we ever want huge blocks, heap it.
 enum { MAXBLK = 2048 }
 ;
 float al[MAXBLK];
 float ar[MAXBLK];
 if (frames > MAXBLK) frames = MAXBLK;
+// caller should chunk; clamp anyway
 memset(al, 0, frames * sizeof(float));
 memset(ar, 0, frames * sizeof(float));
 int contributing = 0;
@@ -119,5 +127,11 @@ i++) {
     // sum bus -> soft clip -> s16, interleaved.
     for (uint32_t i = 0;
 i < frames;
+i++) {
+        out[i * 2 + 0] = audio3d_dsp_to_s16(audio3d_dsp_softclip(al[i]));
+        out[i * 2 + 1] = audio3d_dsp_to_s16(audio3d_dsp_softclip(ar[i]));
+    }
+
+    audio3d_pool_reap(pool);
 return contributing;
 }
