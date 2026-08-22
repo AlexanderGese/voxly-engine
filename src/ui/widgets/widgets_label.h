@@ -3,6 +3,7 @@
 // text widgets. these don't interact, they just emit a WG_CMD_TEXT into the
 // draw list at the right spot for the given alignment. the real glyph shaping
 // happens host-side when it drains the command buffer; here we only need a
+// rough advance width to place aligned/right-justified text, so we carry a
 #include "widgets_context.h"
 #include "widgets_layout.h"
 #define WG_GLYPH_W 6.0f
