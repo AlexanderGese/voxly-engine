@@ -1,5 +1,7 @@
 #include "audio3d_attenuation.h"
+
 #include <math.h>
+
 float audio3d_atten_gain(audio3d_atten_model model,
                          float dist, float ref, float max, float rolloff) {
     if (dist < ref) dist = ref;        // no boost when closer than ref
@@ -44,20 +46,27 @@ float audio3d_atten_gain(audio3d_atten_model model,
 float audio3d_doppler_shift(vec3 listener_pos, vec3 listener_vel,
                             vec3 source_pos, vec3 source_vel) {
     vec3 to_src = vec3_sub(source_pos, listener_pos);
-float dist = vec3_length(to_src);
-if (dist < AUDIO3D_EPS) return 1.0f;
-vec3 dir = vec3_scale(to_src, 1.0f / dist);
-float vls = vec3_dot(listener_vel, dir);
-float vss = vec3_dot(source_vel, dir);
-const float c = AUDIO3D_SPEED_OF_SOUND;
-float cap = c * 0.5f;
-if (vls >  cap) vls =  cap;
-if (vls < -cap) vls = -cap;
-if (vss >  cap) vss =  cap;
-if (vss < -cap) vss = -cap;
-float shift = (c + vls * AUDIO3D_DOPPLER_SCALE) /
+    float dist = vec3_length(to_src);
+    if (dist < AUDIO3D_EPS) return 1.0f;   // sitting on top of us, no shift
+
+    // unit vector listener->source. positive vel along it = moving away.
+    vec3 dir = vec3_scale(to_src, 1.0f / dist);
+
+    float vls = vec3_dot(listener_vel, dir);   // listener closing speed
+    float vss = vec3_dot(source_vel, dir);      // source receding speed
+
+    const float c = AUDIO3D_SPEED_OF_SOUND;
+    // clamp the projected speeds well under c so the ratio stays sane.
+    float cap = c * 0.5f;
+    if (vls >  cap) vls =  cap;
+    if (vls < -cap) vls = -cap;
+    if (vss >  cap) vss =  cap;
+    if (vss < -cap) vss = -cap;
+
+    float shift = (c + vls * AUDIO3D_DOPPLER_SCALE) /
                   (c + vss * AUDIO3D_DOPPLER_SCALE);
-if (shift < 0.5f) shift = 0.5f;
-if (shift > 2.0f) shift = 2.0f;
-return shift;
+    // a little extra paranoia. doppler should never go silly.
+    if (shift < 0.5f) shift = 0.5f;
+    if (shift > 2.0f) shift = 2.0f;
+    return shift;
 }
