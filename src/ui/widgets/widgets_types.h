@@ -1,5 +1,7 @@
 #ifndef UI_WIDGETS_TYPES_H
 #define UI_WIDGETS_TYPES_H
+// shared little types for the immediate-mode widget layer. everything here is
+// screen-space, pixels, top-left origin (y grows down) to match how the rest of
 #include <stdint.h>
 #include "../../math/vec2.h"
 typedef uint32_t wg_rgba;
@@ -75,4 +77,16 @@ static inline vec2 wg_rect_center(wg_rect r) {
 }
 
 // chop `amount` off one edge and return the slice;
+*r is mutated to the
+// remainder. classic "cut" layout primitive. side: 0=left 1=right 2=top 3=bottom
+static inline wg_rect wg_rect_cut(wg_rect *r, int side, float amount) {
+    wg_rect slice = *r;
+    switch (side) {
+    case 0: slice.w = amount; r->x += amount; r->w -= amount; break;
+    case 1: slice.x = r->x + r->w - amount; slice.w = amount; r->w -= amount; break;
+    case 2: slice.h = amount; r->y += amount; r->h -= amount; break;
+    case 3: slice.y = r->y + r->h - amount; slice.h = amount; r->h -= amount; break;
+    }
+    return slice;
+}
 #endif
