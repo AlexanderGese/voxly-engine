@@ -1,9 +1,12 @@
 #include "widgets_panel.h"
 #include "widgets_label.h"
+
 #include <math.h>
+
 #define WG_PANEL_TITLE_H  18.0f
 #define WG_PANEL_MIN_W    80.0f
 #define WG_PANEL_MIN_H    40.0f
+
 void wg_panel_init(wg_panel *p, float x, float y, float w, float h, int flags) {
     p->rect  = wg_rect_make(x, y, w, h);
     p->flags = flags;
@@ -16,8 +19,7 @@ void wg_panel_init(wg_panel *p, float x, float y, float w, float h, int flags) {
 }
 
 // drag the whole window by its titlebar. we use the titlebar's own id so the
-// generic behavior kernel tracks the press for us;
-the actual move is applied
+// generic behavior kernel tracks the press for us; the actual move is applied
 // from the per-frame mouse delta while it's active.
 static void handle_drag(wg_context *ctx, wg_panel *p, wg_id base, wg_rect title) {
     if (!(p->flags & WG_PANEL_MOVABLE)) return;
@@ -38,15 +40,21 @@ static void handle_drag(wg_context *ctx, wg_panel *p, wg_id base, wg_rect title)
 
 int wg_panel_begin(wg_context *ctx, wg_panel *p, const char *title) {
     const wg_style *s = &ctx->style;
-if ((p->flags & WG_PANEL_AUTOSIZE) && p->last_content_h > 0) {
+
+    // autosize: adopt last frame's measured content height. we trail by one
+    // frame which is imperceptible and avoids a two-pass layout.
+    if ((p->flags & WG_PANEL_AUTOSIZE) && p->last_content_h > 0) {
         float th = (p->flags & WG_PANEL_TITLED) ? WG_PANEL_TITLE_H : 0.0f;
         p->rect.h = th + s->pad * 2.0f + (float)p->last_content_h;
     }
     if (p->rect.w < WG_PANEL_MIN_W) p->rect.w = WG_PANEL_MIN_W;
-if (p->rect.h < WG_PANEL_MIN_H) p->rect.h = WG_PANEL_MIN_H;
-wg_rect outer = p->rect;
-wg_rect body  = outer;
-if (p->flags & WG_PANEL_TITLED) {
+    if (p->rect.h < WG_PANEL_MIN_H) p->rect.h = WG_PANEL_MIN_H;
+
+    wg_rect outer = p->rect;
+    wg_rect body  = outer;
+
+    // titlebar
+    if (p->flags & WG_PANEL_TITLED) {
         // a stable id for this window, seeded off the title (untitled windows
         // share one bucket — you don't drag two anonymous panels at once).
         wg_id base = wg_gen_id(ctx, title ? title : "##panel");
@@ -79,24 +87,45 @@ if (p->flags & WG_PANEL_TITLED) {
         // collapsed: just the titlebar border, no body.
         wg_draw_border(&ctx->draw, wg_rect_make(outer.x, outer.y, outer.w, WG_PANEL_TITLE_H),
                        s->panel_border, s->border_thick);
-return 0;
-}
+        return 0;
+    }
 
     // body background + outer border.
     wg_draw_rect(&ctx->draw, body, s->panel_bg);
-wg_draw_border(&ctx->draw, outer, s->panel_border, s->border_thick);
-if (!(p->flags & WG_PANEL_NOCLIP))
+    wg_draw_border(&ctx->draw, outer, s->panel_border, s->border_thick);
+
+    // clip children to the body so overlong rows don't spill past the frame.
+    if (!(p->flags & WG_PANEL_NOCLIP))
         wg_draw_push_clip(&ctx->draw, body);
-p->content = wg_rect_inset(body, s->pad);
-wg_layout_begin(&p->layout, ctx, p->content);
-return 1;
-const wg_style *s = &ctx->style;
-float tw = wg_text_width(text, s->font_scale);
-float th = WG_GLYPH_H * s->font_scale;
-wg_rect box = wg_rect_make(x, y, tw + s->pad * 2.0f, th + s->pad);
-if (box.x + box.w > ctx->screen_w) box.x = ctx->screen_w - box.w;
-if (box.y + box.h > ctx->screen_h) box.y = ctx->screen_h - box.h;
-wg_draw_rect(&ctx->draw, box, s->title_bg);
-wg_draw_border(&ctx->draw, box, s->panel_border, s->border_thick);
-wg_label_in(ctx, box, text, WG_TEXT_CENTER, s->text);
+
+    p->content = wg_rect_inset(body, s->pad);
+    wg_layout_begin(&p->layout, ctx, p->content);
+    return 1;
+}
+
+void wg_panel_end(wg_context *ctx, wg_panel *p) {
+    if (!p->open) return;
+
+    // record measured height for next frame's autosize.
+    p->last_content_h = (int)ceilf(wg_layout_used_height(&p->layout));
+
+    if (!(p->flags & WG_PANEL_NOCLIP))
+        wg_draw_pop_clip(&ctx->draw);
+}
+
+void wg_tooltip(wg_context *ctx, float x, float y, const char *text) {
+    if (!text || !text[0]) return;
+    const wg_style *s = &ctx->style;
+
+    float tw = wg_text_width(text, s->font_scale);
+    float th = WG_GLYPH_H * s->font_scale;
+    wg_rect box = wg_rect_make(x, y, tw + s->pad * 2.0f, th + s->pad);
+
+    // nudge back on-screen if we'd clip the right/bottom edge.
+    if (box.x + box.w > ctx->screen_w) box.x = ctx->screen_w - box.w;
+    if (box.y + box.h > ctx->screen_h) box.y = ctx->screen_h - box.h;
+
+    wg_draw_rect(&ctx->draw, box, s->title_bg);
+    wg_draw_border(&ctx->draw, box, s->panel_border, s->border_thick);
+    wg_label_in(ctx, box, text, WG_TEXT_CENTER, s->text);
 }
