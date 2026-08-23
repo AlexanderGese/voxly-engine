@@ -1,7 +1,9 @@
 #include "compress_palette.h"
 #include "compress_stream.h"
 #include "compress_bits.h"
+
 #include <string.h>
+
 int compress_palette_build(compress_palette *p,
                            const block_id *blocks, size_t count) {
     p->count = 0;
@@ -23,29 +25,30 @@ int compress_palette_build(compress_palette *p,
 size_t compress_palette_encode(const block_id *blocks, size_t count,
                                uint8_t *out, size_t cap) {
     compress_palette pal;
-int n = compress_palette_build(&pal, blocks, count);
-if (n == 0) return 0;
-// empty input, nothing to do
-compress_wstream ws;
-compress_ws_init(&ws, out, cap);
-compress_ws_var(&ws, (uint32_t)count);
-compress_ws_u8(&ws, (uint8_t)(n & 0xff));
-for (int i = 0;
-i < n;
-i++) compress_ws_u8(&ws, pal.entry[i]);
-if (ws.err) return 0;
-int idx_bits = compress_bits_for((size_t)n);
-compress_bitw bw;
-compress_bitw_init(&bw, out + ws.pos, cap - ws.pos);
-for (size_t i = 0;
-i < count;
-i++) {
+    int n = compress_palette_build(&pal, blocks, count);
+    if (n == 0) return 0; // empty input, nothing to do
+
+    compress_wstream ws;
+    compress_ws_init(&ws, out, cap);
+    compress_ws_var(&ws, (uint32_t)count);
+    // palette_size stored as u8; 256 wraps to 0, decode treats 0 as 256.
+    compress_ws_u8(&ws, (uint8_t)(n & 0xff));
+    for (int i = 0; i < n; i++) compress_ws_u8(&ws, pal.entry[i]);
+    if (ws.err) return 0;
+
+    int idx_bits = compress_bits_for((size_t)n);
+
+    // pack the indices straight after the palette table.
+    compress_bitw bw;
+    compress_bitw_init(&bw, out + ws.pos, cap - ws.pos);
+    for (size_t i = 0; i < count; i++) {
         int idx = pal.lookup[blocks[i]];
         compress_bitw_put(&bw, (uint32_t)idx, idx_bits);
     }
     if (bw.overflow) return 0;
-size_t bit_bytes = compress_bitw_flush(&bw);
-return ws.pos + bit_bytes;
+
+    size_t bit_bytes = compress_bitw_flush(&bw);
+    return ws.pos + bit_bytes;
 }
 
 size_t compress_palette_decode(const uint8_t *in, size_t len,
