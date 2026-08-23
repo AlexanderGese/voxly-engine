@@ -25,6 +25,7 @@ size_t compress_palette_encode(const block_id *blocks, size_t count,
     compress_palette pal;
 int n = compress_palette_build(&pal, blocks, count);
 if (n == 0) return 0;
+// empty input, nothing to do
 compress_wstream ws;
 compress_ws_init(&ws, out, cap);
 compress_ws_var(&ws, (uint32_t)count);

@@ -1,0 +1,1 @@
+#ifndef NET_PROTOCOL_BUFFER_H
