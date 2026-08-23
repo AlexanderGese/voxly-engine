@@ -4,8 +4,16 @@
 #include "compress_rle.h"
 #include "compress_lz.h"
 #include "compress_crc.h"
+
 #include <string.h>
+
+// scratch big enough for the worst case at every stage. CHUNK_VOLUME bytes
+// plus slack for the palette table and any stage that briefly inflates.
+// two ping-pong buffers so a stage reads from one and writes the other.
 #define SCRATCH (CHUNK_VOLUME + (CHUNK_VOLUME >> 3) + 512)
+
+// run one stage. returns new length in `dst`, or 0 if the stage refused
+// (didnt shrink, or overflowed). caller keeps the previous buffer on refusal.
 static size_t run_stage(int method,
                         const uint8_t *src, size_t src_len,
                         uint8_t *dst, size_t dst_cap) {
@@ -23,29 +31,35 @@ static size_t run_stage(int method,
 size_t compress_encode_chunk(const block_id *blocks, size_t count,
                              uint8_t *out, size_t cap) {
     if (count == 0 || count > CHUNK_VOLUME) return 0;
-static uint8_t a[SCRATCH];
-static uint8_t b[SCRATCH];
-compress_container c;
-c.magic = COMPRESS_MAGIC;
-c.version = COMPRESS_VERSION;
-c.method_count = 0;
-c.raw_count = (uint32_t)count;
-c.crc32 = compress_crc32(blocks, count);
-uint8_t *cur = a;
-uint8_t *nxt = b;
-size_t cur_len = compress_palette_encode(blocks, count, cur, SCRATCH);
-if (cur_len == 0) {
+
+    static uint8_t a[SCRATCH];
+    static uint8_t b[SCRATCH];
+
+    compress_container c;
+    c.magic = COMPRESS_MAGIC;
+    c.version = COMPRESS_VERSION;
+    c.method_count = 0;
+    c.raw_count = (uint32_t)count;
+    c.crc32 = compress_crc32(blocks, count);
+
+    // stage 0: palette pack the raw ids. almost always a win so it's not
+    // optional, but if the palette is wide (noisy chunk) it can no-op to
+    // roughly the original size, which is fine.
+    uint8_t *cur = a;
+    uint8_t *nxt = b;
+    size_t cur_len = compress_palette_encode(blocks, count, cur, SCRATCH);
+    if (cur_len == 0) {
         // palette overflowed scratch somehow; fall back to raw bytes.
         memcpy(cur, blocks, count);
         cur_len = count;
         c.methods[c.method_count++] = COMPRESS_M_RAW;
     } else {
         c.methods[c.method_count++] = COMPRESS_M_PALETTE;
-}
+    }
 
     // stage 1: rle. cheap, helps on flat columns.
     size_t n = run_stage(COMPRESS_M_RLE, cur, cur_len, nxt, SCRATCH);
-if (n) {
+    if (n) {
         uint8_t *t = cur; cur = nxt; nxt = t;
         cur_len = n;
         c.methods[c.method_count++] = COMPRESS_M_RLE;
@@ -53,18 +67,19 @@ if (n) {
 
     // stage 2: lz over whatever's left.
     n = run_stage(COMPRESS_M_LZ, cur, cur_len, nxt, SCRATCH);
-if (n) {
+    if (n) {
         uint8_t *t = cur; cur = nxt; nxt = t;
         cur_len = n;
         c.methods[c.method_count++] = COMPRESS_M_LZ;
     }
 
     c.payload_len = (uint32_t)cur_len;
-size_t hdr = compress_container_write_header(out, cap, &c);
-if (hdr == 0) return 0;
-if (hdr + cur_len > cap) return 0;
-memcpy(out + hdr, cur, cur_len);
-return hdr + cur_len;
+
+    size_t hdr = compress_container_write_header(out, cap, &c);
+    if (hdr == 0) return 0;
+    if (hdr + cur_len > cap) return 0;
+    memcpy(out + hdr, cur, cur_len);
+    return hdr + cur_len;
 }
 
 // undo a single stage. palette/raw stages terminate the chain (they consume
@@ -89,15 +104,47 @@ static size_t undo_stage(int method,
 size_t compress_decode_chunk(const uint8_t *in, size_t len,
                              block_id *out, size_t count) {
     compress_container c;
-size_t hdr = compress_container_read_header(in, len, &c);
-if (hdr == 0) return 0;
-if (c.raw_count > count) return 0;
-if (hdr + c.payload_len > len) return 0;
-static uint8_t a[SCRATCH];
-static uint8_t b[SCRATCH];
-const uint8_t *cur = in + hdr;
-size_t cur_len = c.payload_len;
-uint8_t *scratch = a;
-uint8_t *other = b;
-for (int i = (int)c.method_count - 1;
-i >= 0;
+    size_t hdr = compress_container_read_header(in, len, &c);
+    if (hdr == 0) return 0;
+    if (c.raw_count > count) return 0;
+    if (hdr + c.payload_len > len) return 0;
+
+    static uint8_t a[SCRATCH];
+    static uint8_t b[SCRATCH];
+
+    const uint8_t *cur = in + hdr;
+    size_t cur_len = c.payload_len;
+    uint8_t *scratch = a;
+    uint8_t *other = b;
+
+    // replay byte stages in reverse until we hit the terminal palette/raw
+    // stage, which writes straight into the block array.
+    for (int i = (int)c.method_count - 1; i >= 0; i--) {
+        int m = c.methods[i];
+        if (m == COMPRESS_M_PALETTE || m == COMPRESS_M_RAW) {
+            size_t got = undo_stage(m, cur, cur_len, NULL, 0, out, count);
+            if (got != c.raw_count) return 0;
+            // verify we reconstructed the exact bytes the encoder saw.
+            if (compress_crc32(out, got) != c.crc32) return 0;
+            return got;
+        }
+
+        size_t got = undo_stage(m, cur, cur_len, scratch, SCRATCH, NULL, 0);
+        if (got == 0) return 0;
+        cur = scratch;
+        cur_len = got;
+        uint8_t *t = scratch; scratch = other; other = t;
+    }
+
+    // no terminal stage? malformed.
+    return 0;
+}
+
+int compress_validate(const uint8_t *in, size_t len) {
+    compress_container c;
+    size_t hdr = compress_container_read_header(in, len, &c);
+    if (hdr == 0) return 0;
+    if (hdr + c.payload_len > len) return 0;
+    if (c.raw_count == 0 || c.raw_count > CHUNK_VOLUME) return 0;
+    return 1;
+}
