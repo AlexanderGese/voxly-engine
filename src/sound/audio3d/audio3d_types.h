@@ -1,14 +1,24 @@
 #ifndef SOUND_AUDIO3D_TYPES_H
 #define SOUND_AUDIO3D_TYPES_H
+
 #include <stdint.h>
 #include "../../math/vec3.h"
 #include "audio3d_config.h"
+
+// shared types for the 3d audio subsystem. kept in one header so the mixer,
+// the source pool and the bank dont end up in an include knot.
+
+// a clip is mono 16-bit pcm. we keep them mono on purpose: spatialisation
+// only makes sense for point sources, and stereo clips would fight the panner.
 typedef struct {
     int16_t *samples;     // owned, length = frames
     uint32_t frames;      // sample count (mono frames)
     uint32_t rate;        // source sample rate, resampled at play time
     uint8_t  in_use;      // slot occupied?
 } audio3d_clip;
+
+// listener is the ears. position + an orthonormal basis (right/up/fwd) plus a
+// velocity for doppler. derived from the camera every frame.
 typedef struct {
     vec3  pos;
     vec3  vel;
@@ -17,11 +27,14 @@ typedef struct {
     vec3  fwd;            // -z look dir, normalised
     float gain;           // master gain, 0..1
 } audio3d_listener;
+
 typedef enum {
     AUDIO3D_VOICE_FREE = 0,
     AUDIO3D_VOICE_PLAYING,
     AUDIO3D_VOICE_STOPPING   // fading out, will free when the ramp hits zero
 } audio3d_voice_state;
+
+// one playing instance of a clip. positional. the mixer owns these.
 typedef struct {
     audio3d_voice_state state;
     int      clip_id;     // index into the bank
@@ -55,8 +68,12 @@ typedef struct {
 
     float    fade;        // 0..1 envelope used by STOPPING and voice steals
 } audio3d_voice;
+
+// a handle of 0 means "invalid / not playing". the generation lives in the
+// high bits so a stale handle never matches a recycled slot.
 #define AUDIO3D_HANDLE_NONE   0u
 #define AUDIO3D_HANDLE_SLOT(h)  ((h) & 0xFFFFu)
 #define AUDIO3D_HANDLE_GEN(h)   ((h) >> 16)
 #define AUDIO3D_MAKE_HANDLE(slot, gen)  (((uint32_t)(gen) << 16) | ((slot) & 0xFFFFu))
+
 #endif
