@@ -1,7 +1,9 @@
 #include "audio3d_system.h"
 #include "audio3d_cone.h"
 #include "../../util/log.h"
+
 #include <string.h>
+
 int audio3d_system_init(audio3d_system *s,
                         audio3d_solid_fn solid_fn, void *solid_user) {
     if (!s) return -1;
@@ -21,8 +23,8 @@ int audio3d_system_init(audio3d_system *s,
 
 void audio3d_system_shutdown(audio3d_system *s) {
     if (!s || !s->ready) return;
-audio3d_bank_free(&s->bank);
-s->ready = 0;
+    audio3d_bank_free(&s->bank);
+    s->ready = 0;
 }
 
 void audio3d_system_set_listener(audio3d_system *s, vec3 pos,
@@ -34,7 +36,7 @@ void audio3d_system_set_listener(audio3d_system *s, vec3 pos,
 
 void audio3d_system_set_master(audio3d_system *s, float gain) {
     if (!s) return;
-audio3d_listener_set_gain(&s->listener, gain);
+    audio3d_listener_set_gain(&s->listener, gain);
 }
 
 uint32_t audio3d_system_play(audio3d_system *s, const char *name,
@@ -63,9 +65,9 @@ uint32_t audio3d_system_play(audio3d_system *s, const char *name,
 uint32_t audio3d_system_play_loop(audio3d_system *s, const char *name,
                                   vec3 pos, float gain) {
     if (!s || !s->ready) return AUDIO3D_HANDLE_NONE;
-int id = audio3d_bank_find(&s->bank, name);
-if (id < 0) return AUDIO3D_HANDLE_NONE;
-return audio3d_pool_play(&s->pool, id, pos, gain, 1.0f, 1, &s->bank);
+    int id = audio3d_bank_find(&s->bank, name);
+    if (id < 0) return AUDIO3D_HANDLE_NONE;
+    return audio3d_pool_play(&s->pool, id, pos, gain, 1.0f, 1, &s->bank);
 }
 
 void audio3d_system_move(audio3d_system *s, uint32_t h, vec3 pos, vec3 vel) {
@@ -75,8 +77,7 @@ void audio3d_system_move(audio3d_system *s, uint32_t h, vec3 pos, vec3 vel) {
 
 void audio3d_system_stop(audio3d_system *s, uint32_t h) {
     if (!s) return;
-audio3d_pool_stop(&s->pool, h, 0);
-// fade out, no click
+    audio3d_pool_stop(&s->pool, h, 0);   // fade out, no click
 }
 
 void audio3d_system_set_cone(audio3d_system *s, uint32_t h, vec3 dir,
@@ -89,10 +90,9 @@ void audio3d_system_set_cone(audio3d_system *s, uint32_t h, vec3 dir,
 
 void audio3d_system_tick(audio3d_system *s) {
     if (!s || !s->ready) return;
-// re-resolve spatial params for every live voice. cheap; AUDIO3D_MAX_VOICES
-for (int i = 0;
-i < AUDIO3D_MAX_VOICES;
-i++) {
+    // re-resolve spatial params for every live voice. cheap; AUDIO3D_MAX_VOICES
+    // is small and the occlusion walk is bounded.
+    for (int i = 0; i < AUDIO3D_MAX_VOICES; i++) {
         audio3d_voice *v = &s->pool.voices[i];
         if (v->state == AUDIO3D_VOICE_FREE) continue;
         float occ = audio3d_occlusion_estimate(&s->occ, s->listener.pos, v->pos);
@@ -102,6 +102,6 @@ i++) {
 
 int audio3d_system_render(audio3d_system *s, int16_t *out, uint32_t frames) {
     if (!s || !s->ready || !out) return 0;
-return audio3d_mixer_render(&s->mix, &s->pool, &s->bank,
+    return audio3d_mixer_render(&s->mix, &s->pool, &s->bank,
                                 &s->listener, out, frames);
 }
