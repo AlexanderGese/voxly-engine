@@ -42,3 +42,23 @@ while (rs.pos < rs.len) {
         produced += run;
     }
     return produced;
+}
+
+size_t compress_rle_estimate(const uint8_t *in, size_t in_len) {
+    if (in_len == 0) return 0;
+
+    size_t total = 0;
+    size_t i = 0;
+    while (i < in_len) {
+        uint8_t v = in[i];
+        size_t run = 1;
+        while (i + run < in_len
+               && in[i + run] == v
+               && run < COMPRESS_RLE_MAX_RUN) {
+            run++;
+        }
+        total += compress_var_size((uint32_t)run) + 1;
+        i += run;
+    }
+    return total;
+}
