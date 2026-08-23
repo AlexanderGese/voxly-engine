@@ -1,0 +1,3 @@
+#ifndef SOUND_AUDIO3D_SYSTEM_H
+#define SOUND_AUDIO3D_SYSTEM_H
+#endif
