@@ -1,5 +1,6 @@
 #include "compress_rle.h"
 #include "compress_stream.h"
+
 size_t compress_rle_encode(const uint8_t *in, size_t in_len,
                            uint8_t *out, size_t cap) {
     if (in_len == 0) return 0;
@@ -29,9 +30,10 @@ size_t compress_rle_encode(const uint8_t *in, size_t in_len,
 size_t compress_rle_decode(const uint8_t *in, size_t in_len,
                            uint8_t *out, size_t cap) {
     compress_rstream rs;
-compress_rs_init(&rs, in, in_len);
-size_t produced = 0;
-while (rs.pos < rs.len) {
+    compress_rs_init(&rs, in, in_len);
+
+    size_t produced = 0;
+    while (rs.pos < rs.len) {
         uint32_t run = compress_rs_var(&rs);
         uint8_t  v   = compress_rs_u8(&rs);
         if (rs.err) return 0;
